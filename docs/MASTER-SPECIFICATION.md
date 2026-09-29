@@ -1,5 +1,9 @@
 # Mayasaba Master Specification
 
+## End-to-End Composition
+
+The complete lifecycle composition is defined in `docs/END-TO-END-DESIGN.md`; it composes, but does not replace, subsystem authorities.
+
 ## 1. Product definition
 
 Mayasaba is a Windows-only, local-first autonomous software-engineering control plane. A user provides a project idea and a local project path. Mayasaba coordinates four independent coding CLIs—Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline—through a deterministic communication, council, task, execution, validation, repair and evidence system until a full working project is delivered.
