@@ -2,98 +2,127 @@
 
 ## M0 — Repository and architecture foundation
 - canonical repository
-- documentation
-- workspace layout
-- governance
+- documentation index
+- master specification
+- requirements
+- subsystem architecture
+- design governance
+- decision register
+- design history
 
-## M1 — MCF-v2 protocol
-- canonical JSON Schemas
-- message registry
-- event registry
+## M1 — MCF-v2 machine-readable contract
+- JSON Schemas
+- manifest
+- message/event registries
 - transition registry
 - fixtures
-- compatibility rules
+- compatibility checker
+- schema validation tests
 
-## M2 — Durable bus
+## M2 — Durable local communication bus
 - SQLite event log
 - transactional outbox
 - receiver inbox
+- routing
 - ACK/NACK
-- retry/dedupe
-- ordering
+- idempotency
+- ordering/gap handling
+- retry/backoff
+- priority lanes
 - backpressure
 - dead letters
-- replay
+- explicit replay
 
-## M3 — Four agent adapters
-- Claude Code CLI
-- Hermes Agent CLI
-- Kilo Code CLI
-- Cline
+## M3 — Agent gateway
+- Claude Code CLI adapter
+- Hermes Agent CLI adapter
+- Kilo Code CLI adapter
+- Cline adapter
 - runtime discovery
 - handshake
 - capability negotiation
+- health checks
+- process supervision
+- structured transport integration
 
-## M4 — Context synchronization
+## M4 — Context and synchronization
 - project epochs
-- snapshots/deltas
+- immutable ContextPacks
 - state digests
+- deltas
 - stale-context enforcement
+- affected-context dependency mapping
+- recovery rehydration
 
-## M5 — Tasks and handoffs
-- task DAG
+## M5 — Task/workspace execution
+- requirements-to-task DAG
 - task leases
-- recovery
+- lease renewal/expiry
 - proof-carrying handoffs
-
-## M6 — Council engine
-- independent analysis
-- debate
-- critique
-- disagreement resolution
-- user question engine
-- barriers
-- decision locks
-
-## M7 — Workspace/execution
-- project path
 - Git worktrees
+- non-Git isolation
+- checkpoints
 - local command execution
+- policy gates
 - process lifecycle
-- permissions
 
-## M8 — Build/test/E2E
-- build discovery
-- runtime launch
+## M6 — Council
+- independent analysis
+- proposals
+- cross-critique
+- rebuttal/revision
+- disagreement resolution
+- user question clustering/deduplication
+- decision locks
+- council barriers
+- participation/timeout semantics
+
+## M7 — Build/run/test/E2E
+- toolchain discovery
+- repository-based command discovery
+- build execution
+- app launch
+- runtime verification
 - deterministic tests
-- browser/UI validation
+- browser/UI validation where applicable
 
-## M9 — Failure/repair
+## M8 — Review/repair
+- cross-agent review
 - failure fingerprints
 - diagnosis
-- bounded repair
-- regression
+- repair tasks
+- bounded retries
+- checkpoints/rollback
+- regression testing
+- high-severity issue gates
 
-## M10 — Cross-agent review
-- independent review
-- severity
-- evidence-backed findings
-
-## M11 — Control Room
-- chat
-- council timeline
+## M9 — Control Room
+- project management
+- chat/timeline
+- council view
+- requirements/architecture/decisions
 - tasks
-- agents
-- builds
-- tests
-- repairs
+- agent sessions
+- files/worktrees
+- build/run/test
+- repair
 - evidence
 - preview
+- communication observability
+- pause/resume/stop
 
-## M12 — Autonomous end-to-end loop
-- idea → working application
-
-## M13 — Certification/package
-- final validation
+## M10 — Autonomous end-to-end delivery
+- idea → working project
+- continuous synchronization
+- build/test/repair loop
 - certification
-- MSI creation
+
+## M11 — Packaging
+- final evidence bundle
+- final validation
+- MSI generation
+- installation validation
+
+## Release gate
+
+No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.
