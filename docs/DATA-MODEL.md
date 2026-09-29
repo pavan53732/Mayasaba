@@ -4,7 +4,9 @@
 
 SQLite is the durable Mayasaba source of truth for orchestration state and event history.
 
-The project-local .mayasaba directory may contain portable manifests for requirements, decisions, tasks and evidence. Larger operational/session data may remain in the application data directory.
+The project-local `.mayasaba` directory is reserved for portable user-visible manifests and import/export packages. It is never an operational database and never competes with SQLite. SQLite in application data is the sole durable runtime source of truth.
+
+Precedence is fixed: current SQLite state > validated `.mayasaba` import candidate > stale portable manifest. Import requires an explicit reconciliation transaction; a portable manifest never silently overwrites runtime state.
 
 ## Core entities
 
@@ -54,6 +56,14 @@ ProjectStatus
 - council round → barriers and messages
 - evidence/artifacts → referenced by messages, tasks, commands, reviews and validations
 
+## Council persistence
+
+CouncilSession and CouncilRound are persisted in SQLite with participants, positions, questions, outcomes and barriers. CouncilService owns these records.
+
+## Traceability persistence
+
+Trace links are first-class durable relationships represented by `trace_links` and coverage projections. Traceability indexes authoritative objects and is not a second source of truth.
+
 ## Message persistence
 
 Messages require durable IDs, project/session identity, delivery state, attempts, receipt state, sequence and idempotency information.
@@ -84,6 +94,10 @@ Events are append-oriented and immutable. Current state is materialized/derived 
 ## Project epoch
 
 Material changes to requirements, HARD_LOCK decisions, architecture, contracts, task graph semantics or policy increment the project epoch and invalidate affected contexts.
+
+## Portable project metadata
+
+`.mayasaba` has a fixed purpose: portable manifests/import-export only. Operational sessions, event history, messages, leases, council state and execution state remain in application-data SQLite.
 
 ## Secret storage
 
