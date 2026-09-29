@@ -130,7 +130,11 @@
     "schemas/mcf-v2/registry.json",
     "schemas/mcf-v2/transition-types.json",
     "schemas/tauri-bridge-v1/bridge.schema.json",
-    "schemas/agent-adapter-v1/probe-result.schema.json"
+    "schemas/agent-adapter-v1/probe-result.schema.json",
+    "schemas/sqlite-v1/schema.sql",
+    "schemas/context-v1/context-digest.schema.json",
+    "schemas/service-contracts-v1/registry.json",
+    "schemas/tauri-bridge-v1/payloads.schema.json"
   ],
   "rule": "This graph and the service/bridge/schema mappings are authoritative until implementation manifests exist; implementation Cargo/npm/Tauri manifests and generated bridge types must conform to them.",
   "application_services": {
@@ -176,7 +180,22 @@
       "request_sync": "ContextService",
       "request_preview": "WorkspaceService",
       "replay_event": "RecoveryService",
-      "replay_dead_letter": "RecoveryService"
+      "replay_dead_letter": "RecoveryService",
+      "abandon_project": "LifecycleService",
+      "pause_agent": "AgentService",
+      "resume_agent": "AgentService",
+      "request_event_resync": "DiagnosticsService",
+      "rollback_workspace": "WorkspaceService",
+      "start_recovery": "RecoveryService",
+      "resolve_recovery": "RecoveryService",
+      "upsert_requirement": "RequirementService",
+      "upsert_decision": "DecisionService",
+      "upsert_architecture": "ArchitectureService",
+      "update_configuration": "ConfigurationService",
+      "validate_configuration": "ConfigurationService",
+      "start_simulation": "SimulationService",
+      "stop_simulation": "SimulationService",
+      "create_trace_link": "DiagnosticsService"
     },
     "queries": {
       "get_project": "ProjectService",
@@ -197,7 +216,14 @@
       "get_reviews": "ReviewService",
       "get_evidence": "EvidenceService",
       "get_logs": "DiagnosticsService",
-      "get_communication_health": "DiagnosticsService"
+      "get_communication_health": "DiagnosticsService",
+      "get_validation_status": "ValidationService",
+      "get_recovery_status": "RecoveryService",
+      "get_doctor_report": "DiagnosticsService",
+      "get_configuration": "ConfigurationService",
+      "get_simulation_status": "SimulationService",
+      "get_event_cursor": "DiagnosticsService",
+      "get_action_admissibility": "PolicyService"
     },
     "events": {
       "PROJECT_UPDATED": "ProjectService",
@@ -244,5 +270,11 @@
     "embedding_mechanism": "Rust include_str!/include_bytes! or equivalent compile-time embedding",
     "msi_runtime_dependency": "none",
     "rule": "Runtime validation must not depend on repository-relative files after installation; schema source files remain build-time inputs."
+  },
+  "rules": {
+    "ownership": "workspace.manifest.json is the only authoritative service/crate and bridge ownership map",
+    "bus_policy": "bus performs transport/schema/project/recipient routing; PolicyService authorization occurs before material dispatch",
+    "context": "ContextService is owned by crates/core",
+    "execution": "privileged command execution is owned by crates/execution and requested through MCF EXECUTION_REQUEST"
   }
 }
