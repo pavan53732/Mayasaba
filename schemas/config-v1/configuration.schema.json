@@ -1,0 +1,15 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/config-v1/configuration.schema.json",
+  "title":"Mayasaba Configuration",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","ui","agents","runtime","communication","workspace","execution","policy","validation","evidence","logging"],
+  "properties":{
+    "schema_version":{"const":"1.0.0"},
+    "ui":{"type":"object"},"agents":{"type":"object"},"runtime":{"type":"object"},
+    "communication":{"type":"object","properties":{"ack_timeout_seconds":{"type":"integer","minimum":1},"retry_limit":{"type":"integer","minimum":0},"backoff_base_ms":{"type":"integer","minimum":1}}},
+    "workspace":{"type":"object","properties":{"project_root_only":{"type":"boolean"},"require_git_isolation":{"type":"boolean"}}},
+    "execution":{"type":"object","properties":{"default_timeout_seconds":{"type":"integer","minimum":1},"cancel_grace_seconds":{"type":"integer","minimum":0}}},
+    "policy":{"type":"object"},"validation":{"type":"object"},"evidence":{"type":"object"},"logging":{"type":"object"}
+  }
+}
