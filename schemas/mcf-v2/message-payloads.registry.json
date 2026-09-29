@@ -1,0 +1,33 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "authority":"schemas/mcf-v2/message-payloads.registry.json",
+  "rule":"Every registered MCF message type maps to exactly one payload schema reference.",
+  "refs":{
+    "handshake":"handshake.schema.json",
+    "ack":"ack.schema.json",
+    "error":"error.schema.json",
+    "sync":"sync.schema.json",
+    "council":"council-round.schema.json",
+    "task":"task.schema.json",
+    "lease":"task-lease.schema.json",
+    "handoff":"handoff.schema.json",
+    "execution":"execution.schema.json",
+    "validation":"validation.schema.json",
+    "artifact":"artifact.schema.json",
+    "evidence":"evidence.schema.json",
+    "control":"control.schema.json"
+  },
+  "messages":{
+    "HANDSHAKE":"handshake.schema.json","HANDSHAKE_ACK":"handshake.schema.json",
+    "ACK":"ack.schema.json","NACK":"error.schema.json","ERROR":"error.schema.json",
+    "SYNC_REQUEST":"sync.schema.json","SYNC_RESPONSE":"sync.schema.json","STATE_DIGEST":"sync.schema.json","CONTEXT_UPDATE":"sync.schema.json","STALE_CONTEXT":"sync.schema.json","EPOCH_CHANGED":"sync.schema.json",
+    "IDEA":"council-round.schema.json","PROPOSAL":"council-round.schema.json","QUESTION":"council-round.schema.json","CRITIQUE":"council-round.schema.json","COUNTERARGUMENT":"council-round.schema.json","REBUTTAL":"council-round.schema.json","REVISION":"council-round.schema.json","AGREE":"council-round.schema.json","DISAGREE":"council-round.schema.json","BLOCK":"council-round.schema.json","ACCEPT":"council-round.schema.json","REJECT":"council-round.schema.json","ABSTAIN":"council-round.schema.json","DECISION":"council-round.schema.json","LOCK":"council-round.schema.json",
+    "TASK":"task.schema.json","TASK_ACCEPT":"task-lease.schema.json","TASK_REJECT":"task-lease.schema.json","TASK_LEASE":"task-lease.schema.json","TASK_LEASE_RENEW":"task-lease.schema.json","TASK_RELEASE":"task-lease.schema.json","TASK_PROGRESS":"task-lease.schema.json",
+    "HANDOFF_REQUEST":"handoff.schema.json","HANDOFF_ACCEPT":"handoff.schema.json","HANDOFF_REJECT":"handoff.schema.json",
+    "IMPLEMENTATION_REPORT":"validation.schema.json","FAILURE":"error.schema.json","DIAGNOSIS":"validation.schema.json","REPAIR_REQUEST":"validation.schema.json","REPAIR_RESULT":"validation.schema.json","REVIEW":"validation.schema.json","TEST_RESULT":"validation.schema.json","VALIDATION":"validation.schema.json","CERTIFICATION":"validation.schema.json",
+    "EXECUTION_REQUEST":"execution.schema.json","EXECUTION_STARTED":"execution.schema.json","EXECUTION_RESULT":"execution.schema.json",
+    "ARTIFACT_PUBLISHED":"artifact.schema.json","EVIDENCE_PUBLISHED":"evidence.schema.json",
+    "READY":"control.schema.json","HEARTBEAT":"control.schema.json","PAUSE":"control.schema.json","RESUME":"control.schema.json","CANCEL":"control.schema.json","STOP":"control.schema.json","RETRY":"control.schema.json","DEAD_LETTER":"error.schema.json"
+  }
+}
