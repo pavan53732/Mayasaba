@@ -1,0 +1,11 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/council-v1/question.schema.json",
+  "title":"Mayasaba Council User Question","type":"object","additionalProperties":false,
+  "required":["question_id","project_id","round_id","body","normalized_key","impact"],
+  "properties":{
+    "question_id":{"type":"string","format":"uuid"},"project_id":{"type":"string","format":"uuid"},"round_id":{"type":"string","format":"uuid"},
+    "body":{"type":"string"},"normalized_key":{"type":"string"},"impact":{"enum":["LOW","MEDIUM","HIGH","BLOCKING"]},
+    "affected_agents":{"type":"array","items":{"type":"string","format":"uuid"}},"answer":{"type":["string","null"]},"status":{"enum":["OPEN","ANSWERED","RESOLVED_BY_EVIDENCE","CANCELED"]}
+  }
+}
