@@ -93,3 +93,13 @@ On Mayasaba restart:
 - no stale-context writes
 - no expired-lease writes
 - no unscoped destructive actions
+
+## Execution mediation invariant
+
+Native agent terminal/shell capabilities do not grant independent execution authority.
+
+For any privileged command:
+
+`agent -> EXECUTION_REQUEST (MCF-v2) -> PolicyService -> ExecutionService -> process -> evidence -> EXECUTION_RESULT`
+
+The adapter may keep scoped file-edit capabilities native to the CLI, but must prevent an uncontrolled native command path for tasks that require controller-mediated execution.
