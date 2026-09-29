@@ -33,7 +33,8 @@
     "transition-types.json",
     "event-payloads.schema.json",
     "message-payloads.registry.json",
-    "event-payloads.registry.json"
+    "event-payloads.registry.json",
+    "common-event.schema.json"
   ],
   "owners": {
     "protocol": "crates/protocol",
@@ -68,6 +69,7 @@
     "event-payloads.schema.json",
     "message-payloads.registry.json",
     "event-payloads.registry.json",
-    "registry.json"
+    "registry.json",
+    "common-event.schema.json"
   ]
 }
