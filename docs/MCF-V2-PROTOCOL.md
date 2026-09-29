@@ -57,7 +57,7 @@ protocol_version, schema_version, message_id, event_id, project_id, session_id, 
 
 Conditional fields include:
 
-causation_id, task_id, round_id, context_snapshot_id, state_digest, idempotency_key and expires_at.
+causation_id, task_id, round_id, context_snapshot_id, state_digest, operation_id, idempotency_key, expires_at and authorization_context.
 
 ## 4. Delivery lifecycle
 
@@ -161,3 +161,18 @@ The complete message, event and priority enum is maintained in `schemas/mcf-v2/r
 The material-action chain is not an informal sequence. Each stage has a canonical event type and is persisted/observable through the bus.
 
 No implementation may introduce a message, event, priority lane or transition identifier outside the registry.
+
+
+## Material authorization context
+
+For every material agent operation the envelope carries authorization_context containing lease_id, lease_version, workspace_id, agent_id, policy_scope, required_capabilities and capability_snapshot_id.
+
+The controller validates these values against durable session, lease, workspace, policy and capability state. The envelope does not grant authority by itself.
+
+## Phase and priority registry
+
+phase is the project lifecycle phase or UNSCOPED for messages not tied to a project phase. Default message priority is derived from schemas/mcf-v2/registry.json; senders may not invent a new priority lane.
+
+## Idempotency
+
+operation_id identifies one logical material operation across delivery retries. message_id identifies one envelope/delivery record. A retry may create a new message_id while retaining the same operation_id and idempotency key.
