@@ -89,3 +89,50 @@ When implementation starts, the following files must encode this graph:
 - `apps/desktop/src-tauri/tauri.conf.json`: Windows/MSI packaging and resource declarations.
 
 No dependency may exist only in prose after implementation begins; CI must compare manifests with this matrix.
+
+
+## Application-service ownership
+
+The complete service → crate mapping is authoritative in `workspace.manifest.json`. It includes all 22 application services and prevents the application-service vocabulary from becoming a second crate ownership system.
+
+Key mappings:
+
+- ProjectService, LifecycleService, RequirementService, DecisionService, ArchitectureService, ContextService, RepairService, RecoveryService, ConfigurationService, SimulationService, DiagnosticsService → `crates/core`
+- AgentService → `crates/agents`
+- CouncilService → `crates/council`
+- TaskService → `crates/tasks`
+- WorkspaceService → `crates/workspace`
+- ExecutionService → `crates/execution`
+- BuildService, TestService, ValidationService, ReviewService → `crates/validation`
+- EvidenceService → `crates/evidence`
+- PolicyService → `crates/policy`
+
+There is no one-crate-per-service requirement.
+
+## Tauri bridge ownership and code generation
+
+`schemas/tauri-bridge-v1/bridge.schema.json` is the canonical identifier schema for commands, queries, channels and UI event types. `workspace.manifest.json` is the canonical command/query/event → service mapping.
+
+The implementation path is:
+
+```text
+bridge.schema.json + workspace.manifest.json
+        ↓
+deterministic code generation
+        ↓
+Rust bridge DTO/metadata + TypeScript bridge types
+        ↓
+Tauri command/event runtime
+```
+
+Generated outputs are checked for drift in CI and are not hand-edited.
+
+## Runtime schema distribution
+
+MCF-v2, Tauri bridge, transition and agent-probe schemas are repository build inputs and are embedded into the installed Mayasaba binary/runtime. The MSI must not depend on repository-relative schema paths.
+
+The embedding owner is `crates/protocol`; compile-time embedding such as Rust `include_str!`/`include_bytes!` (or an equivalent deterministic build step) is authoritative.
+
+## Implementation-manifest gate
+
+Before M0.5 exits, the repository must contain the root `Cargo.toml`, desktop `package.json`, Tauri configuration and crate manifests matching `workspace.manifest.json`. CI must reject dependency drift.
