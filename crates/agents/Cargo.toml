@@ -1,0 +1,1 @@
+[package]\nname = "mayasaba-agents"\nversion.workspace = true\nedition.workspace = true\n\n[dependencies]\nmayasaba-protocol = { path = "../protocol" }\nmayasaba-execution = { path = "../execution" }\nmayasaba-workspace = { path = "../workspace" }\n
