@@ -1,0 +1,8 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "schema":"schemas/config-v1/configuration.schema.json",
+  "layers":["application_defaults","user","project","session_runtime"],
+  "precedence":"project > user > defaults",
+  "groups":["ui","agents","runtime","communication","workspace","execution","policy","validation","evidence","logging","simulation"]
+}
