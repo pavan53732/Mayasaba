@@ -1,0 +1,10 @@
+[package]
+name = "mayasaba-tasks"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-protocol = { path = "../protocol" }
+mayasaba-storage = { path = "../storage" }
+mayasaba-agents = { path = "../agents" }
+mayasaba-workspace = { path = "../workspace" }
