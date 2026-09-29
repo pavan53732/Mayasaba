@@ -48,7 +48,7 @@ Mayasaba/
 | protocol | MCF-v2 types, registry, schema validation | no domain crates |
 | bus | durable messaging, routing, outbox/inbox | protocol, storage |
 | agents | agent registry, sessions, adapters | protocol, execution, workspace |
-| council | rounds, debate, barriers, decisions | protocol, storage, context |
+| council | rounds, debate, barriers, decisions | protocol, storage |
 | tasks | requirements-to-task graph, leases, handoffs | protocol, storage, agents, workspace |
 | workspace | filesystem scope, Git worktrees, checkpoints, integration | storage, policy |
 | execution | PowerShell/CMD/process lifecycle | storage, policy |
