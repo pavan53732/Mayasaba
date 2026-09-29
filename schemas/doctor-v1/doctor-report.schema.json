@@ -1,0 +1,13 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/doctor-v1/doctor-report.schema.json",
+  "title":"Mayasaba Doctor Report",
+  "type":"object","additionalProperties":false,
+  "required":["report_id","platform","timestamp","agents","workspace","policy","blockers"],
+  "properties":{
+    "report_id":{"type":"string","format":"uuid"},"platform":{"type":"object"},"timestamp":{"type":"string","format":"date-time"},
+    "agents":{"type":"array","items":{"type":"object","required":["agent_type","available"],"properties":{"agent_type":{"enum":["CLAUDE_CODE","HERMES_AGENT","KILO_CODE","CLINE"]},"available":{"type":"boolean"},"probe_result_ref":{"type":["string","null"]},"remediation":{"type":["string","null"]}}}},
+    "workspace":{"type":"object"},"policy":{"type":"object"},"blockers":{"type":"array","items":{"type":"object","required":["code","severity","message"],"properties":{"code":{"type":"string"},"severity":{"enum":["INFO","WARNING","ERROR","CRITICAL"]},"message":{"type":"string"}}}},
+    "evidence_ref":{"type":["string","null"]}
+  }
+}
