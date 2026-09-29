@@ -151,7 +151,18 @@
     "schemas/trace-v1/trace-link.schema.json",
     "schemas/ui-events-v1/cursor.schema.json",
     "schemas/error-v1/registry.json",
-    "schemas/sqlite-v1/manifest.json"
+    "schemas/sqlite-v1/manifest.json",
+    "schemas/mcf-v2/event-to-ui.registry.json",
+    "schemas/agent-adapter-v1/native-event.schema.json",
+    "schemas/agent-adapter-v1/native-to-mcf.registry.json",
+    "schemas/validation-v1/failure.schema.json",
+    "schemas/validation-v1/diagnosis.schema.json",
+    "schemas/validation-v1/repair.schema.json",
+    "schemas/validation-v1/review.schema.json",
+    "schemas/validation-v1/certification.schema.json",
+    "schemas/validation-v1/repair-policies.json",
+    "schemas/council-v1/question.schema.json",
+    "schemas/council-v1/answer.schema.json"
   ],
   "rule": "This graph and the service/bridge/schema mappings are authoritative until implementation manifests exist; implementation Cargo/npm/Tauri manifests and generated bridge types must conform to them.",
   "application_services": {
