@@ -8,6 +8,7 @@ const fail=(m)=>{throw new Error(m)};
 
 const mcf=read("schemas/mcf-v2/manifest.json");
 for(const file of mcf.schemas ?? []) if(!exists("schemas/mcf-v2/"+file)) fail("Missing MCF schema: "+file);
+for(const file of mcf.required_files ?? []) if(!exists("schemas/mcf-v2/"+file)) fail("Missing required MCF file: "+file);
 
 const messages=read("schemas/mcf-v2/message-types.schema.json").enum;
 const events=read("schemas/mcf-v2/event-types.schema.json").enum;
@@ -43,3 +44,16 @@ for(const p of requiredRefs) if(!exists(p)) fail("Missing workspace schema sourc
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+
+const wm=read("workspace.manifest.json");
+if(!exists("Cargo.toml") || !exists("package.json")) fail("Missing root workspace manifest");
+for(const member of wm.rust_workspace.members){
+  if(!exists(member + "/Cargo.toml")) fail("Missing Rust manifest: " + member + "/Cargo.toml");
+}
+if(!exists(wm.desktop.path + "/package.json")) fail("Missing desktop package manifest");
+if(!exists(wm.tauri_shell.path + "/tauri.conf.json")) fail("Missing Tauri configuration");
+for(const [name,def] of Object.entries(wm.crates)){
+  const actual=(def.depends||[]).map(x=>"mayasaba-"+x);
+  const cargo=fs.readFileSync(path.join(root,def.path,"Cargo.toml"),"utf8");
+  for(const dep of actual) if(!cargo.includes(dep)) fail("Manifest missing declared dependency: "+name+" -> "+dep);
+}
