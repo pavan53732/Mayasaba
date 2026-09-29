@@ -23,6 +23,9 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-017 | One canonical owner per subsystem; no shadow sources of truth | HARD_LOCK |
 | DEC-018 | Protocol schemas use JSON Schema Draft 2020-12 | HARD_LOCK |
 | DEC-019 | No private chain-of-thought in Control Room | HARD_LOCK |
+| DEC-020 | Project-local `.mayasaba` is portable manifest/import-export only; SQLite app-data remains the sole runtime source of truth | HARD_LOCK |
+| DEC-021 | MCF-v2 and Tauri bridge identifiers use machine-readable canonical registries | HARD_LOCK |
+| DEC-022 | The implementation target uses exactly 12 Rust crates defined by WORKSPACE-MANIFEST.md | HARD_LOCK |
 
 ## Change procedure
 
