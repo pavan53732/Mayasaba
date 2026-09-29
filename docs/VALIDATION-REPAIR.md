@@ -92,3 +92,8 @@ Required evidence includes:
 ## 10. Completion
 
 COMPLETE is unreachable by agent declaration. It is a controller-owned terminal state after all applicable validation gates are satisfied.
+
+
+## Machine-readable validation contracts
+
+Failure packets, diagnoses, repairs, reviews and controller certification use schemas under schemas/validation-v1/. Repair retry and anti-loop limits are defined by repair-policies.json.
