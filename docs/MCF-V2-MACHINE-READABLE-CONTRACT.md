@@ -120,3 +120,20 @@ The package contract is specified here. The actual JSON Schema files, fixtures a
 
 
 Implementation mechanics, durable inbox/outbox behavior, ordering, replay and delivery recovery are defined separately in `MCF-V2-IMPLEMENTATION-DESIGN.md`.
+
+## Canonical registry implementation
+
+The actual registry is now implemented at `schemas/mcf-v2/registry.json`.
+
+It is the single machine-readable enum source for:
+
+- message types
+- event types
+- priority lanes
+- material-action-chain mappings
+
+The human-readable registry is `MCF-V2-REGISTRY.md`. No crate or adapter may maintain a second authoritative message/event enum.
+
+`message-types.schema.json` validates message names against the registry; `event-types.schema.json` validates event names; `transition-types.json` validates legal state transitions. These files must reference the same registry identity/version.
+
+The 13+ stage material-action chain in `MCF-V2-PROTOCOL.md` is explicitly mapped to canonical event types in the registry.
