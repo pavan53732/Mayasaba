@@ -119,3 +119,6 @@ The Control Room does not expose private model chain-of-thought. It exposes mode
 ## Preview
 
 Where the target project has a runnable UI/application, the local running target is a first-class preview surface. Preview status is evidence-backed rather than inferred from a successful start command alone.
+
+
+The implementation-level UI composition and event-cursor contract is defined in `CONTROL-ROOM-DESIGN.md`.
