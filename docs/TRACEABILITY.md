@@ -22,3 +22,18 @@ Changes to requirements, decisions, or contracts identify affected tasks, contex
 
 ## Authority
 Traceability indexes relationships between authoritative objects. It is not a second source of truth.
+
+
+## Persistence implementation
+
+Traceability is persisted by the SQLite storage owner.
+
+Canonical tables:
+- `trace_links` — typed source → target relationship.
+- `trace_link_versions` — immutable supersession/history.
+- `trace_coverage` — materialized coverage facts derived from authoritative links and validation/certification state.
+
+Canonical link types:
+`INTENT_REQUIREMENT`, `REQUIREMENT_ACCEPTANCE`, `REQUIREMENT_DECISION`, `DECISION_ARCHITECTURE`, `ARCHITECTURE_CONTRACT`, `CONTRACT_TASK`, `TASK_LEASE`, `LEASE_CHANGESET`, `CHANGESET_EXECUTION`, `EXECUTION_EVIDENCE`, `EVIDENCE_REVIEW`, `REVIEW_VALIDATION`, `VALIDATION_CERTIFICATION`.
+
+Orphan detection is a deterministic SQLite query/service operation, not an LLM judgment.
