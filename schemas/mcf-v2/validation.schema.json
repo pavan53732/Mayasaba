@@ -1,0 +1,24 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/mcf-v2/validation.schema.json",
+  "title":"Mayasaba Validation Result",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["validation_id","project_id","scope","checks","verdict"],
+  "properties":{
+    "validation_id":{"type":"string","format":"uuid"},
+    "project_id":{"type":"string","format":"uuid"},
+    "scope":{"type":"object","additionalProperties":false,"required":["task_id","workspace_id"],"properties":{
+      "task_id":{"type":"string","format":"uuid"},
+      "workspace_id":{"type":"string","format":"uuid"}
+    }},
+    "checks":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["check_id","predicate","status"],"properties":{
+      "check_id":{"type":"string"},
+      "predicate":{"type":"object"},
+      "status":{"enum":["NOT_RUN","RUNNING","PASS","FAIL","BLOCKED"]},
+      "evidence_refs":{"type":"array","items":{"type":"string"}}
+    }}},
+    "verdict":{"enum":["PASS","FAIL","BLOCKED"]},
+    "failure_refs":{"type":"array","items":{"type":"string","format":"uuid"}}
+  }
+}
