@@ -1,0 +1,10 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/council-v1/answer.schema.json",
+  "title":"Mayasaba Council User Answer","type":"object","additionalProperties":false,
+  "required":["answer_id","question_id","answer","answered_at"],
+  "properties":{
+    "answer_id":{"type":"string","format":"uuid"},"question_id":{"type":"string","format":"uuid"},"answer":{"type":"string"},"answered_at":{"type":"string","format":"date-time"},
+    "redistribution_scope":{"type":"array","items":{"type":"string","format":"uuid"}}
+  }
+}
