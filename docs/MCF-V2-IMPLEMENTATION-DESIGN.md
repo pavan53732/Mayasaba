@@ -35,12 +35,13 @@ Receiver processing:
 receive
 → validate envelope
 → validate project/session
-→ persist message identity
-→ if duplicate: return prior outcome
+→ persist inbox identity
+→ ACK receipt
+→ if duplicate: return prior terminal outcome
 → validate epoch/context/lease
 → execute side effect
 → persist outcome
-→ ACK
+→ emit PROCESSED or NACK/ERROR
 ```
 Persistence before side effects prevents duplicate side effects after acknowledgement races.
 
@@ -106,3 +107,16 @@ Before the bus is considered buildable:
 - every legal transition is represented by `transition-types.json`;
 - the protocol crate, bus and adapters consume the same generated/validated identifiers;
 - fixtures prove valid, invalid, duplicate, stale-context and replay cases.
+
+
+## Routing and authorization boundary
+
+The bus performs transport/schema/project/recipient routing only. It does not depend on domain policy. Core/PolicyService performs authorization before a material message becomes dispatchable and persists the authorization decision with the outbox record. The bus verifies the envelope contains the required authorization context fields but does not independently reimplement policy rules.
+
+## Idempotency scope
+
+The canonical idempotency scope is `project_id + operation_id`. `operation_id` is a stable UUID for one logical material operation and is carried in the envelope. A message may have a different `message_id` for retries while retaining the same `operation_id`.
+
+## Message/event relationship
+
+`event_id` identifies the immutable bus event record created for the message lifecycle. `causation_id` identifies the immediately preceding event that caused the current message/event. They are therefore not interchangeable.
