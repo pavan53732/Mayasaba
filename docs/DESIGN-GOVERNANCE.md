@@ -79,3 +79,13 @@ Any meaningful change must document:
 ## Historical integrity
 
 Do not erase historical decisions/events to make the current state look cleaner. Supersede them explicitly and preserve traceability.
+
+
+## Machine-readable ownership registries
+
+- MCF-v2 message/event/priority registry: `schemas/mcf-v2/registry.json`.
+- Tauri bridge command/query/event registry: `schemas/tauri-bridge-v1/bridge.schema.json`.
+- Agent runtime probe result: `schemas/agent-adapter-v1/probe-result.schema.json`.
+- Workspace/crate dependency contract: `docs/WORKSPACE-MANIFEST.md`.
+
+These are source-of-truth artifacts, not additional competing architecture documents.
