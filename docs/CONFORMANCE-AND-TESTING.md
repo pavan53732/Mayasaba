@@ -101,3 +101,31 @@ The system must prove that:
 ## Release gate
 
 A Mayasaba release must have passing conformance results for protocol, adapters, storage, recovery, workspace, execution, validation and certification. Failed mandatory suites block release.
+
+
+## M0.5 integration-seam tests
+
+Before any real adapter is considered integrated, the repository must pass a deterministic seam suite covering:
+
+1. workspace manifest/dependency graph validation;
+2. MCF registry loading and enum validation;
+3. MCF envelope encode/decode with one valid and one invalid fixture;
+4. bus inbox/outbox persistence using a simulated adapter;
+5. Tauri command/query identifier validation;
+6. Rust→Tauri event emission and React-side event decoding using the bridge schema;
+7. empty-schema UI↔Rust round-trip with correlation ID preservation;
+8. Windows process cancellation/cleanup smoke test;
+9. runtime agent probe result schema validation.
+
+This suite belongs to M0.5 and must run before M1/M2/M3 vertical integration. It does not require any real AI provider or live agent.
+
+## Cross-contract drift tests
+
+CI must compare:
+
+- `schemas/mcf-v2/registry.json` against protocol/message/event enums;
+- `schemas/tauri-bridge-v1/bridge.schema.json` against generated Rust and TypeScript bridge identifiers;
+- `docs/WORKSPACE-MANIFEST.md` against Cargo/npm/Tauri manifests once implementation exists;
+- adapter probe results against the adapter capability contract.
+
+Any mismatch is a build failure, not a warning.
