@@ -1,0 +1,11 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/ui-events-v1/cursor.schema.json",
+  "title":"Mayasaba UI event cursor",
+  "type":"object","additionalProperties":false,
+  "required":["project_id","consumer_id","last_sequence"],
+  "properties":{
+    "project_id":{"type":"string","format":"uuid"},"consumer_id":{"type":"string"},"last_sequence":{"type":"integer","minimum":0},
+    "next_sequence":{"type":["integer","null"],"minimum":0},"gap_detected":{"type":"boolean"},"resync_from":{"type":["integer","null"],"minimum":0}
+  }
+}
