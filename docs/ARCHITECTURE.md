@@ -159,3 +159,10 @@ Recovery uses durable events, outbox/inbox reconciliation, process verification,
 ## 9. Completion
 
 An agent can never certify the project. The controller may enter COMPLETE only after evidence-backed validation and packaging gates pass.
+
+
+The detailed orchestration contract is defined in `ORCHESTRATOR-DESIGN.md` and authoritative internal transitions in `DOMAIN-STATE-MACHINES.md`.
+
+MCF-v2 implementation mechanics are defined in `MCF-V2-IMPLEMENTATION-DESIGN.md`.
+
+SQLite implementation structure is defined in `SQLITE-DATA-ARCHITECTURE.md`.
