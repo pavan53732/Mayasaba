@@ -1,0 +1,8 @@
+[package]
+name = "mayasaba-execution"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-storage = { path = "../storage" }
+mayasaba-policy = { path = "../policy" }
