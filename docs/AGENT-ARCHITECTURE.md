@@ -86,3 +86,9 @@ Detailed native integration is specified in AGENT-INTEGRATION.md.
 Execution mechanics are defined in `EXECUTION-KERNEL-DESIGN.md`.
 
 Workspace and integration mechanics are defined in `WORKSPACE-INTEGRATION-DESIGN.md`.
+
+## Material-action binding
+
+Every material action is bound to project + agent + session + workspace + task lease + context snapshot + project epoch + policy scope + required capabilities + capability snapshot. The machine-readable envelope authorization context is defined in schemas/mcf-v2/envelope.schema.json.
+
+The controller validates the binding before a material action is admitted. An envelope is not an authority grant; durable controller state is authoritative.
