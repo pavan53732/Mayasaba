@@ -102,3 +102,13 @@ The Doctor should produce a structured report containing:
 - timestamp
 
 The report can be displayed in the Control Room and persisted as evidence.
+
+## Machine-readable contract
+
+Doctor output is canonicalized by `schemas/doctor-v1/doctor-report.schema.json` and is persisted as evidence when a report is generated.
+
+The Control Room reads the report through `get_doctor_report` (DiagnosticsService). The report never contains secrets; authentication is represented as readiness/status facts only.
+
+## Adapter probe authority
+
+The detailed native invocation matrix is `schemas/agent-adapter-v1/native-transport-contract.json`. Runtime probe results conform to `schemas/agent-adapter-v1/probe-result.schema.json` and are authoritative for the installed executable/version.
