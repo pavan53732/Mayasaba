@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mayasaba.local/schemas/mcf-v2/council-round.schema.json",
+  "title": "Mayasaba Council Round",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "round_id",
+    "project_id",
+    "state",
+    "participants"
+  ],
+  "properties": {
+    "round_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "OPEN",
+        "RESPONSES_COLLECTING",
+        "CRITIQUE",
+        "REBUTTAL",
+        "REVISION",
+        "DISAGREEMENT_REVIEW",
+        "CLOSING",
+        "SEALED"
+      ]
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "barrier_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "outcome": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "sealed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}
