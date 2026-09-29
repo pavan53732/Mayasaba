@@ -1,0 +1,104 @@
+# Mayasaba Windows Preflight and Agent Doctor
+
+## Purpose
+
+Before any project work begins, Mayasaba performs deterministic local preflight.
+
+## Product checks
+
+- Windows OS
+- writable application data location
+- SQLite availability
+- project path accessibility
+- required local permissions
+
+## Agent checks
+
+For each of Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline:
+
+1. detect executable
+2. resolve actual executable path
+3. determine version
+4. verify invocation
+5. inspect authentication/readiness
+6. detect working-directory support
+7. detect structured transport/features
+8. detect capabilities
+9. run health check
+10. create an isolated session only after checks pass
+
+Mayasaba must not rely on fixed install paths.
+
+## Capability discovery
+
+Runtime capability facts may include:
+
+- structured I/O
+- streaming
+- interrupt
+- resume
+- autonomous execution
+- file modification
+- shell
+- browser automation
+- Git
+- patching
+- artifact/evidence reporting
+- structured errors
+
+## Agent readiness
+
+~~~text
+DISCOVERED
+→ HANDSHAKING
+→ CAPABILITY_VALIDATING
+→ WORKSPACE_VALIDATING
+→ READY
+~~~
+
+Only READY agents receive task leases.
+
+## Missing agents
+
+The user may proceed with fewer than four if an agent is unavailable or intentionally disabled. The Control Room must show actual capacity, for example 3/4 ready.
+
+Missing agents must never be represented as silently participating.
+
+## Kilo remote mode
+
+Remote/cloud gateway execution is outside Mayasaba's product boundary. Local execution is required.
+
+## Workspace preflight
+
+Before an agent session starts:
+
+- project path is resolved
+- workspace identity is established
+- Git status/worktree capability is detected
+- allowed scope is calculated
+- protected integration workspace is identified
+- policy scope is attached to the session
+
+## Process supervision
+
+Mayasaba must track actual process state and child processes.
+
+A stop request is not considered complete until the process state is verified.
+
+## Doctor output
+
+The Doctor should produce a structured report containing:
+
+- platform
+- agent availability
+- versions
+- paths
+- authentication/readiness
+- capabilities
+- workspace readiness
+- policy status
+- blockers
+- remediation instructions
+- timestamp
+
+The report can be displayed in the Control Room and persisted as evidence.
