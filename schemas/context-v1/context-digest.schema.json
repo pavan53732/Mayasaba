@@ -1,0 +1,20 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/context-v1/context-digest.schema.json",
+  "title":"Mayasaba canonical context digest",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["algorithm","version","project_id","project_epoch","scope","canonical_serialization","input","digest"],
+  "properties":{
+    "algorithm":{"const":"SHA-256"},
+    "version":{"const":"1.0"},
+    "project_id":{"type":"string","format":"uuid"},
+    "project_epoch":{"type":"integer","minimum":0},
+    "scope":{"enum":["PROJECT","TASK","COUNCIL_ROUND","WORKSPACE","AGENT_SESSION"]},
+    "canonical_serialization":{"const":"RFC8785-JCS"},
+    "input":{"type":"object","additionalProperties":false,"required":["requirements","decisions","architecture","contracts","task","workspace","validation","policy"],"properties":{
+      "requirements":{"type":"array"},"decisions":{"type":"array"},"architecture":{"type":"array"},"contracts":{"type":"array"},"task":{"type":"object"},"workspace":{"type":"object"},"validation":{"type":"array"},"policy":{"type":"array"}
+    }},
+    "digest":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"}
+  }
+}
