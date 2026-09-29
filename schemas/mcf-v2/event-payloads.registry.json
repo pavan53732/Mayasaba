@@ -1,0 +1,8 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "authority":"schemas/mcf-v2/event-payloads.registry.json",
+  "rule":"Every registered MCF event type maps to one canonical payload family or the event envelope.",
+  "default_schema":"common-event.schema.json",
+  "ownership":"Event payload construction follows the registry ownership in registry.json."
+}
