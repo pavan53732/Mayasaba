@@ -1,41 +1,114 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "schema_version":"1.0.0",
-  "authority":"schemas/agent-adapter-v1/native-transport-contract.json",
-  "runtime_probe_authoritative":true,
-  "agents":{
-    "CLAUDE_CODE":{
-      "executable":"claude",
-      "launch":["-p","<prompt>","--output-format","stream-json","--input-format","stream-json"],
-      "resume":["-p","--resume","<native_session_id>","<prompt>","--output-format","stream-json","--input-format","stream-json"],
-      "version":["--version"],"auth":["auth","status"],
-      "transport":"CLAUDE_STREAM_JSON",
-      "interrupt":"controller terminates the local process tree after bounded graceful cancellation; no protocol success until process state is verified"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "1.0.0",
+  "authority": "schemas/agent-adapter-v1/native-transport-contract.json",
+  "runtime_probe_authoritative": true,
+  "agents": {
+    "CLAUDE_CODE": {
+      "executable": "claude",
+      "launch": [
+        "-p",
+        "<prompt>",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json"
+      ],
+      "resume": [
+        "-p",
+        "-r",
+        "<native_session_id>",
+        "<prompt>",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json"
+      ],
+      "version": [
+        "--version"
+      ],
+      "auth": [
+        "auth",
+        "status"
+      ],
+      "transport": "CLAUDE_STREAM_JSON",
+      "interrupt": "controller terminates the local process tree after bounded graceful cancellation; no protocol success until process state is verified"
     },
-    "HERMES_AGENT":{
-      "executable":"hermes",
-      "launch":["chat","-q","<prompt>","--format","stream-json"],
-      "version":["--version"],"auth_probe":"isolated readiness probe; credential failures are mapped to AUTH_REQUIRED",
-      "transport":"HERMES_STREAM_JSON",
-      "interrupt":"OS process cancellation; terminal result exit_code is reconciled with observed process state"
+    "HERMES_AGENT": {
+      "executable": "hermes",
+      "launch": [
+        "chat",
+        "-q",
+        "<prompt>",
+        "--format",
+        "stream-json"
+      ],
+      "version": [
+        "--version"
+      ],
+      "auth_probe": "hermes doctor (diagnostic readiness probe); credentials are never copied into MCF payloads",
+      "transport": "HERMES_STREAM_JSON",
+      "interrupt": "OS process cancellation; terminal result exit_code is reconciled with observed process state"
     },
-    "KILO_CODE":{
-      "executable":"kilo",
-      "launch":["run","<prompt>","--auto","--format","json"],
-      "resume":["run","<prompt>","--session","<native_session_id>","--format","json"],
-      "version":["--version"],"auth":["auth"],
-      "transport":"KILO_JSON",
-      "remote_forbidden":["cloud","remote"],
-      "permission_enforcement":"adapter must configure native permissions so terminal/command operations are controller-mediated or fail admission"
+    "KILO_CODE": {
+      "executable": "kilo",
+      "launch": [
+        "run",
+        "<prompt>",
+        "--auto",
+        "--format",
+        "json"
+      ],
+      "resume": [
+        "run",
+        "<prompt>",
+        "--session",
+        "<native_session_id>",
+        "--format",
+        "json"
+      ],
+      "version": [
+        "--version"
+      ],
+      "auth": [
+        "auth"
+      ],
+      "transport": "KILO_JSON",
+      "remote_forbidden": [
+        "cloud",
+        "remote"
+      ],
+      "permission_enforcement": "adapter must configure native permissions so terminal/command operations are controller-mediated or fail admission",
+      "auth_probe": "readiness probe; kilo auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result"
     },
-    "CLINE":{
-      "executable":"cline",
-      "launch":["<prompt>","--json","--cwd","<workspace>"],
-      "resume":["<prompt>","--json","--cwd","<workspace>","--id","<native_session_id>"],
-      "version":["--version"],"auth":["auth"],
-      "transport":"CLINE_JSON",
-      "acp":["--acp"],
-      "permission_enforcement":"use --auto-approve false when controller-mediated tool approval is required; otherwise fail admission for tasks requiring execution mediation"
+    "CLINE": {
+      "executable": "cline",
+      "launch": [
+        "<prompt>",
+        "--json",
+        "--cwd",
+        "<workspace>"
+      ],
+      "resume": [
+        "<prompt>",
+        "--json",
+        "--cwd",
+        "<workspace>",
+        "--id",
+        "<native_session_id>"
+      ],
+      "version": [
+        "--version"
+      ],
+      "auth": [
+        "auth"
+      ],
+      "transport": "CLINE_JSON",
+      "acp": [
+        "--acp"
+      ],
+      "permission_enforcement": "use --auto-approve false when controller-mediated tool approval is required; otherwise fail admission for tasks requiring execution mediation",
+      "auth_probe": "readiness probe; cline auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result"
     }
   }
 }
