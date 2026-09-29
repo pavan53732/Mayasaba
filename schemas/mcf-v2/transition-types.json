@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "registry_version": "1.0.0",
+  "authority": "schemas/mcf-v2/transition-types.json",
+  "rule": "Every adjacent state pair listed below is a legal transition subject to the authoritative guard and authorization contract.",
+  "machines": {
+    "project": {"owner":"crates/core","states":["PROJECT_CREATED","DISCOVERY","INDEPENDENT_ANALYSIS","PROPOSALS","CROSS_CRITIQUE","REBUTTAL_AND_REVISION","DISAGREEMENT_RESOLUTION","USER_INTERVIEW","PRODUCT_AND_UX_DESIGN","TECH_STACK_DEBATE","ARCHITECTURE_REVIEW","ARCHITECTURE_LOCKED","TASK_PLANNING","IMPLEMENTATION","INTEGRATION","BUILD","TEST","E2E","CROSS_AGENT_REVIEW","FINAL_VALIDATION","PACKAGE","COMPLETE"]},
+    "agent_session": {"owner":"crates/agents","states":["DISCOVERED","HANDSHAKING","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","READY","ACTIVE","PAUSED","DRAINING","STOPPED","LOST","RECONNECTING","SYNCING","FAILED"]},
+    "task": {"owner":"crates/tasks","states":["PLANNED","READY","LEASE_REQUESTED","LEASED","ACCEPTED","IN_PROGRESS","REVIEW_PENDING","VALIDATION_PENDING","PASSED","COMPLETED","BLOCKED","FAILED","RETRY_PENDING","REPAIR_PENDING","LEASE_EXPIRED","RECOVERY_PENDING","REASSIGNED","INVALIDATED"]},
+    "lease": {"owner":"crates/tasks","states":["REQUESTED","ACTIVE","RENEWING","EXPIRED","RELEASED","REVOKED"]},
+    "council_round": {"owner":"crates/council","states":["OPEN","RESPONSES_COLLECTING","CRITIQUE","REBUTTAL","REVISION","DISAGREEMENT_REVIEW","CLOSING","SEALED"]},
+    "handoff": {"owner":"crates/tasks","states":["REQUESTED","PACKAGE_BUILT","OFFERED","RECEIVER_ACCEPTED","OWNERSHIP_TRANSFERRED","VERIFIED","CLOSED"]},
+    "execution": {"owner":"crates/execution","states":["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"]},
+    "validation": {"owner":"crates/validation","states":["REQUESTED","COLLECTING_EVIDENCE","RUNNING_CHECKS","RESULTS_RECORDED","PASS","FAIL"]},
+    "repair": {"owner":"crates/core","states":["REQUESTED","DIAGNOSING","ACTIVE","VERIFYING","REGRESSION","RESOLVED","RETRY_PENDING","BLOCKED"]},
+    "context": {"owner":"crates/core","states":["CURRENT","SUPERSEDED","INVALIDATED"]},
+    "message_delivery": {"owner":"crates/bus","states":["CREATED","PERSISTED","QUEUED","DISPATCHED","RECEIVED","ACKED","PROCESSING","PROCESSED","RETRYING","EXPIRED","REJECTED","DEAD_LETTER"]},
+    "barrier": {"owner":"crates/council","states":["OPEN","WAITING","SATISFIED","BLOCKED","TIMED_OUT"]}
+  }
+}
