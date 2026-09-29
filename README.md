@@ -4,80 +4,70 @@ Mayasaba is a Windows-only, local-first autonomous software engineering platform
 
 ## Canonical repository
 
-This repository is the **only canonical implementation repository for Mayasaba**:
+**This repository is the only canonical implementation repository for Mayasaba:**
 
-- https://github.com/pavan53732/Mayasaba
+https://github.com/pavan53732/Mayasaba
 
-All Mayasaba source code, architecture, specifications, protocols, schemas, tests, design decisions, and implementation history belong here.
+All Mayasaba source code, architecture, specifications, protocol schemas, tests, design decisions, and implementation history belong here.
 
-## Product boundary
+## What Mayasaba is
 
-Mayasaba is a local Windows desktop control plane. It does not replace the four coding agents with a fifth AI brain.
+Mayasaba is a **control plane for four independent coding agents**.
 
-The four initial agents are:
+It is not a fifth AI brain. Each supported CLI keeps its own model/provider, context, reasoning, tools, authentication and runtime. Mayasaba supplies the shared deterministic project state, communication, orchestration, workspace, execution, validation and evidence systems.
+
+## Four initial agents
 
 1. Claude Code CLI
 2. Hermes Agent CLI
 3. Kilo Code CLI
 4. Cline
 
-Each agent keeps its own model/provider, reasoning, tools, authentication, runtime, and native context. Mayasaba provides the shared deterministic engineering reality around them.
+The architecture is adapter-based for future extension, but no additional agent is part of the initial supported set.
 
-## Locked deployment constraints
+## Locked boundaries
 
-- Windows-only
-- Local-only execution on the user's Windows PC
-- No cloud VM or remote development machine
-- No required Mayasaba account or login
-- User-selected local project path is authoritative
-- Git worktrees/branches are preferred for agent isolation when available
-- SQLite is the durable Mayasaba source of truth
-- Tauri 2 + React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui
-- Rust + Tokio for the controller/core
-- MSI-only user-facing distribution
-- Full working delivery is mandatory: build, run, test, E2E, review, repair, regression, validation, packaging
+- Windows-only.
+- Local-only execution on the user's Windows PC.
+- No cloud VM, remote executor or hosted development workspace.
+- No required Mayasaba login/account.
+- User-selected local project path is authoritative.
+- Git worktrees/branches are preferred for concurrent agent isolation.
+- SQLite is the durable Mayasaba source of truth.
+- Tauri 2 + React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui.
+- Rust + Tokio for the controller/core.
+- User-facing distribution is MSI only.
+- Full working software delivery is mandatory; planning-only completion is not accepted.
 
-## Architecture
+## Architecture at a glance
 
-```text
+~~~text
 USER
   ↓
-MAYASABA CONTROL ROOM
+CONTROL ROOM
   ↓
-ORCHESTRATOR
+MAYASABA ORCHESTRATOR
   ↓
 MCF-v2 COMMUNICATION FABRIC
   ↓
-┌────────────┬────────────┬────────────┐
-│ Claude     │ Hermes     │ Kilo       │
-│ Code CLI   │ Agent CLI  │ Code       │
-└────────────┴────────────┴────────────┘
-                │
-              Cline
-                ↓
-Workspace → Execute → Build → Test → E2E → Review → Repair → Certify
-```
-
-### Canonical subsystem ownership
-
-- `crates/protocol` — MCF-v2 wire schemas and protocol contracts
-- `crates/bus` — durable routing, ACK, retry, ordering, dedupe, backpressure, replay, dead letters
-- `crates/agents` — Claude/Hermes/Kilo/Cline adapters and sessions
-- `crates/core` — orchestration and project transition authorization
-- `crates/tasks` — task lifecycle and leases
-- `crates/council` — council rounds and barriers
-- `crates/execution` — local command/process execution
-- `crates/workspace` — project/worktree isolation
-- `crates/validation` — deterministic validation gates
-- `crates/evidence` — evidence and artifact integrity
-- `crates/policy` — permissions and security policy
-- `crates/storage` — SQLite persistence and event history
-
-No subsystem may introduce a competing source of truth for another subsystem.
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│ Claude Code  │ Hermes Agent │ Kilo Code    │ Cline        │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+                         ↓
+             WORKSPACE + EXECUTION
+                         ↓
+        BUILD → TEST → E2E → REVIEW
+                         ↓
+               DIAGNOSE → REPAIR
+                         ↓
+                REGRESSION → CERTIFY
+                         ↓
+                     PACKAGE
+~~~
 
 ## Canonical lifecycle
 
-```text
+~~~text
 PROJECT_CREATED
 → DISCOVERY
 → INDEPENDENT_ANALYSIS
@@ -97,42 +87,62 @@ PROJECT_CREATED
 → TEST
 → E2E
 → CROSS_AGENT_REVIEW
-→ REPAIR (when needed)
+→ REPAIR
 → FINAL_VALIDATION
 → PACKAGE
 → COMPLETE
-```
+~~~
 
-`COMPLETE` is controller-owned and evidence-backed. An agent cannot self-certify completion.
+REPAIR is entered only when required. COMPLETE is controller-owned and evidence-backed.
+
+## Canonical subsystem ownership
+
+| Responsibility | Canonical owner |
+|---|---|
+| Protocol schemas | crates/protocol |
+| Communication bus | crates/bus |
+| Agent adapters/sessions | crates/agents |
+| Orchestration/state transitions | crates/core |
+| Council | crates/council |
+| Context synchronization | core context orchestration |
+| Tasks and leases | crates/tasks |
+| Workspace/worktrees | crates/workspace |
+| Local execution | crates/execution |
+| Validation | crates/validation |
+| Evidence/artifacts | crates/evidence |
+| Security/policy | crates/policy |
+| SQLite persistence | crates/storage |
+
+No subsystem may create a competing authority for another subsystem.
 
 ## MCF-v2
 
-MCF-v2 is the canonical communication protocol between Mayasaba and all four CLI agents.
+MCF-v2 is the canonical communication protocol connecting Mayasaba and the four CLIs.
 
-Key guarantees:
+It provides:
 
-- versioned typed messages
+- typed versioned envelopes
 - at-least-once delivery
-- idempotency for side effects
-- ACK/NACK semantics
-- bounded retries and dead-letter handling
-- causal correlation
-- per-session/channel ordering
+- ACK/NACK
+- idempotent side effects
+- ordering and causality
+- retries and dead letters
+- priority lanes and backpressure
 - project isolation
-- project epoch and stale-context protection
+- project epochs
+- ContextPacks and stale-context protection
 - task leases
 - proof-carrying handoffs
-- council synchronization barriers
+- council barriers
 - pause/resume/cancel/stop propagation
-- transactional outbox + receiver inbox/deduplication
-- restart/crash recovery
-- replayable event history
+- transactional outbox and receiver inbox/deduplication
+- replay and crash recovery
 
-ACK never means success. Agent completion reports never become truth without evidence and validation.
+**ACK is receipt, not success. An agent report is not authoritative truth.**
 
-## Source of truth hierarchy
+## Truth hierarchy
 
-1. User-approved current requirements
+1. Current user-approved requirements
 2. HARD_LOCK decisions
 3. Versioned architecture/contracts
 4. Verified repository/workspace facts
@@ -140,14 +150,17 @@ ACK never means success. Agent completion reports never become truth without evi
 6. Persisted Mayasaba orchestration state
 7. Agent proposals/reports
 
-Conflicts are resolved explicitly; lower-level agent claims cannot silently override higher-level truth.
+## Documentation
+
+Start with docs/INDEX.md.
+
+The documentation is intentionally split by ownership to avoid one oversized, conflicting specification.
 
 ## Repository layout
 
-```text
+~~~text
 mayasaba/
-├── apps/
-│   └── desktop/
+├── apps/desktop/
 ├── crates/
 │   ├── core/
 │   ├── protocol/
@@ -161,29 +174,17 @@ mayasaba/
 │   ├── evidence/
 │   ├── policy/
 │   └── storage/
-├── schemas/
-│   └── mcf-v2/
+├── schemas/mcf-v2/
 ├── docs/
 ├── tests/
 ├── scripts/
 └── installer/
-```
+~~~
 
-## Documentation policy
+## Documentation governance
 
-Architecture is documentation-first and versioned.
-
-Every meaningful architectural change must be classified as:
-
-- ADDITIVE
-- REFINEMENT
-- REPLACEMENT
-- DEPRECATION
-
-Changes must identify affected subsystems, previous behavior, new behavior, compatibility impact, migration/reconciliation, and required tests.
-
-Historical decisions remain traceable. Existing canonical concepts must be refined rather than duplicated.
+Architecture changes must be classified as ADDITIVE, REFINEMENT, REPLACEMENT or DEPRECATION. Existing canonical terms, schemas, state owners and sources of truth must not be silently redefined.
 
 ## Current status
 
-This repository starts as a clean architecture-first baseline. The next implementation milestone is the machine-readable MCF-v2 contract and its Rust/SQLite implementation, followed by agent adapters, council orchestration, task execution, validation, repair, and the Control Room UI.
+The repository is in a **documentation-first architecture baseline**. The next implementation gate is the actual MCF-v2 machine-readable schema package and Rust/SQLite conformance implementation, followed by the four adapters, council, tasks, execution, validation/repair and Control Room.
