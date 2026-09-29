@@ -19,6 +19,12 @@ projects, project_paths, project_epochs, project_status
 ### Agents
 agents, agent_sessions, agent_capabilities
 
+### Council
+council_sessions, council_rounds, council_participants, council_positions, council_questions, council_outcomes, council_barriers
+
+### Traceability
+trace_links, trace_link_versions, trace_coverage
+
 ### Communication
 messages, message_attempts, message_receipts, inbox, outbox, dead_letters
 
@@ -46,6 +52,21 @@ artifacts, evidence, evidence_links
 ### User interaction
 user_questions, user_answers
 
+## Council persistence invariants
+
+- CouncilSession and CouncilRound are project-scoped and durably persisted.
+- participants, positions, questions, outcomes and barriers reference their owning round.
+- sealed rounds are immutable except through explicit supersession records.
+- CouncilService is the sole owner of council/barrier state.
+
+## Traceability persistence invariants
+
+- every trace link references authoritative source and target IDs;
+- link types are enum validated;
+- duplicate active links are prevented;
+- coverage is derived from authoritative links plus validation/certification facts;
+- required links cannot be silently orphaned.
+
 ## Required invariants
 - every project-scoped row references a project
 - message_id unique
@@ -69,7 +90,7 @@ Integration checkpoints and workspace mutations are recorded transactionally wit
 
 ## Index families
 Indexes must cover:
-project_id, status, phase, epoch, session_id, task_id, lease expiry, message delivery state, retry time, event sequence, correlation_id, artifact hash, validation status and failure fingerprint.
+project_id, status, phase, epoch, session_id, task_id, lease expiry, message delivery state, retry time, event sequence, correlation_id, artifact hash, validation status and failure fingerprint, council round/phase, barrier status, trace source/target and coverage status.
 
 ## Recovery queries
 The database must support deterministic scans for:
