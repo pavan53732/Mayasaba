@@ -1,0 +1,16 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/agent-adapter-v1/native-event.schema.json",
+  "title":"Mayasaba normalized native adapter event",
+  "type":"object","additionalProperties":false,
+  "required":["agent_type","transport","native_kind","received_at","raw_ref"],
+  "properties":{
+    "agent_type":{"enum":["CLAUDE_CODE","HERMES_AGENT","KILO_CODE","CLINE"]},
+    "transport":{"type":"string"},
+    "native_kind":{"enum":["SESSION_STARTED","TEXT","TOOL_CALL","TOOL_RESULT","FILE_CHANGE","COMMAND_REQUEST","COMMAND_RESULT","ERROR","RESULT","SESSION_ENDED","HEARTBEAT","UNKNOWN"]},
+    "native_session_id":{"type":["string","null"]},
+    "received_at":{"type":"string","format":"date-time"},
+    "raw_ref":{"type":"string"},
+    "payload":{"type":"object"}
+  }
+}
