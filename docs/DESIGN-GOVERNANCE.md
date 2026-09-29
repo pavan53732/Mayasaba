@@ -30,29 +30,7 @@ Reference and refine canonical definitions instead.
 
 ## Ownership
 
-Protocol → crates/protocol
-
-Bus → crates/bus
-
-Agents → crates/agents
-
-Orchestrator → crates/core
-
-Tasks/leases → crates/tasks
-
-Council → crates/council
-
-Execution → crates/execution
-
-Workspace → crates/workspace
-
-Validation → crates/validation
-
-Evidence → crates/evidence
-
-Policy → crates/policy
-
-Persistence → crates/storage
+The authoritative subsystem-to-crate ownership matrix is maintained only in `WORKSPACE-MANIFEST.md`. Other documents may summarize ownership but must not duplicate the matrix.
 
 ## Required change record
 
