@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/validation-v1/repair.schema.json",
+  "title":"Mayasaba Repair","type":"object","additionalProperties":false,
+  "required":["repair_id","project_id","task_id","failure_id","attempt_no","status","scope","regression_required"],
+  "properties":{
+    "repair_id":{"type":"string","format":"uuid"},"project_id":{"type":"string","format":"uuid"},"task_id":{"type":"string","format":"uuid"},
+    "failure_id":{"type":"string","format":"uuid"},"attempt_no":{"type":"integer","minimum":1},
+    "status":{"enum":["REQUESTED","DIAGNOSING","ACTIVE","VERIFYING","REGRESSION","RESOLVED","RETRY_PENDING","BLOCKED"]},
+    "scope":{"type":"object"},"regression_required":{"type":"boolean"},"max_attempts":{"type":"integer","minimum":1},
+    "changed_files":{"type":"array","items":{"type":"string"}},"evidence_refs":{"type":"array","items":{"type":"string"}}}
+}
