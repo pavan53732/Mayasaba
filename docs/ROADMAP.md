@@ -10,6 +10,17 @@
 - decision register
 - design history
 
+## M0.5 — Workspace and contract integration seam
+- repository workspace skeleton
+- root/app/Cargo/npm/Tauri manifest contracts
+- 12-crate dependency matrix
+- canonical MCF-v2 registry wired to protocol/bus/core
+- Tauri bridge schema and generated Rust/TypeScript type path
+- empty-schema bridge round-trip test
+- Windows local process smoke-test harness
+- adapter probe-result schema
+- no real agent required to pass the seam test
+
 ## M1 — MCF-v2 machine-readable contract
 - JSON Schemas
 - manifest
@@ -34,6 +45,8 @@
 - explicit replay
 
 ## M3 — Agent gateway
+
+M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - Claude Code CLI adapter
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
