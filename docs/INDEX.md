@@ -49,3 +49,5 @@ This directory is the canonical product, architecture, protocol, implementation,
 ## Documentation rule
 
 When information belongs to an existing canonical document, update that document or link to it. Do not create duplicate specifications for the same responsibility.
+
+- [End-to-End Design](END-TO-END-DESIGN.md) — composition of the complete Mayasaba lifecycle from project creation through certification and packaging
