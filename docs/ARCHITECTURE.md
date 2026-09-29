@@ -96,7 +96,11 @@ Permissions, destructive-operation controls, install/admin escalation and secret
 ### crates/storage
 SQLite schema, transactions, state persistence and event history.
 
-## 5. State architecture
+## 5. Workspace and dependency authority
+
+The 12-crate dependency graph, application-shell placement and manifest alignment are defined only in `WORKSPACE-MANIFEST.md`. That document is the dependency source of truth; this file remains the runtime architecture overview.
+
+## 6. State architecture
 
 Do not implement a monolithic state enum. The following state machines are independent and authoritative within their ownership boundary:
 
@@ -112,7 +116,7 @@ Do not implement a monolithic state enum. The following state machines are indep
 
 The orchestrator derives a project-level status from these states.
 
-## 6. Material action gates
+## 7. Material action gates
 
 Before a material state-changing action:
 
@@ -132,7 +136,7 @@ AUTHORIZED ACTION
 
 A failed gate produces an explicit blocker/error and no unauthorized action.
 
-## 7. Workspace model
+## 8. Workspace model
 
 Git worktrees/branches are preferred for concurrent agents.
 
@@ -140,7 +144,7 @@ The integration workspace is controller-owned. Agents work in isolated scopes an
 
 Non-Git projects use scoped filesystem isolation and checkpoints.
 
-## 8. Recovery
+## 9. Recovery
 
 Mayasaba survives:
 
@@ -156,7 +160,7 @@ Mayasaba survives:
 
 Recovery uses durable events, outbox/inbox reconciliation, process verification, workspace verification, lease reconciliation and context rehydration.
 
-## 9. Completion
+## 10. Completion
 
 An agent can never certify the project. The controller may enter COMPLETE only after evidence-backed validation and packaging gates pass.
 
