@@ -51,3 +51,11 @@ Keyboard navigation, visible focus, confirmation for destructive actions, clear 
 
 ## Event cursor
 UI subscriptions use event cursors. Sequence gaps trigger recovery/resync rather than silent local reconstruction.
+
+## Machine-readable UI wiring
+
+The canonical Tauri identifier registry is `schemas/tauri-bridge-v1/bridge.schema.json`; operation metadata is `schemas/tauri-bridge-v1/payloads.json`; ownership is `workspace.manifest.json`.
+
+The Control Room uses `get_event_cursor` to load the durable cursor, `request_event_resync` on sequence gaps, `get_action_admissibility` before enabling a mutating action, `get_doctor_report` for preflight, and `get_recovery_status` for recovery progress.
+
+UI enablement is advisory only; Rust authorization remains authoritative.
