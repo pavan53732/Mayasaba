@@ -5,6 +5,17 @@
   "type": "object",
   "properties": {
     "priority": {
+      "$ref": "#/$defs/priority"
+    },
+    "message_type": {
+      "$ref": "message-types.schema.json"
+    },
+    "event_type": {
+      "$ref": "event-types.schema.json"
+    }
+  },
+  "$defs": {
+    "priority": {
       "type": "string",
       "enum": [
         "EMERGENCY_CONTROL",
@@ -15,12 +26,6 @@
         "PROGRESS_HEARTBEAT",
         "BULK"
       ]
-    },
-    "message_type": {
-      "$ref": "message-types.schema.json"
-    },
-    "event_type": {
-      "$ref": "event-types.schema.json"
     }
   }
 }
