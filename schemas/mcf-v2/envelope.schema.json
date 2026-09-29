@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mayasaba.local/schemas/mcf-v2/envelope.schema.json",
+  "title": "Mayasaba MCF-v2 envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "schema_version",
+    "message_id",
+    "event_id",
+    "project_id",
+    "session_id",
+    "sender",
+    "recipients",
+    "channel",
+    "message_type",
+    "phase",
+    "correlation_id",
+    "sequence",
+    "project_epoch",
+    "priority",
+    "created_at",
+    "requires_ack",
+    "requires_response",
+    "blocking",
+    "payload",
+    "security"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "MCF-2"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^2\\.\\d+\\.\\d+$"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sender": {
+      "$ref": "identity.schema.json"
+    },
+    "recipients": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "identity.schema.json"
+      }
+    },
+    "channel": {
+      "enum": [
+        "project",
+        "agent",
+        "council",
+        "requirement",
+        "decision",
+        "architecture",
+        "context",
+        "task",
+        "lease",
+        "workspace",
+        "execution",
+        "build",
+        "test",
+        "validation",
+        "repair",
+        "evidence",
+        "review",
+        "communication",
+        "diagnostics"
+      ]
+    },
+    "message_type": {
+      "$ref": "message-types.schema.json"
+    },
+    "phase": {
+      "enum": [
+        "UNSCOPED",
+        "PROJECT_CREATED",
+        "DISCOVERY",
+        "INDEPENDENT_ANALYSIS",
+        "PROPOSALS",
+        "CROSS_CRITIQUE",
+        "REBUTTAL_AND_REVISION",
+        "DISAGREEMENT_RESOLUTION",
+        "USER_INTERVIEW",
+        "PRODUCT_AND_UX_DESIGN",
+        "TECH_STACK_DEBATE",
+        "ARCHITECTURE_REVIEW",
+        "ARCHITECTURE_LOCKED",
+        "TASK_PLANNING",
+        "IMPLEMENTATION",
+        "INTEGRATION",
+        "BUILD",
+        "TEST",
+        "E2E",
+        "CROSS_AGENT_REVIEW",
+        "FINAL_VALIDATION",
+        "PACKAGE",
+        "COMPLETE"
+      ]
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "causation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "project_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "priority": {
+      "$ref": "enums.schema.json#/$defs/priority"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "requires_ack": {
+      "type": "boolean"
+    },
+    "requires_response": {
+      "type": "boolean"
+    },
+    "blocking": {
+      "type": "boolean"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "round_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "context_snapshot_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "state_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "expires_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "authorization_context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "lease_id",
+        "lease_version",
+        "workspace_id",
+        "agent_id",
+        "policy_scope",
+        "required_capabilities",
+        "capability_snapshot_id"
+      ],
+      "properties": {
+        "lease_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "lease_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workspace_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "agent_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "policy_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "capability_snapshot_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "secret_refs"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "PUBLIC_PROJECT",
+            "INTERNAL_PROJECT",
+            "SENSITIVE",
+            "SECRET_REFERENCE_ONLY"
+          ]
+        },
+        "secret_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "contains_secret_material": {
+          "const": false
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "message_type": {
+            "enum": [
+              "TASK_ACCEPT",
+              "TASK_REJECT",
+              "TASK_LEASE",
+              "TASK_LEASE_RENEW",
+              "TASK_RELEASE",
+              "TASK_PROGRESS",
+              "HANDOFF_REQUEST",
+              "HANDOFF_ACCEPT",
+              "HANDOFF_REJECT",
+              "IMPLEMENTATION_REPORT",
+              "FAILURE",
+              "DIAGNOSIS",
+              "REPAIR_REQUEST",
+              "REPAIR_RESULT",
+              "REVIEW",
+              "TEST_RESULT",
+              "VALIDATION",
+              "CERTIFICATION",
+              "EXECUTION_REQUEST",
+              "EXECUTION_STARTED",
+              "EXECUTION_RESULT",
+              "ARTIFACT_PUBLISHED",
+              "EVIDENCE_PUBLISHED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "task_id",
+          "context_snapshot_id",
+          "state_digest",
+          "idempotency_key",
+          "authorization_context"
+        ],
+        "properties": {
+          "authorization_context": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ]
+}
