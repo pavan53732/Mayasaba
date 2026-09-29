@@ -693,3 +693,68 @@ Before implementation, code must conform to:
 - ownership map
 
 If implementation needs behavior not specified by these documents, it is an architecture gap and must be explicitly resolved rather than invented silently.
+
+
+## 27. Command/query/event ownership map
+
+The machine-readable bridge contract is `schemas/tauri-bridge-v1/bridge.schema.json`. It is the single source for command, query and UI event identifiers.
+
+### Command ownership
+
+| Command | Owner service |
+|---|---|
+| create_project | ProjectService |
+| open_project | ProjectService |
+| pause_project | LifecycleService |
+| resume_project | LifecycleService |
+| stop_project | LifecycleService |
+| answer_user_question | CouncilService |
+| reopen_decision | DecisionService |
+| approve_action | PolicyService |
+| retry_task | TaskService |
+| reassign_task | TaskService |
+| retry_repair | RepairService |
+| launch_agent | AgentService |
+| stop_agent | AgentService |
+| request_sync | ContextService |
+| request_preview | WorkspaceService |
+| replay_event | RecoveryService |
+| replay_dead_letter | RecoveryService |
+
+### Query ownership
+
+| Query | Owner service |
+|---|---|
+| get_project | ProjectService |
+| list_projects | ProjectService |
+| get_project_status | LifecycleService |
+| get_agent_status | AgentService |
+| get_council_round | CouncilService |
+| list_requirements | RequirementService |
+| list_decisions | DecisionService |
+| get_architecture | ArchitectureService |
+| get_context_status | ContextService |
+| get_task_graph | TaskService |
+| get_workspace_status | WorkspaceService |
+| get_build_status | BuildService |
+| get_test_runs | TestService |
+| get_failures | RepairService |
+| get_repairs | RepairService |
+| get_reviews | ReviewService |
+| get_evidence | EvidenceService |
+| get_logs | DiagnosticsService |
+| get_communication_health | DiagnosticsService |
+
+## 28. UI event catalog
+
+Canonical Tauri channels: `project`, `agent`, `council`, `requirement`, `decision`, `architecture`, `context`, `task`, `lease`, `workspace`, `execution`, `build`, `test`, `validation`, `repair`, `evidence`, `review`, `communication`, `diagnostics`.
+
+Canonical event types: `PROJECT_UPDATED`, `PROJECT_PHASE_CHANGED`, `PROJECT_STATUS_CHANGED`, `AGENT_SESSION_CHANGED`, `AGENT_HEALTH_CHANGED`, `AGENT_CAPABILITY_CHANGED`, `COUNCIL_ROUND_CHANGED`, `COUNCIL_MESSAGE_RECEIVED`, `COUNCIL_BARRIER_CHANGED`, `REQUIREMENT_CHANGED`, `DECISION_CHANGED`, `ARCHITECTURE_CHANGED`, `CONTEXT_CHANGED`, `TASK_CHANGED`, `LEASE_CHANGED`, `HANDOFF_CHANGED`, `WORKSPACE_CHANGED`, `EXECUTION_CHANGED`, `BUILD_CHANGED`, `TEST_CHANGED`, `VALIDATION_CHANGED`, `FAILURE_RECORDED`, `REPAIR_CHANGED`, `ARTIFACT_PUBLISHED`, `EVIDENCE_PUBLISHED`, `REVIEW_RECORDED`, `COMMUNICATION_CHANGED`, `DEAD_LETTER_RECORDED`, `RECOVERY_STARTED`, `RECOVERY_COMPLETED`.
+
+## 29. Bridge code generation
+
+The source of truth is `schemas/tauri-bridge-v1/bridge.schema.json` → generated Rust DTO/command metadata + generated TypeScript bridge types. Generated files carry a generated marker and are not hand-edited. CI regenerates and compares output to detect drift.
+
+## 30. Crate/service reconciliation
+
+The target 12-crate dependency graph is defined by `WORKSPACE-MANIFEST.md`. Application services are façades over crate/domain ownership rather than one-crate-per-service. In particular, RepairService is owned by `crates/core`; ContextService is also owned by `crates/core`. There is no `crates/repair` or `crates/context`.
