@@ -49,3 +49,11 @@ This directory is the canonical product, architecture, protocol, implementation,
 ## Documentation rule
 
 When information belongs to an existing canonical document, update that document or link to it. Do not create duplicate specifications for the same responsibility.
+
+- [Domain State Machines](DOMAIN-STATE-MACHINES.md) — authoritative internal lifecycle and transition ownership
+- [Orchestrator Design](ORCHESTRATOR-DESIGN.md) — deterministic scheduling, gates, recovery and lifecycle coordination
+- [MCF-v2 Implementation Design](MCF-V2-IMPLEMENTATION-DESIGN.md) — durable bus implementation mechanics
+- [SQLite Data Architecture](SQLITE-DATA-ARCHITECTURE.md) — relational persistence and transaction structure
+- [Execution Kernel Design](EXECUTION-KERNEL-DESIGN.md) — local Windows process execution
+- [Workspace & Integration Design](WORKSPACE-INTEGRATION-DESIGN.md) — worktrees, integration, checkpoints and rollback
+- [Control Room UX Architecture](CONTROL-ROOM-DESIGN.md) — UI composition and authoritative-state presentation
