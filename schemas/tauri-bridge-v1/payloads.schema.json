@@ -1,0 +1,21 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/tauri-bridge-v1/payloads.schema.json",
+  "title":"Mayasaba Tauri command/query/event payload registry",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["commands","queries","events"],
+  "properties":{
+    "commands":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"}},
+    "queries":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"}},
+    "events":{"type":"object","additionalProperties":{"$ref":"#/$defs/event"}}
+  },
+  "$defs":{
+    "operation":{"type":"object","additionalProperties":false,"required":["request","response","errors","cancellable"],"properties":{
+      "request":{"type":"object"},"response":{"type":"object"},"errors":{"type":"array","items":{"type":"string"}},"cancellable":{"type":"boolean"}
+    }},
+    "event":{"type":"object","additionalProperties":false,"required":["channel","payload"],"properties":{
+      "channel":{"type":"string"},"payload":{"type":"object"},"cursor":{"type":["integer","null"],"minimum":0}
+    }}
+  }
+}
