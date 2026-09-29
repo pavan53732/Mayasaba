@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0.0",
+  "project": "Mayasaba",
+  "platform": "windows",
+  "desktop": {
+    "path": "apps/desktop",
+    "frontend": "react19+typescript+vite",
+    "shell": "tauri2",
+    "rust_entry": "apps/desktop/src-tauri"
+  },
+  "rust_workspace": {
+    "path": "Cargo.toml",
+    "members": [
+      "crates/core",
+      "crates/protocol",
+      "crates/bus",
+      "crates/agents",
+      "crates/council",
+      "crates/tasks",
+      "crates/workspace",
+      "crates/execution",
+      "crates/validation",
+      "crates/evidence",
+      "crates/policy",
+      "crates/storage",
+      "apps/desktop/src-tauri"
+    ]
+  },
+  "crates": {
+    "core": {
+      "path": "crates/core",
+      "depends": [
+        "protocol",
+        "bus",
+        "agents",
+        "council",
+        "tasks",
+        "workspace",
+        "execution",
+        "validation",
+        "evidence",
+        "policy",
+        "storage"
+      ]
+    },
+    "protocol": {
+      "path": "crates/protocol",
+      "depends": []
+    },
+    "bus": {
+      "path": "crates/bus",
+      "depends": [
+        "protocol",
+        "storage"
+      ]
+    },
+    "agents": {
+      "path": "crates/agents",
+      "depends": [
+        "protocol",
+        "execution",
+        "workspace"
+      ]
+    },
+    "council": {
+      "path": "crates/council",
+      "depends": [
+        "protocol",
+        "storage"
+      ]
+    },
+    "tasks": {
+      "path": "crates/tasks",
+      "depends": [
+        "protocol",
+        "storage",
+        "agents",
+        "workspace"
+      ]
+    },
+    "workspace": {
+      "path": "crates/workspace",
+      "depends": [
+        "storage",
+        "policy"
+      ]
+    },
+    "execution": {
+      "path": "crates/execution",
+      "depends": [
+        "storage",
+        "policy"
+      ]
+    },
+    "validation": {
+      "path": "crates/validation",
+      "depends": [
+        "execution",
+        "workspace",
+        "evidence",
+        "storage"
+      ]
+    },
+    "evidence": {
+      "path": "crates/evidence",
+      "depends": [
+        "storage"
+      ]
+    },
+    "policy": {
+      "path": "crates/policy",
+      "depends": [
+        "storage"
+      ]
+    },
+    "storage": {
+      "path": "crates/storage",
+      "depends": []
+    }
+  },
+  "tauri_shell": {
+    "path": "apps/desktop/src-tauri",
+    "depends": [
+      "core",
+      "protocol"
+    ],
+    "packaging": "MSI"
+  },
+  "schema_sources": [
+    "schemas/mcf-v2/registry.json",
+    "schemas/mcf-v2/transition-types.json",
+    "schemas/tauri-bridge-v1/bridge.schema.json",
+    "schemas/agent-adapter-v1/probe-result.schema.json"
+  ],
+  "rule": "This graph is authoritative until implementation manifests exist; implementation Cargo/npm/Tauri manifests must conform to it."
+}
