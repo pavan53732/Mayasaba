@@ -1,0 +1,560 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS projects (
+  project_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  local_path TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  status TEXT NOT NULL,
+  current_epoch INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_epochs (
+  project_id TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, epoch),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS agents (
+  agent_id TEXT PRIMARY KEY,
+  agent_type TEXT NOT NULL,
+  executable TEXT NOT NULL,
+  resolved_path TEXT,
+  version TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  session_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  native_session_id TEXT,
+  state TEXT NOT NULL,
+  health_state TEXT NOT NULL,
+  process_id INTEGER,
+  workspace_id TEXT,
+  capability_snapshot_id TEXT,
+  current_epoch INTEGER NOT NULL,
+  started_at TEXT,
+  stopped_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_capabilities (
+  capability_snapshot_id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  session_id TEXT,
+  capabilities_json TEXT NOT NULL,
+  detected_at TEXT NOT NULL,
+  FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_sessions (
+  council_session_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  closed_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_rounds (
+  round_id TEXT PRIMARY KEY,
+  council_session_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  sealed_at TEXT,
+  FOREIGN KEY(council_session_id) REFERENCES council_sessions(council_session_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_participants (
+  round_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  session_id TEXT,
+  participation_state TEXT NOT NULL,
+  PRIMARY KEY(round_id, agent_id),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id),
+  FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_positions (
+  position_id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  message_id TEXT,
+  position_type TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_questions (
+  question_id TEXT PRIMARY KEY,
+  round_id TEXT,
+  project_id TEXT NOT NULL,
+  source_agent_id TEXT,
+  status TEXT NOT NULL,
+  body TEXT NOT NULL,
+  normalized_key TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_outcomes (
+  outcome_id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL,
+  outcome_type TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id)
+);
+
+CREATE TABLE IF NOT EXISTS requirements (
+  requirement_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  statement TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  supersedes_requirement_id TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS requirement_acceptance (
+  acceptance_id TEXT PRIMARY KEY,
+  requirement_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  predicate_json TEXT NOT NULL,
+  FOREIGN KEY(requirement_id) REFERENCES requirements(requirement_id)
+);
+
+CREATE TABLE IF NOT EXISTS decisions (
+  decision_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  class TEXT NOT NULL,
+  status TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  decision_text TEXT NOT NULL,
+  rationale TEXT,
+  created_at TEXT NOT NULL,
+  supersedes_decision_id TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS architecture_artifacts (
+  architecture_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS contracts (
+  contract_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS context_snapshots (
+  context_snapshot_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  scope TEXT NOT NULL,
+  state_digest TEXT NOT NULL,
+  pack_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  superseded_at TEXT,
+  invalidated_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  task_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  status TEXT NOT NULL,
+  priority INTEGER NOT NULL,
+  risk TEXT NOT NULL,
+  workspace_id TEXT,
+  current_epoch INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id TEXT NOT NULL,
+  depends_on_task_id TEXT NOT NULL,
+  PRIMARY KEY(task_id, depends_on_task_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(depends_on_task_id) REFERENCES tasks(task_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_leases (
+  lease_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lease_version INTEGER NOT NULL,
+  project_epoch INTEGER NOT NULL,
+  context_snapshot_id TEXT NOT NULL,
+  state_digest TEXT NOT NULL,
+  allowed_paths_json TEXT NOT NULL,
+  required_capabilities_json TEXT NOT NULL,
+  policy_scope TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  heartbeat_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  status TEXT NOT NULL,
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+);
+
+CREATE TABLE IF NOT EXISTS handoffs (
+  handoff_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  sender_agent_id TEXT NOT NULL,
+  sender_session_id TEXT NOT NULL,
+  receiver_agent_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  package_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workspaces (
+  workspace_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  root_path TEXT NOT NULL,
+  agent_id TEXT,
+  branch_name TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_checkpoints (
+  checkpoint_id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  agent_id TEXT,
+  session_id TEXT,
+  epoch INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  repository_head TEXT,
+  diff_hash TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_changes (
+  change_id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  task_id TEXT,
+  agent_id TEXT,
+  path TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  before_hash TEXT,
+  after_hash TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  message_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  message_type TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  correlation_id TEXT NOT NULL,
+  causation_id TEXT,
+  idempotency_key TEXT,
+  delivery_state TEXT NOT NULL,
+  envelope_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(session_id, channel, sequence),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS message_attempts (
+  attempt_id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  outcome TEXT,
+  error_json TEXT,
+  FOREIGN KEY(message_id) REFERENCES messages(message_id)
+);
+
+CREATE TABLE IF NOT EXISTS inbox (
+  message_id TEXT PRIMARY KEY,
+  received_at TEXT NOT NULL,
+  persisted_at TEXT NOT NULL,
+  acked_at TEXT,
+  processing_state TEXT NOT NULL,
+  terminal_event_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS outbox (
+  outbox_id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL UNIQUE,
+  project_id TEXT NOT NULL,
+  queued_at TEXT NOT NULL,
+  dispatch_state TEXT NOT NULL,
+  next_attempt_at TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY(message_id) REFERENCES messages(message_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS dead_letters (
+  dead_letter_id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  final_error_json TEXT NOT NULL,
+  attempts INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  event_id TEXT PRIMARY KEY,
+  project_id TEXT,
+  session_id TEXT,
+  event_type TEXT NOT NULL,
+  sequence INTEGER,
+  correlation_id TEXT,
+  causation_id TEXT,
+  epoch INTEGER,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_cursors (
+  cursor_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  consumer_id TEXT NOT NULL,
+  last_sequence INTEGER NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id, consumer_id)
+);
+
+CREATE TABLE IF NOT EXISTS trace_links (
+  trace_link_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  link_type TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, link_type, source_type, source_id, target_type, target_id)
+);
+
+CREATE TABLE IF NOT EXISTS trace_link_versions (
+  trace_link_version_id TEXT PRIMARY KEY,
+  trace_link_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  active INTEGER NOT NULL,
+  supersedes_version INTEGER,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(trace_link_id) REFERENCES trace_links(trace_link_id)
+);
+
+CREATE TABLE IF NOT EXISTS trace_coverage (
+  project_id TEXT NOT NULL,
+  requirement_id TEXT NOT NULL,
+  coverage_status TEXT NOT NULL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY(project_id, requirement_id)
+);
+
+CREATE TABLE IF NOT EXISTS command_executions (
+  execution_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  workspace_id TEXT NOT NULL,
+  requested_by_agent_id TEXT,
+  classification TEXT NOT NULL,
+  executable TEXT NOT NULL,
+  arguments_json TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  status TEXT NOT NULL,
+  exit_code INTEGER,
+  started_at TEXT,
+  ended_at TEXT,
+  timeout_seconds INTEGER NOT NULL,
+  stdout_artifact_id TEXT,
+  stderr_artifact_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS process_records (
+  process_record_id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL,
+  pid INTEGER NOT NULL,
+  parent_pid INTEGER,
+  state TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  FOREIGN KEY(execution_id) REFERENCES command_executions(execution_id)
+);
+
+CREATE TABLE IF NOT EXISTS builds (
+  build_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  status TEXT NOT NULL,
+  command_execution_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS test_runs (
+  test_run_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  status TEXT NOT NULL,
+  command_execution_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS failures (
+  failure_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  fingerprint TEXT NOT NULL,
+  category TEXT NOT NULL,
+  packet_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS diagnoses (
+  diagnosis_id TEXT PRIMARY KEY,
+  failure_id TEXT NOT NULL,
+  agent_id TEXT,
+  diagnosis_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(failure_id) REFERENCES failures(failure_id)
+);
+
+CREATE TABLE IF NOT EXISTS repairs (
+  repair_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  failure_id TEXT,
+  status TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  repair_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  reviewer_agent_id TEXT,
+  verdict TEXT NOT NULL,
+  findings_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS validation_runs (
+  validation_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  scope_json TEXT NOT NULL,
+  checks_json TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+  artifact_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  path TEXT,
+  sha256 TEXT,
+  size_bytes INTEGER,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evidence (
+  evidence_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source_json TEXT NOT NULL,
+  sha256 TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evidence_links (
+  evidence_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  PRIMARY KEY(evidence_id, artifact_id),
+  FOREIGN KEY(evidence_id) REFERENCES evidence(evidence_id),
+  FOREIGN KEY(artifact_id) REFERENCES artifacts(artifact_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_questions (
+  question_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  round_id TEXT,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_answers (
+  answer_id TEXT PRIMARY KEY,
+  question_id TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  answered_at TEXT NOT NULL,
+  FOREIGN KEY(question_id) REFERENCES user_questions(question_id)
+);
+
+CREATE TABLE IF NOT EXISTS barriers (
+  barrier_id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  predicate_json TEXT NOT NULL,
+  deadline TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_project_state ON messages(project_id, delivery_state);
+CREATE INDEX IF NOT EXISTS idx_messages_correlation ON messages(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_events_project_sequence ON events(project_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_leases_expiry ON task_leases(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_failures_fingerprint ON failures(project_id, fingerprint);
+CREATE INDEX IF NOT EXISTS idx_trace_source ON trace_links(project_id, source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_trace_target ON trace_links(project_id, target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_validation_status ON validation_runs(project_id, verdict);
+CREATE INDEX IF NOT EXISTS idx_council_round_state ON council_rounds(project_id, state);
+CREATE INDEX IF NOT EXISTS idx_barrier_state ON barriers(project_id, state);
