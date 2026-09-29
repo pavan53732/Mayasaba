@@ -80,3 +80,29 @@ Every delivery attempt records message ID, sequence, timestamps, sender/recipien
 
 ## Transport boundary
 The initial implementation is local-only. The transport abstraction must not imply a remote/cloud executor.
+
+
+## Schema distribution and runtime validation
+
+The canonical schema package lives at repository root under `schemas/mcf-v2/`. The repository copy is the only source of truth.
+
+For the Windows MSI build:
+
+1. CI validates the complete schema package before compilation.
+2. The Rust `crates/protocol` build embeds the required schema files with Rust compile-time inclusion (for example `include_str!`) so runtime validation does not depend on the user's filesystem.
+3. The same schema package may also be included as a read-only Tauri resource for diagnostics, but that resource is not authoritative.
+4. Runtime validators report protocol/schema version and registry version in errors and evidence.
+5. The MSI installer must not fetch schemas from the network.
+
+The required package is therefore available in source, embedded in the protocol crate, and optionally exposed as an immutable diagnostic resource after packaging.
+
+## Registry/code alignment gate
+
+Before the bus is considered buildable:
+
+- every message identifier is present in `schemas/mcf-v2/message-types.schema.json`;
+- every event identifier is present in `schemas/mcf-v2/event-types.schema.json`;
+- every priority lane is present in `schemas/mcf-v2/enums.schema.json`;
+- every legal transition is represented by `transition-types.json`;
+- the protocol crate, bus and adapters consume the same generated/validated identifiers;
+- fixtures prove valid, invalid, duplicate, stale-context and replay cases.
