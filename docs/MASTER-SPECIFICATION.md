@@ -128,6 +128,10 @@ Mayasaba is not:
 - a prompt-only “autonomous” wrapper
 - an agent-controlled final authority
 
-## 12. Source-of-truth rule
+## 12. Internal application contract
+
+The internal application architecture is defined in docs/INTERNAL-APPLICATION-ARCHITECTURE.md. It specifies the frontend, Tauri bridge, Rust services, domain aggregates, event model, orchestration engine, configuration, recovery, simulation, subsystem interfaces and dependency direction.
+
+## 13. Source-of-truth rule
 
 This document integrates the product contract. Detailed definitions remain in their canonical subsystem documents and machine-readable schemas. Those documents are referenced rather than redefined.
