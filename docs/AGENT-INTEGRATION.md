@@ -91,7 +91,8 @@ Capabilities are runtime-detected, including where applicable:
 - autonomous execution
 - working directory
 - file write
-- shell execution
+- execution request via Mayasaba ExecutionService
+- native terminal/shell use is admitted only when the adapter probe proves it can be restricted or fully supervised
 - browser automation
 - Git
 - patching
@@ -240,3 +241,19 @@ An adapter may not report cancellation success until the child process state is 
 ## Version drift
 
 Native flags and output schemas are runtime facts, not MCF-v2 contracts. Adapter probes must fail closed when a required structured transport disappears or changes incompatibly.
+
+
+## Execution mediation
+
+Mayasaba uses a hybrid adapter model:
+
+- scoped file edits may remain native to the agent inside its leased workspace;
+- shell/process/package/install/admin operations are controller-mediated through `EXECUTION_REQUEST`;
+- native agent terminal capability is therefore not sufficient evidence of Mayasaba execution authority;
+- the adapter must reject admission when required execution mediation cannot be enforced.
+
+## Native invocation baseline
+
+The current documented native automation surfaces are runtime facts and must be recorded in the probe result. Claude Code supports `claude -p` with JSON/stream-JSON output and stream-JSON input; Hermes supports `hermes chat -q` with `--format stream-json`; Kilo supports `kilo run` with `--format json` and `--auto`; Cline supports `cline <prompt>` with `--json`, `--cwd`, session IDs and ACP via `--acp`. Runtime probe remains authoritative for the installed version.
+
+Sources: Anthropic Claude Code CLI reference; NousResearch Hermes CLI reference; Kilo Code CLI documentation; Cline CLI reference.
