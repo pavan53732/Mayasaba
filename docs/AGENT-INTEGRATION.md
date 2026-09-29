@@ -126,3 +126,6 @@ On loss:
 6. reconnect or reassign
 7. regenerate current ContextPack
 8. require all action gates before resuming
+
+
+Concrete adapter behavior remains runtime-probed; native CLI quirks stay inside each adapter. The implementation-level process/execution boundary is defined in `EXECUTION-KERNEL-DESIGN.md`.
