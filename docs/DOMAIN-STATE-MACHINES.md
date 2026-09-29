@@ -181,3 +181,8 @@ Recovery reconstructs machine state from durable authoritative state and actual 
 | Barrier | CouncilService | crates/council |
 
 The Orchestrator coordinates these owners but is never a second owner. Cross-machine changes invoke the authoritative owner service.
+## Machine-readable transition authority
+
+The complete transition registry is `schemas/mcf-v2/transition-types.json`. It contains explicit transition records with owner, source/target state, event/command, guards, authorization, required/forbidden fields, state mutation, emitted events, epoch effect, outbox effect, idempotency behavior, transaction boundary and failure transition.
+
+`crates/core` coordinates cross-machine transitions but cannot mutate a state machine owned by another crate.
