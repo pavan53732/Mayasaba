@@ -257,3 +257,7 @@ Mayasaba uses a hybrid adapter model:
 The current documented native automation surfaces are runtime facts and must be recorded in the probe result. Claude Code supports `claude -p` with JSON/stream-JSON output and stream-JSON input; Hermes supports `hermes chat -q` with `--format stream-json`; Kilo supports `kilo run` with `--format json` and `--auto`; Cline supports `cline <prompt>` with `--json`, `--cwd`, session IDs and ACP via `--acp`. Runtime probe remains authoritative for the installed version.
 
 Sources: Anthropic Claude Code CLI reference; NousResearch Hermes CLI reference; Kilo Code CLI documentation; Cline CLI reference.
+
+## Native event normalization
+
+Native CLI output is first normalized to schemas/agent-adapter-v1/native-event.schema.json, then translated according to native-to-mcf.registry.json. Runtime probe results remain authoritative for installed-version behavior.
