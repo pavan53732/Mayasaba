@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "schema_version":"1.0.0",
+  "authority":"schemas/sqlite-v1/schema.sql",
+  "engine":"SQLite",
+  "foreign_keys":true,
+  "timestamps":"UTC RFC3339",
+  "ids":"UUIDv7 preferred",
+  "hash":"SHA-256",
+  "source_of_truth":"SQLite application data",
+  "portable_project_data":".mayasaba is import/export only"
+}
