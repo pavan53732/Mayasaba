@@ -1,0 +1,20 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "authority":"schemas/agent-adapter-v1/native-to-mcf.registry.json",
+  "rule":"Native adapter events are normalized before MCF translation; adapters never invent project lifecycle events.",
+  "mappings":{
+    "SESSION_STARTED":"HANDSHAKE_ACK",
+    "TEXT":"IMPLEMENTATION_REPORT",
+    "TOOL_CALL":"EXECUTION_REQUEST",
+    "COMMAND_REQUEST":"EXECUTION_REQUEST",
+    "COMMAND_RESULT":"EXECUTION_RESULT",
+    "TOOL_RESULT":"EXECUTION_RESULT",
+    "FILE_CHANGE":"ARTIFACT_PUBLISHED",
+    "ERROR":"ERROR",
+    "RESULT":"IMPLEMENTATION_REPORT",
+    "SESSION_ENDED":"READY",
+    "HEARTBEAT":"HEARTBEAT",
+    "UNKNOWN":"ERROR"
+  }
+}
