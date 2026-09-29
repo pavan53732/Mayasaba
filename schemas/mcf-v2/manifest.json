@@ -30,11 +30,44 @@
     "message-types.schema.json",
     "message-payloads.schema.json",
     "event-types.schema.json",
-    "transition-types.json"
+    "transition-types.json",
+    "event-payloads.schema.json",
+    "message-payloads.registry.json",
+    "event-payloads.registry.json"
   ],
   "owners": {
     "protocol": "crates/protocol",
     "bus": "crates/bus",
     "core": "crates/core"
-  }
+  },
+  "package_status": "IMPLEMENTATION_BASELINE",
+  "required_files": [
+    "common.schema.json",
+    "enums.schema.json",
+    "identity.schema.json",
+    "envelope.schema.json",
+    "handshake.schema.json",
+    "ack.schema.json",
+    "error.schema.json",
+    "sync.schema.json",
+    "context-pack.schema.json",
+    "task.schema.json",
+    "task-lease.schema.json",
+    "handoff.schema.json",
+    "council-round.schema.json",
+    "barrier.schema.json",
+    "execution.schema.json",
+    "artifact.schema.json",
+    "evidence.schema.json",
+    "validation.schema.json",
+    "control.schema.json",
+    "message-types.schema.json",
+    "message-payloads.schema.json",
+    "event-types.schema.json",
+    "transition-types.json",
+    "event-payloads.schema.json",
+    "message-payloads.registry.json",
+    "event-payloads.registry.json",
+    "registry.json"
+  ]
 }
