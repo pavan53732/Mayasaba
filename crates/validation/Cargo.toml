@@ -1,0 +1,10 @@
+[package]
+name = "mayasaba-validation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-execution = { path = "../execution" }
+mayasaba-workspace = { path = "../workspace" }
+mayasaba-evidence = { path = "../evidence" }
+mayasaba-storage = { path = "../storage" }
