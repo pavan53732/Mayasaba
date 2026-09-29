@@ -88,3 +88,6 @@ Material changes to requirements, HARD_LOCK decisions, architecture, contracts, 
 ## Secret storage
 
 Secrets are never stored as ordinary message, log, evidence or artifact payloads. Use opaque secret references where necessary.
+
+
+Relational table groups, migration rules, recovery scans and index families are defined in `SQLITE-DATA-ARCHITECTURE.md`.
