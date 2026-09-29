@@ -1,0 +1,8 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/service-contracts-v1/registry.schema.json",
+  "title":"Mayasaba service contract registry",
+  "type":"object",
+  "required":["services","types"],
+  "properties":{"services":{"type":"object"},"types":{"type":"object"}}
+}
