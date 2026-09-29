@@ -1,0 +1,4 @@
+{
+  "scenario":"session/channel receives sequence 12 before sequence 11",
+  "expected":"persist receipt, do not process out of order, request missing range, resume after reconciliation"
+}
