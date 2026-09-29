@@ -34,20 +34,7 @@ This directory is the canonical product, architecture, protocol, implementation,
 
 ## Canonical ownership
 
-| Responsibility | Owner |
-|---|---|
-| Wire protocol | crates/protocol |
-| Delivery/bus | crates/bus |
-| Agent adapters | crates/agents |
-| Orchestration | crates/core |
-| Council | crates/council |
-| Tasks/leases | crates/tasks |
-| Execution | crates/execution |
-| Workspace | crates/workspace |
-| Validation | crates/validation |
-| Evidence | crates/evidence |
-| Policy | crates/policy |
-| Persistence | crates/storage |
+The authoritative crate/dependency ownership matrix is maintained only in [WORKSPACE-MANIFEST.md](WORKSPACE-MANIFEST.md). This index intentionally does not duplicate the table.
 
 ## Documentation rule
 
