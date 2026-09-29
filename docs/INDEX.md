@@ -10,6 +10,8 @@ This directory is the canonical product, architecture, protocol, implementation,
 - [Requirements](REQUIREMENTS.md) — functional and non-functional requirements
 - [MCF-v2 Protocol](MCF-V2-PROTOCOL.md) — communication semantics
 - [MCF-v2 Machine-Readable Contract](MCF-V2-MACHINE-READABLE-CONTRACT.md) — schema package contract
+- [MCF-v2 Registry](MCF-V2-REGISTRY.md) — canonical message/event/priority registry
+- [Workspace Manifest](WORKSPACE-MANIFEST.md) — canonical crate/dependency/build graph
 - [Agent Architecture](AGENT-ARCHITECTURE.md) — agent registry, sessions, capabilities, health, routing and recovery
 - [Agent Integration](AGENT-INTEGRATION.md) — four CLI adapter architecture
 - [AGENTS.md](../AGENTS.md) — mandatory repository operating instructions for AI coding agents
@@ -22,6 +24,7 @@ This directory is the canonical product, architecture, protocol, implementation,
 - [Bootstrap / Doctor](BOOTSTRAP-DOCTOR.md) — Windows preflight and runtime agent detection
 - [Conformance & Testing](CONFORMANCE-AND-TESTING.md) — protocol, adapter, recovery and autonomy validation
 - [Traceability](TRACEABILITY.md) — requirement-to-evidence coverage
+- [Agent Integration](AGENT-INTEGRATION.md) — native CLI facts, probes and adapter contract
 - [Integration Authority](INTEGRATION-AUTHORITY.md) — merge, checkpoint and authoritative workspace control
 - [Local Security](LOCAL-SECURITY.md) — permissions, secrets, isolation and recovery
 - [Design Governance](DESIGN-GOVERNANCE.md) — rules preventing architecture/document collisions
