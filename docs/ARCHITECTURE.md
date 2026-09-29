@@ -1,127 +1,161 @@
 # Mayasaba Master Architecture
 
-## 1. Purpose
+## 1. System role
 
-Mayasaba is a deterministic local control plane for autonomous software engineering using four independent coding CLIs.
+Mayasaba is the deterministic local control plane for autonomous software engineering using four independent coding CLIs.
 
-## 2. Core principle
+It coordinates, but does not replace, the intelligence of:
 
-Mayasaba is not a fifth AI brain. It coordinates independent agent runtimes against one authoritative project reality.
+- Claude Code CLI
+- Hermes Agent CLI
+- Kilo Code CLI
+- Cline
 
-## 3. End-to-end system
+## 2. Architectural principle
 
-```text
-User Idea
+**One project reality, four independent intelligences.**
+
+Agents do not share an implicit brain. Mayasaba maintains authoritative project facts, requirements, decisions, task ownership, context versions, workspace scope, execution evidence and validation state.
+
+All agent communication is brokered through MCF-v2.
+
+## 3. Layered architecture
+
+~~~text
+┌──────────────────────────────────────────────────────┐
+│                  CONTROL ROOM                        │
+│ Chat • Council • Tasks • Builds • Tests • Evidence   │
+└───────────────────────┬──────────────────────────────┘
+                        │
+┌───────────────────────▼──────────────────────────────┐
+│                ORCHESTRATOR / CORE                  │
+│ phase transitions • scheduling • barriers • gates    │
+└───────────────────────┬──────────────────────────────┘
+                        │
+┌───────────────────────▼──────────────────────────────┐
+│                    MCF-v2 BUS                       │
+│ protocol • routing • ACK • retry • dedupe • replay  │
+└───────────────────────┬──────────────────────────────┘
+                        │
+          ┌─────────────┼─────────────┬─────────────┐
+          ▼             ▼             ▼             ▼
+       Claude         Hermes         Kilo          Cline
+       Adapter        Adapter        Adapter       Adapter
+          │             │             │             │
+          └─────────────┴─────────────┴─────────────┘
+                        │
+             ┌──────────▼──────────┐
+             │ Workspace Manager   │
+             │ Execution Kernel    │
+             └──────────┬──────────┘
+                        │
+             Build / Test / E2E / Review
+                        │
+             Validation / Repair Engine
+                        │
+                    Evidence Store
+                        │
+                      SQLite
+~~~
+
+## 4. Core modules
+
+### crates/core
+Project lifecycle authority, orchestration, phase transitions and aggregate state.
+
+### crates/protocol
+Canonical MCF-v2 types, JSON Schema compatibility and protocol validation.
+
+### crates/bus
+Durable local routing, queueing, priorities, ACK/NACK, idempotency, retries, ordering, dead-letter, outbox/inbox and replay.
+
+### crates/agents
+Runtime detection, adapter sessions, capability negotiation and native-protocol translation.
+
+### crates/council
+Independent analysis, debate, questions, barriers, disagreement resolution and decision locks.
+
+### crates/tasks
+Requirement-to-task transformation, DAG scheduling, task ownership and leases.
+
+### crates/workspace
+Project-root scope, Git worktrees, checkpoints, integration workspace and non-Git isolation.
+
+### crates/execution
+PowerShell/CMD/process execution, timeouts, cancellation, child-process cleanup and command evidence.
+
+### crates/validation
+Build/test/E2E/review gates and deterministic pass/fail rules.
+
+### crates/evidence
+Content-addressed artifacts and evidence bundles.
+
+### crates/policy
+Permissions, destructive-operation controls, install/admin escalation and secret handling.
+
+### crates/storage
+SQLite schema, transactions, state persistence and event history.
+
+## 5. State architecture
+
+Do not implement a monolithic state enum. The following state machines are independent and authoritative within their ownership boundary:
+
+- project/orchestrator
+- agent session
+- message delivery
+- context
+- task/lease
+- council round/barrier
+- handoff
+- execution
+- validation
+
+The orchestrator derives a project-level status from these states.
+
+## 6. Material action gates
+
+Before a material state-changing action:
+
+~~~text
+Identity
+  + Session
+  + Project
+  + Workspace
+  + Capability
+  + Policy
+  + Task Lease
+  + Current Context/Epoch
+  + Relevant Requirement/Decision/Contract
   ↓
-Project + Local Path
-  ↓
-Preflight / Agent Discovery
-  ↓
-Independent Analysis
-  ↓
-Council / Debate
-  ↓
-Targeted User Interview
-  ↓
-Product + UX
-  ↓
-Stack Debate
-  ↓
-Architecture Review
-  ↓
-Architecture Lock
-  ↓
-Task DAG
-  ↓
-Isolated Implementation
-  ↓
-Integration
-  ↓
-Build
-  ↓
-Run
-  ↓
-Test
-  ↓
-E2E / UI
-  ↓
-Cross-Agent Review
-  ↓
-Diagnose / Repair / Retest
-  ↓
-Final Validation
-  ↓
-Package
-  ↓
-Full Working Project
-```
+AUTHORIZED ACTION
+~~~
 
-## 4. Runtime architecture
+A failed gate produces an explicit blocker/error and no unauthorized action.
 
-### Desktop
+## 7. Workspace model
 
-- Tauri 2
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS
-- shadcn/ui
+Git worktrees/branches are preferred for concurrent agents.
 
-### Controller
+The integration workspace is controller-owned. Agents work in isolated scopes and submit changes/evidence for integration.
 
-- Rust
-- Tokio
-- typed internal events
-- deterministic orchestration
+Non-Git projects use scoped filesystem isolation and checkpoints.
 
-### Persistence
+## 8. Recovery
 
-- SQLite
-- append-oriented event history
-- transactional state mutations
-- transactional outbox
-- receiver inbox/deduplication
+Mayasaba survives:
 
-### Agent integration
+- UI restart
+- controller restart
+- agent crash
+- adapter restart
+- duplicate message
+- delayed delivery
+- stale context
+- lease expiry
+- partial council participation
 
-Adapters:
+Recovery uses durable events, outbox/inbox reconciliation, process verification, workspace verification, lease reconciliation and context rehydration.
 
-- ClaudeCodeAdapter
-- HermesAdapter
-- KiloCodeAdapter
-- ClineAdapter
+## 9. Completion
 
-Native agent protocols remain adapter-internal. MCF-v2 remains the canonical interoperability contract.
-
-## 5. Workspace isolation
-
-Git repositories should use isolated worktrees/branches for concurrent agents.
-
-The integration workspace remains Mayasaba-controlled.
-
-Non-Git projects use controlled filesystem checkpoints and scoped access.
-
-## 6. Permission model
-
-- READ_ONLY
-- SAFE_WRITE
-- PROJECT_WRITE
-- EXECUTE
-- INSTALL
-- ADMIN_REQUIRED
-
-Default scope is the selected project root.
-
-## 7. Evidence-backed completion
-
-A task or project is complete only after objective evidence is captured and appropriate deterministic validation passes.
-
-## 8. Design governance
-
-One canonical owner per subsystem. No shadow source of truth.
-
-See also:
-
-- `docs/MCF-V2-PROTOCOL.md`
-- `docs/MCF-V2-MACHINE-READABLE-CONTRACT.md`
-- `docs/DESIGN-GOVERNANCE.md`
+An agent can never certify the project. The controller may enter COMPLETE only after evidence-backed validation and packaging gates pass.
