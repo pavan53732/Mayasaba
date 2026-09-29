@@ -23,7 +23,22 @@
         "request_sync",
         "request_preview",
         "replay_event",
-        "replay_dead_letter"
+        "replay_dead_letter",
+        "abandon_project",
+        "pause_agent",
+        "resume_agent",
+        "request_event_resync",
+        "rollback_workspace",
+        "start_recovery",
+        "resolve_recovery",
+        "upsert_requirement",
+        "upsert_decision",
+        "upsert_architecture",
+        "update_configuration",
+        "validate_configuration",
+        "start_simulation",
+        "stop_simulation",
+        "create_trace_link"
       ]
     },
     "query": {
@@ -47,7 +62,14 @@
         "get_reviews",
         "get_evidence",
         "get_logs",
-        "get_communication_health"
+        "get_communication_health",
+        "get_validation_status",
+        "get_recovery_status",
+        "get_doctor_report",
+        "get_configuration",
+        "get_simulation_status",
+        "get_event_cursor",
+        "get_action_admissibility"
       ]
     },
     "channel": {
@@ -120,5 +142,6 @@
     "mode": "generated-and-checked-in",
     "verification": "CI regenerates and fails on diff"
   },
-  "x-service-mappings": "workspace.manifest.json"
+  "x-service-mappings": "workspace.manifest.json",
+  "x-payload-schema": "schemas/tauri-bridge-v1/payloads.schema.json"
 }
