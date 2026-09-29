@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/mcf-v2/message-payloads.schema.json",
+  "title":"MCF-v2 message payload registry schema",
+  "type":"object","additionalProperties":false,
+  "required":["version","authority","messages"],
+  "properties":{
+    "version":{"type":"string"},
+    "authority":{"const":"schemas/mcf-v2/message-payloads.registry.json"},
+    "messages":{"type":"object","minProperties":1,"additionalProperties":{"type":"string"}}
+  }
+}
