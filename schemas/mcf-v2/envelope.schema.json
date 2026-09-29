@@ -25,7 +25,8 @@
     "requires_response",
     "blocking",
     "payload",
-    "security"
+    "security",
+    "operation_id"
   ],
   "properties": {
     "protocol_version": {
@@ -270,6 +271,13 @@
           "const": false
         }
       }
+    },
+    "operation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
     }
   },
   "allOf": [
@@ -311,7 +319,9 @@
           "context_snapshot_id",
           "state_digest",
           "idempotency_key",
-          "authorization_context"
+          "authorization_context",
+          "authorization_context",
+          "operation_id"
         ],
         "properties": {
           "authorization_context": {
