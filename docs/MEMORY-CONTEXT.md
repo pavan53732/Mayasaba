@@ -99,3 +99,34 @@ A newer decision supersedes an older one through an explicit version/supersessio
 ## Recovery
 
 After restart, Mayasaba regenerates valid current context from durable state instead of trusting an agent's private session memory.
+
+
+## Canonical state-digest algorithm
+
+The state digest is a deterministic SHA-256 hash over the RFC 8785 JSON Canonicalization Scheme (JCS) serialization of the authoritative scoped input.
+
+Digest input version: `1.0`.
+
+The input contains exactly the normalized fields declared by `schemas/context-v1/context-digest.schema.json`:
+
+- requirements
+- decisions
+- architecture
+- contracts
+- task/dependencies
+- workspace scope/checkpoint identity
+- validation requirements/results
+- policy constraints
+
+Rules:
+
+1. Object keys are canonicalized with RFC 8785 JCS.
+2. Arrays representing sets are sorted by stable identifier before canonicalization.
+3. Semantically ordered arrays retain their declared order.
+4. Volatile timestamps, logs, display state and agent prose are excluded unless explicitly part of authoritative task/validation state.
+5. The scope and project epoch are included in the canonical input.
+6. SHA-256 is computed over the UTF-8 bytes of the canonical JSON.
+7. Any authoritative change to an input field produces a different digest.
+8. A receiver compares the envelope digest against the digest recomputed from current authoritative state for the same project/epoch/scope. A mismatch is a stale-context condition.
+
+Digest fixtures must cover identical-input equality, key-order independence, set-order normalization, changed requirement, changed lease/workspace and changed epoch.
