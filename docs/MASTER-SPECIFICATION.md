@@ -42,7 +42,7 @@ PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS → CROSS_C
 
 Global states include PAUSED, STOPPED, BLOCKED and RECOVERING.
 
-## 5. Core engineering loop
+## 6. Core engineering loop
 
 The system must perform real work, not merely generate advice:
 
@@ -50,7 +50,7 @@ idea → requirements → architecture → task DAG → isolated implementation 
 
 An agent's “done” message never closes this loop.
 
-## 6. Authoritative truth
+## 7. Authoritative truth
 
 1. Current user-approved requirements
 2. HARD_LOCK decisions
