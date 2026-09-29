@@ -758,3 +758,21 @@ The source of truth is `schemas/tauri-bridge-v1/bridge.schema.json` → generate
 ## 30. Crate/service reconciliation
 
 The target 12-crate dependency graph is defined by `WORKSPACE-MANIFEST.md`. Application services are façades over crate/domain ownership rather than one-crate-per-service. In particular, RepairService is owned by `crates/core`; ContextService is also owned by `crates/core`. There is no `crates/repair` or `crates/context`.
+
+## Machine-readable interface sources
+
+Implementation source-of-truth artifacts are:
+
+- MCF-v2: `schemas/mcf-v2/`
+- service contracts: `schemas/service-contracts-v1/registry.json`
+- Tauri identifiers: `schemas/tauri-bridge-v1/bridge.schema.json`
+- Tauri operation metadata: `schemas/tauri-bridge-v1/payloads.json`
+- adapter types/probes: `schemas/agent-adapter-v1/`
+- context digest: `schemas/context-v1/context-digest.schema.json`
+- SQLite schema: `schemas/sqlite-v1/schema.sql`
+- doctor: `schemas/doctor-v1/doctor-report.schema.json`
+- recovery: `schemas/recovery-v1/recovery.schema.json`
+- configuration: `schemas/config-v1/configuration.schema.json`
+- simulation: `schemas/simulation-v1/simulation.schema.json`
+
+No service or UI implementation may define a competing machine-readable contract outside these owners.
