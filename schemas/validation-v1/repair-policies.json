@@ -1,0 +1,14 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "authority":"schemas/validation-v1/repair-policies.json",
+  "defaults":{
+    "max_attempts_per_fingerprint":3,
+    "max_total_attempts_per_task":8,
+    "max_consecutive_regressions":2,
+    "require_regression_after_repair":true,
+    "forbid_acceptance_weakening":true,
+    "forbid_test_deletion_as_repair":true
+  },
+  "escalation":"After any budget is exhausted the repair becomes BLOCKED/ESCALATED and requires controller or user resolution."
+}
