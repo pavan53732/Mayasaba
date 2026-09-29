@@ -1,0 +1,19 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/mcf-v2/common-event.schema.json",
+  "title":"Mayasaba common event",
+  "type":"object","additionalProperties":false,
+  "required":["event_id","event_type","created_at","project_id"],
+  "properties":{
+    "event_id":{"type":"string","format":"uuid"},
+    "event_type":{"$ref":"event-types.schema.json"},
+    "created_at":{"type":"string","format":"date-time"},
+    "project_id":{"type":["string","null"],"format":"uuid"},
+    "session_id":{"type":["string","null"],"format":"uuid"},
+    "correlation_id":{"type":["string","null"],"format":"uuid"},
+    "causation_id":{"type":["string","null"],"format":"uuid"},
+    "project_epoch":{"type":["integer","null"],"minimum":0},
+    "sequence":{"type":["integer","null"],"minimum":0},
+    "payload":{"type":"object"}
+  }
+}
