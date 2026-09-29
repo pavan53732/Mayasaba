@@ -1,116 +1,154 @@
 # MCF-v2 Protocol Contract
 
-MCF-v2 is the canonical Mayasaba communication contract.
+MCF-v2 is the single canonical communication protocol between Mayasaba and the four supported CLI agents.
 
-## 1. Delivery model
+## 1. Communication path
 
-At-least-once delivery with deterministic idempotency.
+No uncontrolled direct CLI-to-CLI channel exists.
 
-```text
+~~~text
+Agent
+  ↓
+Adapter
+  ↓
+MCF-v2 Envelope
+  ↓
+Durable Bus
+  ↓
+Route / Policy / Context / Lease Gates
+  ↓
+Recipient Adapter
+  ↓
+Agent
+~~~
+
+## 2. End-to-end material action
+
+~~~text
+INTENT_RECORDED
+→ ROUTE_RESOLVED
+→ MESSAGE_PERSISTED
+→ MESSAGE_QUEUED
+→ MESSAGE_DISPATCHED
+→ MESSAGE_RECEIVED
+→ ACKED
+→ CONTEXT_VALIDATED
+→ AUTHORIZATION_VALIDATED
+→ LEASE_VALIDATED
+→ ACTION_STARTED
+→ PROGRESS
+→ ACTION_COMPLETED / ACTION_FAILED
+→ RESULT_PERSISTED
+→ EVIDENCE_CAPTURED
+→ VALIDATION_REQUESTED
+→ VALIDATION_COMPLETED
+→ STATE_COMMITTED / REPAIR_STARTED
+→ AFFECTED_PARTICIPANTS_SYNCED
+→ TASK/CYCLE_CLOSED
+~~~
+
+ACK is only transport/session receipt.
+
+## 3. Envelope
+
+Required fields include:
+
+protocol_version, schema_version, message_id, event_id, project_id, session_id, sender, recipients, channel, message_type, phase, correlation_id, sequence, project_epoch, priority, created_at, requires_ack, requires_response, blocking, payload and security.
+
+Conditional fields include:
+
+causation_id, task_id, round_id, context_snapshot_id, state_digest, idempotency_key and expires_at.
+
+## 4. Delivery lifecycle
+
+~~~text
 CREATED → PERSISTED → QUEUED → DISPATCHED → RECEIVED → ACKED → PROCESSING → PROCESSED
-```
+~~~
 
-Failure paths include retry, expiry, rejection, and dead-letter.
+Failure branches:
 
-ACK means receipt only.
+- RETRYING
+- EXPIRED
+- REJECTED
+- DEAD_LETTER
 
-## 2. Canonical envelope
+Use at-least-once delivery and receiver-side idempotency. Exactly-once execution is not assumed.
 
-Every message contains:
+## 5. Causality
 
-- protocol_version
-- schema_version
-- message_id
-- event_id
-- project_id
-- session_id
-- sender
-- recipients
-- channel
-- message_type
-- phase
-- correlation_id
-- causation_id when applicable
-- sequence
+correlation_id identifies a logical operation.
+
+causation_id identifies the direct event that produced the current message/event.
+
+sequence provides monotonic ordering per session/channel.
+
+These fields enable reconstruction of:
+
+~~~text
+INTENT → TASK → LEASE → ACTION → FAILURE → DIAGNOSIS → REPAIR → VALIDATION
+~~~
+
+## 6. Context synchronization
+
+Material task/action messages carry:
+
 - project_epoch
-- context_snapshot_id when required
-- state_digest when required
-- priority
-- created_at
-- optional expires_at
-- requires_ack
-- requires_response
-- blocking
-- idempotency_key when side-effecting
-- typed payload
-- references
-- security metadata
+- context_snapshot_id
+- state_digest
+- applicable requirement/decision/contract hashes
 
-## 3. Core message families
+Material changes create a new project epoch. Affected context becomes stale and cannot authorize new material work.
 
-Lifecycle/control:
+## 7. ACK, NACK and retry
 
-HANDSHAKE, HANDSHAKE_ACK, READY, HEARTBEAT, ACK, NACK, PAUSE, RESUME, CANCEL, STOP, ERROR, RETRY, DEAD_LETTER
+ACK = received.
 
-Synchronization:
+NACK = rejected with reason and retryability.
 
-SYNC_REQUEST, SYNC_RESPONSE, STATE_DIGEST, CONTEXT_UPDATE, STALE_CONTEXT, EPOCH_CHANGED
+Retryable failures include transport loss, queue pressure, timeout, process crash, adapter failure and recoverable internal errors.
 
-Council:
+Permanent failures include schema errors, unauthorized actions, policy denial, unsupported capabilities, project mismatch, stale epoch/context requiring synchronization, lease ownership errors and secret-policy violations.
 
-IDEA, PROPOSAL, QUESTION, CRITIQUE, COUNTERARGUMENT, REBUTTAL, REVISION, AGREE, DISAGREE, BLOCK, ACCEPT, REJECT, ABSTAIN, DECISION, LOCK
+Retries are bounded. Dead-letter is explicit.
 
-Task:
+## 8. Control traffic
 
-TASK, TASK_ACCEPT, TASK_REJECT, TASK_LEASE, TASK_LEASE_RENEW, TASK_RELEASE, TASK_PROGRESS, HANDOFF_REQUEST, HANDOFF_ACCEPT, HANDOFF_REJECT
+Priority order:
 
-Engineering:
+1. emergency control
+2. synchronization
+3. task control
+4. failure/recovery
+5. council
+6. progress/heartbeat
+7. bulk
 
-IMPLEMENTATION_REPORT, FAILURE, DIAGNOSIS, REPAIR_REQUEST, REPAIR_RESULT, REVIEW, TEST_RESULT, VALIDATION, CERTIFICATION
+STOP/CANCEL/security blocks cannot be starved by model streaming.
 
-Execution/evidence:
-
-EXECUTION_REQUEST, EXECUTION_STARTED, EXECUTION_RESULT, ARTIFACT_PUBLISHED, EVIDENCE_PUBLISHED
-
-## 4. Strong invariants
-
-1. No unmanaged direct agent-to-agent channel.
-2. ACK never means success.
-3. Agent completion claims are never authoritative.
-4. No material action without valid identity, workspace, policy, lease, current context, and relevant contract/decision.
-5. Stale context cannot execute current material work.
-6. Duplicate messages cannot cause duplicate material side effects.
-7. Expired leases cannot authorize writes.
-8. User interruption has operational priority.
-9. State transitions are durable and replayable.
-10. Historical events are immutable.
-11. One subsystem owns each protocol/state concept.
-12. COMPLETE is controller-certified.
-
-## 5. Context synchronization
-
-Every material task/action includes a project_epoch, context_snapshot_id, state_digest and relevant requirement/decision/contract hashes.
-
-Material authoritative changes increment project_epoch and invalidate affected contexts.
-
-## 6. Task leases
-
-Task ownership is explicit and time-bounded. A lease contains task, owner session, workspace, epoch, context, allowed paths/capabilities, expiry, heartbeat and validation requirements.
-
-## 7. Handoffs
-
-Handoffs carry objective, completed work, pending work, files/diffs, checkpoints/commits, tests, failures, evidence, decisions, contracts, risks and current context.
-
-## 8. Recovery
-
-Mayasaba restart and agent crash recovery use durable events, outbox/inbox records, lease reconciliation, workspace verification, context rehydration and adapter health validation.
-
-## 9. Persistence pattern
+## 9. Persistence
 
 Use transactional outbox:
 
-state mutation + event + outbound record commit atomically, then dispatch asynchronously.
+state mutation + event + outbound record commit atomically.
 
 Use receiver inbox/deduplication:
 
-record receipt/idempotency before a side effect and make duplicate delivery harmless.
+received message identity is persisted before side effects.
+
+## 10. Recovery
+
+After restart or crash:
+
+1. reconstruct durable state
+2. reconcile in-flight delivery
+3. inspect outbox/inbox
+4. verify agent processes
+5. reconcile leases
+6. verify workspaces
+7. identify stale contexts
+8. rehydrate sessions
+9. resume only after required gates
+
+## 11. Security
+
+Every message is project-scoped. Secrets are referenced out-of-band and never copied into normal council/log/evidence payloads. Malformed, unauthorized, oversized or cross-project messages are rejected explicitly.
