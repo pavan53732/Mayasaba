@@ -44,7 +44,7 @@ Mayasaba/
 
 | Crate | Owns | Depends on |
 |---|---|---|
-| core | lifecycle, orchestration, application services, cross-subsystem gates | protocol, bus, agents, council, context, tasks, workspace, execution, validation, evidence, policy, storage |
+| core | lifecycle, orchestration, application services, cross-subsystem gates | protocol, bus, agents, council, tasks, workspace, execution, validation, evidence, policy, storage |
 | protocol | MCF-v2 types, registry, schema validation | no domain crates |
 | bus | durable messaging, routing, outbox/inbox | protocol, storage |
 | agents | agent registry, sessions, adapters | protocol, execution, workspace |
