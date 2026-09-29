@@ -117,3 +117,6 @@ Within v2, additive optional fields are allowed. Breaking type/semantic changes 
 ## Package status
 
 The package contract is specified here. The actual JSON Schema files, fixtures and conformance harness are an implementation milestone and must be created under schemas/mcf-v2/ before MCF-v2 can be declared implemented.
+
+
+Implementation mechanics, durable inbox/outbox behavior, ordering, replay and delivery recovery are defined separately in `MCF-V2-IMPLEMENTATION-DESIGN.md`.
