@@ -113,3 +113,10 @@ identity + session + project + workspace + capability + policy + task lease + cu
 Detailed workspace lifecycle, Git worktree admission, integration, conflict handling and rollback are defined in `WORKSPACE-INTEGRATION-DESIGN.md`.
 
 Detailed local process supervision and evidence capture are defined in `EXECUTION-KERNEL-DESIGN.md`.
+## Execution authority
+
+Agent file-editing is permitted only inside the leased workspace when the adapter capability probe confirms scoped file-write support.
+
+Shell, process, package, install, compiler and administrative operations are not direct agent authority. They are requested through MCF `EXECUTION_REQUEST` and executed by Mayasaba `ExecutionService`.
+
+An adapter must enforce or prove this separation. If the installed CLI cannot provide the required mediation, the session is not admitted for tasks that require privileged execution.
