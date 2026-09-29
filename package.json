@@ -1,0 +1,10 @@
+{
+  "name":"mayasaba",
+  "private":true,
+  "scripts":{
+    "verify:contracts":"node tools/contracts/verify.mjs",
+    "codegen:bridge":"node tools/codegen/generate-bridge.mjs",
+    "dev":"npm --prefix apps/desktop run dev",
+    "build":"npm --prefix apps/desktop run build"
+  }
+}
