@@ -1,20 +1,23 @@
 # MCF-v2 Machine-Readable Contract Package
 
+This document specifies the machine-readable package that will live under schemas/mcf-v2/. It is the canonical schema contract; implementation code must conform to it.
+
 ## Package identity
 
-- Protocol family: MCF
-- Major protocol version: 2
-- Namespace: mayasaba.mcf.v2
+- protocol family: MCF
+- major protocol version: 2
+- namespace: mayasaba.mcf.v2
 - JSON Schema: Draft 2020-12
-- Transport serialization: JSON / NDJSON
+- normal serialization: JSON
+- streaming serialization: NDJSON
+- timestamps: RFC3339 UTC
 - IDs: UUIDv7 preferred
-- Content hashes: SHA-256
-- Timestamps: RFC3339 UTC
-- Schema changes are compatibility-governed
+- content hashes: SHA-256
+- schema compatibility is explicit and testable
 
 ## Canonical package
 
-```text
+~~~text
 schemas/mcf-v2/
 ├── manifest.json
 ├── common.schema.json
@@ -41,36 +44,76 @@ schemas/mcf-v2/
 ├── event-types.schema.json
 ├── transition-types.json
 ├── fixtures/
+│   ├── valid/
+│   ├── invalid/
+│   ├── replay/
+│   ├── recovery/
+│   └── concurrency/
 └── conformance/
-```
+    ├── protocol-conformance.yaml
+    └── adapter-capabilities.yaml
+~~~
 
 ## Canonical registries
 
-- One primitive/type registry
-- One enum registry
-- One envelope
-- One message-type registry
-- One event-type registry
-- One transition registry
+There is exactly one:
+
+- primitive/type registry
+- enum registry
+- envelope definition
+- message-type registry
+- event-type registry
+- transition registry
 
 Every message type maps to exactly one payload schema.
 
-## Required message semantics
+## Canonical message rules
 
-ACK = receipt.
-TASK_ACCEPT = ownership acceptance.
-IMPLEMENTATION_REPORT = agent report.
-VALIDATION = deterministic result.
-CERTIFICATION = controller-owned final result.
+ACK means receipt.
 
-## State registries
+TASK_ACCEPT means ownership acceptance.
 
-Agent, message delivery, context, task, handoff, council, execution and validation each have independent state machines.
+IMPLEMENTATION_REPORT is an agent report.
 
-## Compatibility
+VALIDATION is an objective validation result.
 
-Additive optional fields may be added inside v2. Breaking semantic/type changes require a new major version or explicit migration.
+CERTIFICATION is controller-owned only.
 
-## Conformance
+No generic untyped command message exists.
 
-Required suites cover schema validation, adapter compatibility, ACK/NACK, idempotency, duplicate delivery, ordering/gaps, stale context, epochs, leases, handoffs, barriers, pause/resume/cancel/stop, crash recovery, replay, dead letters, isolation, secret handling, and compatibility.
+## Canonical context contract
+
+A ContextPack contains objective, requirements, acceptance criteria, HARD_LOCKs, relevant decisions/assumptions, architecture/contracts, task/dependencies, workspace scope, relevant files/evidence, recent failures/repairs, validation requirements, policy constraints, project_epoch, snapshot ID and state digest.
+
+## Canonical task lease
+
+A TaskLease contains task/owner/session/workspace identity, project epoch, ContextPack identity, allowed paths/capabilities, expiry/heartbeat rules, validation requirements and lease version.
+
+## Canonical handoff
+
+A HandoffPacket contains completed/pending work, changed files, diff/checkpoint/commit references, tests, failures, evidence, affected decisions/contracts, risks and current context/state digest.
+
+## Transition contract
+
+Every legal transition is machine-described by:
+
+- from_state
+- event_type
+- to_state
+- guards
+- authorization
+- required_fields
+- forbidden_fields
+- side_effects
+- emitted_events
+- idempotency requirement
+- transaction boundary
+- failure transition
+
+## Versioning
+
+Within v2, additive optional fields are allowed. Breaking type/semantic changes require a major protocol version or an explicit migration contract.
+
+## Package status
+
+The package contract is specified here. The actual JSON Schema files, fixtures and conformance harness are an implementation milestone and must be created under schemas/mcf-v2/ before MCF-v2 can be declared implemented.
