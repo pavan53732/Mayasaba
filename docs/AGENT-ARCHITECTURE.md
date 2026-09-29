@@ -81,3 +81,8 @@ record failure -> reconcile processes -> verify workspace -> reconcile lease -> 
 Adapters translate native CLI behavior to MCF-v2 and report actual runtime capabilities. They must not redefine Mayasaba domain semantics.
 
 Detailed native integration is specified in AGENT-INTEGRATION.md.
+
+
+Execution mechanics are defined in `EXECUTION-KERNEL-DESIGN.md`.
+
+Workspace and integration mechanics are defined in `WORKSPACE-INTEGRATION-DESIGN.md`.
