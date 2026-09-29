@@ -10,6 +10,7 @@ This directory is the canonical product, architecture, protocol, implementation,
 - [Requirements](REQUIREMENTS.md) — functional and non-functional requirements
 - [MCF-v2 Protocol](MCF-V2-PROTOCOL.md) — communication semantics
 - [MCF-v2 Machine-Readable Contract](MCF-V2-MACHINE-READABLE-CONTRACT.md) — schema package contract
+- [Agent Architecture](AGENTS.md) — agent registry, sessions, capabilities, health, routing and recovery
 - [Agent Integration](AGENT-INTEGRATION.md) — four CLI adapter architecture
 - [Council Engine](COUNCIL-ENGINE.md) — multi-agent deliberation and user interview model
 - [Task & Execution](TASK-EXECUTION.md) — task DAG, leases, workspaces and local execution
