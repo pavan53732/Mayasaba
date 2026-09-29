@@ -152,3 +152,12 @@ After restart or crash:
 ## 11. Security
 
 Every message is project-scoped. Secrets are referenced out-of-band and never copied into normal council/log/evidence payloads. Malformed, unauthorized, oversized or cross-project messages are rejected explicitly.
+
+
+## 12. Canonical registries
+
+The complete message, event and priority enum is maintained in `schemas/mcf-v2/registry.json` and documented in `MCF-V2-REGISTRY.md`.
+
+The material-action chain is not an informal sequence. Each stage has a canonical event type and is persisted/observable through the bus.
+
+No implementation may introduce a message, event, priority lane or transition identifier outside the registry.
