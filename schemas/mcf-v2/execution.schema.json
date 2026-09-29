@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mayasaba.local/schemas/mcf-v2/execution.schema.json",
+  "title": "Mayasaba Execution",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "execution_id",
+    "task_id",
+    "project_id",
+    "workspace_id",
+    "classification",
+    "executable",
+    "arguments",
+    "cwd",
+    "timeout_seconds"
+  ],
+  "properties": {
+    "execution_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "workspace_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "classification": {
+      "enum": [
+        "READ_ONLY",
+        "SAFE_WRITE",
+        "PROJECT_WRITE",
+        "EXECUTE",
+        "INSTALL",
+        "ADMIN_REQUIRED"
+      ]
+    },
+    "executable": {
+      "type": "string"
+    },
+    "arguments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "environment_policy": {
+      "type": "object"
+    },
+    "stdin_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stdout_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stderr_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string"
+    }
+  }
+}
