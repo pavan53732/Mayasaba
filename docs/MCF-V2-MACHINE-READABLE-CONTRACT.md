@@ -116,7 +116,18 @@ Within v2, additive optional fields are allowed. Breaking type/semantic changes 
 
 ## Package status
 
-The package contract is specified here. The actual JSON Schema files, fixtures and conformance harness are an implementation milestone and must be created under schemas/mcf-v2/ before MCF-v2 can be declared implemented.
+The canonical registry and core machine-readable enum/transition files are present under `schemas/mcf-v2/` and are the source inputs for protocol implementation.
+
+Current repository state:
+
+- `manifest.json` exists.
+- `message-types.schema.json` exists and enumerates all legal message types.
+- `event-types.schema.json` exists and enumerates all legal event types.
+- `transition-types.json` exists and assigns state-machine ownership.
+- `registry.json` exists and binds messages, events, priority lanes and the material-action chain.
+- Remaining package files, fixtures and the full conformance harness remain implementation work and must be completed before MCF-v2 is declared fully implemented.
+
+Runtime schema validation must use embedded schema assets after installation; it must not depend on repository-relative files.
 
 
 Implementation mechanics, durable inbox/outbox behavior, ordering, replay and delivery recovery are defined separately in `MCF-V2-IMPLEMENTATION-DESIGN.md`.
