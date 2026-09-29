@@ -330,152 +330,152 @@
   "events": {
     "PROJECT_UPDATED": {
       "owner": "ProjectService",
-      "channel": "derived",
+      "channel": "project",
       "payload": "PROJECT_UPDATEDPayload"
     },
     "PROJECT_PHASE_CHANGED": {
       "owner": "LifecycleService",
-      "channel": "derived",
+      "channel": "project",
       "payload": "PROJECT_PHASE_CHANGEDPayload"
     },
     "PROJECT_STATUS_CHANGED": {
       "owner": "LifecycleService",
-      "channel": "derived",
+      "channel": "project",
       "payload": "PROJECT_STATUS_CHANGEDPayload"
     },
     "AGENT_SESSION_CHANGED": {
       "owner": "AgentService",
-      "channel": "derived",
+      "channel": "agent",
       "payload": "AGENT_SESSION_CHANGEDPayload"
     },
     "AGENT_HEALTH_CHANGED": {
       "owner": "AgentService",
-      "channel": "derived",
+      "channel": "agent",
       "payload": "AGENT_HEALTH_CHANGEDPayload"
     },
     "AGENT_CAPABILITY_CHANGED": {
       "owner": "AgentService",
-      "channel": "derived",
+      "channel": "agent",
       "payload": "AGENT_CAPABILITY_CHANGEDPayload"
     },
     "COUNCIL_ROUND_CHANGED": {
       "owner": "CouncilService",
-      "channel": "derived",
+      "channel": "council",
       "payload": "COUNCIL_ROUND_CHANGEDPayload"
     },
     "COUNCIL_MESSAGE_RECEIVED": {
       "owner": "CouncilService",
-      "channel": "derived",
+      "channel": "council",
       "payload": "COUNCIL_MESSAGE_RECEIVEDPayload"
     },
     "COUNCIL_BARRIER_CHANGED": {
       "owner": "CouncilService",
-      "channel": "derived",
+      "channel": "council",
       "payload": "COUNCIL_BARRIER_CHANGEDPayload"
     },
     "REQUIREMENT_CHANGED": {
       "owner": "RequirementService",
-      "channel": "derived",
+      "channel": "requirement",
       "payload": "REQUIREMENT_CHANGEDPayload"
     },
     "DECISION_CHANGED": {
       "owner": "DecisionService",
-      "channel": "derived",
+      "channel": "decision",
       "payload": "DECISION_CHANGEDPayload"
     },
     "ARCHITECTURE_CHANGED": {
       "owner": "ArchitectureService",
-      "channel": "derived",
+      "channel": "architecture",
       "payload": "ARCHITECTURE_CHANGEDPayload"
     },
     "CONTEXT_CHANGED": {
       "owner": "ContextService",
-      "channel": "derived",
+      "channel": "context",
       "payload": "CONTEXT_CHANGEDPayload"
     },
     "TASK_CHANGED": {
       "owner": "TaskService",
-      "channel": "derived",
+      "channel": "task",
       "payload": "TASK_CHANGEDPayload"
     },
     "LEASE_CHANGED": {
       "owner": "TaskService",
-      "channel": "derived",
+      "channel": "lease",
       "payload": "LEASE_CHANGEDPayload"
     },
     "HANDOFF_CHANGED": {
       "owner": "TaskService",
-      "channel": "derived",
+      "channel": "task",
       "payload": "HANDOFF_CHANGEDPayload"
     },
     "WORKSPACE_CHANGED": {
       "owner": "WorkspaceService",
-      "channel": "derived",
+      "channel": "project",
       "payload": "WORKSPACE_CHANGEDPayload"
     },
     "EXECUTION_CHANGED": {
       "owner": "ExecutionService",
-      "channel": "derived",
+      "channel": "execution",
       "payload": "EXECUTION_CHANGEDPayload"
     },
     "BUILD_CHANGED": {
       "owner": "BuildService",
-      "channel": "derived",
+      "channel": "build",
       "payload": "BUILD_CHANGEDPayload"
     },
     "TEST_CHANGED": {
       "owner": "TestService",
-      "channel": "derived",
+      "channel": "test",
       "payload": "TEST_CHANGEDPayload"
     },
     "VALIDATION_CHANGED": {
       "owner": "ValidationService",
-      "channel": "derived",
+      "channel": "validation",
       "payload": "VALIDATION_CHANGEDPayload"
     },
     "FAILURE_RECORDED": {
       "owner": "RepairService",
-      "channel": "derived",
+      "channel": "repair",
       "payload": "FAILURE_RECORDEDPayload"
     },
     "REPAIR_CHANGED": {
       "owner": "RepairService",
-      "channel": "derived",
+      "channel": "repair",
       "payload": "REPAIR_CHANGEDPayload"
     },
     "ARTIFACT_PUBLISHED": {
       "owner": "EvidenceService",
-      "channel": "derived",
+      "channel": "evidence",
       "payload": "ARTIFACT_PUBLISHEDPayload"
     },
     "EVIDENCE_PUBLISHED": {
       "owner": "EvidenceService",
-      "channel": "derived",
+      "channel": "evidence",
       "payload": "EVIDENCE_PUBLISHEDPayload"
     },
     "REVIEW_RECORDED": {
       "owner": "ReviewService",
-      "channel": "derived",
+      "channel": "review",
       "payload": "REVIEW_RECORDEDPayload"
     },
     "COMMUNICATION_CHANGED": {
       "owner": "DiagnosticsService",
-      "channel": "derived",
+      "channel": "diagnostics",
       "payload": "COMMUNICATION_CHANGEDPayload"
     },
     "DEAD_LETTER_RECORDED": {
       "owner": "DiagnosticsService",
-      "channel": "derived",
+      "channel": "diagnostics",
       "payload": "DEAD_LETTER_RECORDEDPayload"
     },
     "RECOVERY_STARTED": {
       "owner": "RecoveryService",
-      "channel": "derived",
+      "channel": "diagnostics",
       "payload": "RECOVERY_STARTEDPayload"
     },
     "RECOVERY_COMPLETED": {
       "owner": "RecoveryService",
-      "channel": "derived",
+      "channel": "diagnostics",
       "payload": "RECOVERY_COMPLETEDPayload"
     }
   }
