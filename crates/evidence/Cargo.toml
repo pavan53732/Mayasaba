@@ -1,0 +1,7 @@
+[package]
+name = "mayasaba-evidence"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-storage = { path = "../storage" }
