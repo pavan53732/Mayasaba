@@ -4,10 +4,121 @@
   "title": "Mayasaba Tauri Bridge Identifier Registry",
   "type": "object",
   "properties": {
-    "command": {"type":"string","enum":["create_project","open_project","pause_project","resume_project","stop_project","answer_user_question","reopen_decision","approve_action","retry_task","reassign_task","retry_repair","launch_agent","stop_agent","request_sync","request_preview","replay_event","replay_dead_letter"]},
-    "query": {"type":"string","enum":["get_project","list_projects","get_project_status","get_agent_status","get_council_round","list_requirements","list_decisions","get_architecture","get_context_status","get_task_graph","get_workspace_status","get_build_status","get_test_runs","get_failures","get_repairs","get_reviews","get_evidence","get_logs","get_communication_health"]},
-    "channel": {"type":"string","enum":["project","agent","council","requirement","decision","architecture","context","task","lease","workspace","execution","build","test","validation","repair","evidence","review","communication","diagnostics"]},
-    "event_type": {"type":"string","enum":["PROJECT_UPDATED","PROJECT_PHASE_CHANGED","PROJECT_STATUS_CHANGED","AGENT_SESSION_CHANGED","AGENT_HEALTH_CHANGED","AGENT_CAPABILITY_CHANGED","COUNCIL_ROUND_CHANGED","COUNCIL_MESSAGE_RECEIVED","COUNCIL_BARRIER_CHANGED","REQUIREMENT_CHANGED","DECISION_CHANGED","ARCHITECTURE_CHANGED","CONTEXT_CHANGED","TASK_CHANGED","LEASE_CHANGED","HANDOFF_CHANGED","WORKSPACE_CHANGED","EXECUTION_CHANGED","BUILD_CHANGED","TEST_CHANGED","VALIDATION_CHANGED","FAILURE_RECORDED","REPAIR_CHANGED","ARTIFACT_PUBLISHED","EVIDENCE_PUBLISHED","REVIEW_RECORDED","COMMUNICATION_CHANGED","DEAD_LETTER_RECORDED","RECOVERY_STARTED","RECOVERY_COMPLETED"]}
+    "command": {
+      "type": "string",
+      "enum": [
+        "create_project",
+        "open_project",
+        "pause_project",
+        "resume_project",
+        "stop_project",
+        "answer_user_question",
+        "reopen_decision",
+        "approve_action",
+        "retry_task",
+        "reassign_task",
+        "retry_repair",
+        "launch_agent",
+        "stop_agent",
+        "request_sync",
+        "request_preview",
+        "replay_event",
+        "replay_dead_letter"
+      ]
+    },
+    "query": {
+      "type": "string",
+      "enum": [
+        "get_project",
+        "list_projects",
+        "get_project_status",
+        "get_agent_status",
+        "get_council_round",
+        "list_requirements",
+        "list_decisions",
+        "get_architecture",
+        "get_context_status",
+        "get_task_graph",
+        "get_workspace_status",
+        "get_build_status",
+        "get_test_runs",
+        "get_failures",
+        "get_repairs",
+        "get_reviews",
+        "get_evidence",
+        "get_logs",
+        "get_communication_health"
+      ]
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "project",
+        "agent",
+        "council",
+        "requirement",
+        "decision",
+        "architecture",
+        "context",
+        "task",
+        "lease",
+        "workspace",
+        "execution",
+        "build",
+        "test",
+        "validation",
+        "repair",
+        "evidence",
+        "review",
+        "communication",
+        "diagnostics"
+      ]
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "PROJECT_UPDATED",
+        "PROJECT_PHASE_CHANGED",
+        "PROJECT_STATUS_CHANGED",
+        "AGENT_SESSION_CHANGED",
+        "AGENT_HEALTH_CHANGED",
+        "AGENT_CAPABILITY_CHANGED",
+        "COUNCIL_ROUND_CHANGED",
+        "COUNCIL_MESSAGE_RECEIVED",
+        "COUNCIL_BARRIER_CHANGED",
+        "REQUIREMENT_CHANGED",
+        "DECISION_CHANGED",
+        "ARCHITECTURE_CHANGED",
+        "CONTEXT_CHANGED",
+        "TASK_CHANGED",
+        "LEASE_CHANGED",
+        "HANDOFF_CHANGED",
+        "WORKSPACE_CHANGED",
+        "EXECUTION_CHANGED",
+        "BUILD_CHANGED",
+        "TEST_CHANGED",
+        "VALIDATION_CHANGED",
+        "FAILURE_RECORDED",
+        "REPAIR_CHANGED",
+        "ARTIFACT_PUBLISHED",
+        "EVIDENCE_PUBLISHED",
+        "REVIEW_RECORDED",
+        "COMMUNICATION_CHANGED",
+        "DEAD_LETTER_RECORDED",
+        "RECOVERY_STARTED",
+        "RECOVERY_COMPLETED"
+      ]
+    }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "x-authority": "workspace.manifest.json",
+  "x-codegen": {
+    "source": "schemas/tauri-bridge-v1/bridge.schema.json",
+    "ownership": "workspace.manifest.json",
+    "rust_output": "apps/desktop/src-tauri/src/generated/bridge.rs",
+    "typescript_output": "apps/desktop/src/generated/bridge.ts",
+    "mode": "generated-and-checked-in",
+    "verification": "CI regenerates and fails on diff"
+  },
+  "x-service-mappings": "workspace.manifest.json"
 }
