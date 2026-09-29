@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/mcf-v2/event-payloads.schema.json",
+  "title":"MCF-v2 event payload resolver",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["event_type","payload_schema_ref"],
+  "properties":{
+    "event_type":{"$ref":"event-types.schema.json"},
+    "payload_schema_ref":{"type":"string"}
+  }
+}
