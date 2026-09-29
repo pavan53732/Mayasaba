@@ -1,0 +1,166 @@
+{
+  "version": "1.0.0",
+  "authority": "schemas/error-v1/registry.json",
+  "codes": {
+    "SCHEMA_INVALID": {
+      "category": "SCHEMA",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_SCHEMA_INVALID",
+      "tauri_code": "MAYASABA_SCHEMA_INVALID",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "PROJECT_MISMATCH": {
+      "category": "IDENTITY",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_PROJECT_MISMATCH",
+      "tauri_code": "MAYASABA_PROJECT_MISMATCH",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "UNAUTHORIZED": {
+      "category": "AUTHORIZATION",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_UNAUTHORIZED",
+      "tauri_code": "MAYASABA_UNAUTHORIZED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "POLICY_DENIED": {
+      "category": "POLICY",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": "MCF_POLICY_DENIED",
+      "tauri_code": "MAYASABA_POLICY_DENIED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "CAPABILITY_UNAVAILABLE": {
+      "category": "CAPABILITY",
+      "retryability": "AFTER_REASSIGNMENT",
+      "severity": "ERROR",
+      "mcf_code": "MCF_CAPABILITY_UNAVAILABLE",
+      "tauri_code": "MAYASABA_CAPABILITY_UNAVAILABLE",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "STALE_CONTEXT": {
+      "category": "CONTEXT",
+      "retryability": "AFTER_SYNC",
+      "severity": "ERROR",
+      "mcf_code": "MCF_STALE_CONTEXT",
+      "tauri_code": "MAYASABA_STALE_CONTEXT",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "EPOCH_MISMATCH": {
+      "category": "CONTEXT",
+      "retryability": "AFTER_SYNC",
+      "severity": "ERROR",
+      "mcf_code": "MCF_EPOCH_MISMATCH",
+      "tauri_code": "MAYASABA_EPOCH_MISMATCH",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "LEASE_INVALID": {
+      "category": "LEASE",
+      "retryability": "AFTER_SYNC",
+      "severity": "ERROR",
+      "mcf_code": "MCF_LEASE_INVALID",
+      "tauri_code": "MAYASABA_LEASE_INVALID",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "LEASE_EXPIRED": {
+      "category": "LEASE",
+      "retryability": "AFTER_REASSIGNMENT",
+      "severity": "ERROR",
+      "mcf_code": "MCF_LEASE_EXPIRED",
+      "tauri_code": "MAYASABA_LEASE_EXPIRED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "WORKSPACE_MISMATCH": {
+      "category": "WORKSPACE",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_WORKSPACE_MISMATCH",
+      "tauri_code": "MAYASABA_WORKSPACE_MISMATCH",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "SEQUENCE_GAP": {
+      "category": "SEQUENCE",
+      "retryability": "AFTER_SYNC",
+      "severity": "WARNING",
+      "mcf_code": "MCF_SEQUENCE_GAP",
+      "tauri_code": "MAYASABA_SEQUENCE_GAP",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "IDEMPOTENCY_CONFLICT": {
+      "category": "IDEMPOTENCY",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_IDEMPOTENCY_CONFLICT",
+      "tauri_code": "MAYASABA_IDEMPOTENCY_CONFLICT",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "TIMEOUT": {
+      "category": "TIMEOUT",
+      "retryability": "BACKOFF",
+      "severity": "ERROR",
+      "mcf_code": "MCF_TIMEOUT",
+      "tauri_code": "MAYASABA_TIMEOUT",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "CANCELED": {
+      "category": "CANCELLATION",
+      "retryability": "NEVER",
+      "severity": "INFO",
+      "mcf_code": "MCF_CANCELED",
+      "tauri_code": "MAYASABA_CANCELED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "PROCESS_FAILED": {
+      "category": "PROCESS",
+      "retryability": "BACKOFF",
+      "severity": "ERROR",
+      "mcf_code": "MCF_PROCESS_FAILED",
+      "tauri_code": "MAYASABA_PROCESS_FAILED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "ADAPTER_UNAVAILABLE": {
+      "category": "ADAPTER",
+      "retryability": "AFTER_REASSIGNMENT",
+      "severity": "ERROR",
+      "mcf_code": "MCF_ADAPTER_UNAVAILABLE",
+      "tauri_code": "MAYASABA_ADAPTER_UNAVAILABLE",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "ADAPTER_PROTOCOL_ERROR": {
+      "category": "ADAPTER",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_ADAPTER_PROTOCOL_ERROR",
+      "tauri_code": "MAYASABA_ADAPTER_PROTOCOL_ERROR",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "AUTH_REQUIRED": {
+      "category": "AUTHENTICATION",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": "MCF_AUTH_REQUIRED",
+      "tauri_code": "MAYASABA_AUTH_REQUIRED",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "UNSUPPORTED_VERSION": {
+      "category": "VERSION",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_UNSUPPORTED_VERSION",
+      "tauri_code": "MAYASABA_UNSUPPORTED_VERSION",
+      "remediation": "See affected subsystem remediation metadata."
+    },
+    "DEAD_LETTERED": {
+      "category": "DEAD_LETTER",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": "MCF_DEAD_LETTER",
+      "tauri_code": "MAYASABA_DEAD_LETTERED",
+      "remediation": "See affected subsystem remediation metadata."
+    }
+  }
+}
