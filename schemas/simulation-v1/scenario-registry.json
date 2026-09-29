@@ -1,0 +1,7 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "schema":"schemas/simulation-v1/simulation.schema.json",
+  "required_fault_classes":["latency","duplicate","drop","reorder","ack_loss","malformed_payload","stale_context","capability_loss","adapter_crash","timeout","build_failure","test_failure","repair_regression","conflicting_proposals"],
+  "rule":"Simulation uses deterministic seeds and simulated adapters implementing the real adapter contract; simulated outcomes are never production evidence."
+}
