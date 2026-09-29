@@ -1,0 +1,13 @@
+{
+  "protocol_version":"MCF-2","schema_version":"2.0.0",
+  "message_id":"018f4a20-0000-7000-8000-000000000011",
+  "event_id":"018f4a20-0000-7000-8000-000000000012",
+  "project_id":"018f4a20-0000-7000-8000-000000000013",
+  "session_id":"018f4a20-0000-7000-8000-000000000014",
+  "sender":{"actor_type":"AGENT","actor_id":"018f4a20-0000-7000-8000-000000000015","agent_type":"CLAUDE_CODE"},
+  "recipients":[{"actor_type":"MAYASABA","actor_id":"mayasaba-controller"}],
+  "channel":"task","message_type":"TASK_PROGRESS","phase":"IMPLEMENTATION","correlation_id":"018f4a20-0000-7000-8000-000000000016",
+  "sequence":1,"project_epoch":1,"priority":"TASK_CONTROL","created_at":"2026-01-01T00:00:00Z",
+  "requires_ack":true,"requires_response":false,"blocking":false,"operation_id":"018f4a20-0000-7000-8000-000000000017",
+  "payload":{},"security":{"classification":"INTERNAL_PROJECT","secret_refs":[],"contains_secret_material":false}
+}
