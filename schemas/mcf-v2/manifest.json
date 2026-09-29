@@ -1,0 +1,40 @@
+{
+  "protocol": "mayasaba.mcf.v2",
+  "version": "2.0.0",
+  "schema_draft": "2020-12",
+  "serialization": [
+    "JSON",
+    "NDJSON"
+  ],
+  "registry": "registry.json",
+  "schemas": [
+    "common.schema.json",
+    "enums.schema.json",
+    "identity.schema.json",
+    "envelope.schema.json",
+    "handshake.schema.json",
+    "ack.schema.json",
+    "error.schema.json",
+    "sync.schema.json",
+    "context-pack.schema.json",
+    "task.schema.json",
+    "task-lease.schema.json",
+    "handoff.schema.json",
+    "council-round.schema.json",
+    "barrier.schema.json",
+    "execution.schema.json",
+    "artifact.schema.json",
+    "evidence.schema.json",
+    "validation.schema.json",
+    "control.schema.json",
+    "message-types.schema.json",
+    "message-payloads.schema.json",
+    "event-types.schema.json",
+    "transition-types.json"
+  ],
+  "owners": {
+    "protocol": "crates/protocol",
+    "bus": "crates/bus",
+    "core": "crates/core"
+  }
+}
