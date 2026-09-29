@@ -80,22 +80,24 @@ If the conflict cannot be resolved safely, stop and report the architecture conf
 
 ## 6. Canonical ownership
 
-Respect these subsystem owners:
+The authoritative subsystem → crate, application-service → crate, and dependency mappings are maintained in `workspace.manifest.json` and explained in `docs/WORKSPACE-MANIFEST.md`.
 
-- crates/core — lifecycle/orchestration
-- crates/protocol — MCF-v2 types and protocol validation
-- crates/bus — communication delivery/routing
-- crates/agents — agent runtime/adapters
-- crates/council — deliberation
-- crates/tasks — task DAG and leases
-- crates/workspace — workspaces/checkpoints/integration support
-- crates/execution — local process execution
-- crates/validation — validation gates
-- crates/evidence — evidence/artifacts
-- crates/policy — permissions and security policy
-- crates/storage — SQLite persistence
+The domain-crate ownership is:
 
-Do not create a second authority for another subsystem.
+- `crates/core` — lifecycle/orchestration and cross-subsystem application services
+- `crates/protocol` — MCF-v2 types and protocol validation
+- `crates/bus` — communication delivery/routing
+- `crates/agents` — agent runtime/adapters
+- `crates/council` — deliberation
+- `crates/tasks` — task DAG and leases
+- `crates/workspace` — workspaces/checkpoints/integration support
+- `crates/execution` — local process execution
+- `crates/validation` — validation/build/test/review gates
+- `crates/evidence` — evidence/artifacts
+- `crates/policy` — permissions and security policy
+- `crates/storage` — SQLite persistence
+
+Do not maintain a second ownership matrix in agent instructions or implementation code. Service ownership is resolved through the machine-readable workspace manifest.
 
 ## 7. MCF-v2 rule
 
