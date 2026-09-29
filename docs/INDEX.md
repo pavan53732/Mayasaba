@@ -6,6 +6,7 @@ This directory is the canonical product, architecture, protocol, implementation,
 
 - [Master Specification](MASTER-SPECIFICATION.md) — single integrated product/system contract
 - [Architecture](ARCHITECTURE.md) — runtime/component architecture
+- [Internal Application Architecture](INTERNAL-APPLICATION-ARCHITECTURE.md) — frontend, Tauri bridge, Rust services, domain, orchestration, configuration, recovery and simulation
 - [Requirements](REQUIREMENTS.md) — functional and non-functional requirements
 - [MCF-v2 Protocol](MCF-V2-PROTOCOL.md) — communication semantics
 - [MCF-v2 Machine-Readable Contract](MCF-V2-MACHINE-READABLE-CONTRACT.md) — schema package contract
