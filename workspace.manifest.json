@@ -195,7 +195,7 @@
       "validate_configuration": "ConfigurationService",
       "start_simulation": "SimulationService",
       "stop_simulation": "SimulationService",
-      "create_trace_link": "DiagnosticsService"
+      "create_trace_link": "RequirementService"
     },
     "queries": {
       "get_project": "ProjectService",
