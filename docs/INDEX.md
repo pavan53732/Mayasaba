@@ -18,6 +18,8 @@ This directory is the canonical product, architecture, protocol, implementation,
 - [Memory & Context](MEMORY-CONTEXT.md) — project memory, epochs, snapshots and context synchronization
 - [Bootstrap / Doctor](BOOTSTRAP-DOCTOR.md) — Windows preflight and runtime agent detection
 - [Conformance & Testing](CONFORMANCE-AND-TESTING.md) — protocol, adapter, recovery and autonomy validation
+- [Traceability](TRACEABILITY.md) — requirement-to-evidence coverage
+- [Integration Authority](INTEGRATION-AUTHORITY.md) — merge, checkpoint and authoritative workspace control
 - [Local Security](LOCAL-SECURITY.md) — permissions, secrets, isolation and recovery
 - [Design Governance](DESIGN-GOVERNANCE.md) — rules preventing architecture/document collisions
 - [Design History](DESIGN-HISTORY.md) — consolidated record of architectural decisions made so far
