@@ -1,0 +1,11 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/validation-v1/certification.schema.json",
+  "title":"Mayasaba Certification","type":"object","additionalProperties":false,
+  "required":["certification_id","project_id","verdict","gates","evidence_refs"],
+  "properties":{
+    "certification_id":{"type":"string","format":"uuid"},"project_id":{"type":"string","format":"uuid"},
+    "verdict":{"enum":["CERTIFIED","NOT_CERTIFIED"]},"gates":{"type":"array","items":{"type":"object","required":["gate_id","status","evidence_refs"],"properties":{"gate_id":{"type":"string"},"status":{"enum":["PASS","FAIL","BLOCKED"]},"evidence_refs":{"type":"array","items":{"type":"string"}}}}},
+    "evidence_refs":{"type":"array","items":{"type":"string","format":"uuid"}},"certified_at":{"type":["string","null"],"format":"date-time"}
+  }
+}
