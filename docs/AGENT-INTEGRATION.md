@@ -147,7 +147,7 @@ The following are documented baseline facts. Runtime probing remains authoritati
 - exit status remains an OS process signal; final structured `result` is parsed separately from process exit
 - authentication is external to MCF-v2 and must never be copied into protocol payloads.
 
-Anthropic documents `claude -p`, JSON/stream-JSON, stream-JSON input, session resume and tool permission flags. urlClaude Code CLI referencehttps://docs.anthropic.com/en/docs/claude-code/cli-usage
+Anthropic documents `claude -p`, JSON/stream-JSON, stream-JSON input, session resume and tool permission flags. Source: https://docs.anthropic.com/en/docs/claude-code/cli-usage
 
 ### Hermes Agent CLI
 
@@ -160,7 +160,7 @@ Anthropic documents `claude -p`, JSON/stream-JSON, stream-JSON input, session re
 - ACP uses stdio JSON-RPC
 - adapter must treat ACP and stream-json as distinct native transports and normalize both to MCF-v2.
 
-Hermes documents both stream-json CLI output and ACP stdio operation. urlHermes CLI referencehttps://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md
+Hermes documents both stream-json CLI output and ACP stdio operation. Source: https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md
 
 ### Kilo Code CLI
 
@@ -173,7 +173,7 @@ Hermes documents both stream-json CLI output and ACP stdio operation. urlH
 - cloud commands exist in Kilo, but Mayasaba MUST NOT use `kilo cloud`; only local CLI/ACP execution is supported
 - permission behavior in autonomous mode is governed by Kilo's auto-approval configuration; Mayasaba still enforces its own task/workspace/policy gates.
 
-Kilo documents `kilo run --auto`, JSON output, ACP, session controls and cwd options. urlKilo CLI documentationhttps://kilo.ai/docs/code-with-ai/platforms/cli
+Kilo documents `kilo run --auto`, JSON output, ACP, session controls and cwd options. Source: https://kilo.ai/docs/code-with-ai/platforms/cli
 
 ### Cline CLI
 
@@ -187,7 +187,7 @@ Kilo documents `kilo run --auto`, JSON output, ACP, session controls and cwd opt
 - ACP is stdio based
 - adapter must keep Cline JSON/headless and ACP as separate native transport implementations.
 
-Cline documents headless JSON/NDJSON, cwd, session IDs, autonomous approval and ACP. urlCline CLI referencehttps://github.com/cline/cline/blob/main/docs/cli/cli-reference.mdx
+Cline documents headless JSON/NDJSON, cwd, session IDs, autonomous approval and ACP. Source: https://github.com/cline/cline/blob/main/docs/cli/cli-reference.mdx
 
 ## Adapter transport decision
 
