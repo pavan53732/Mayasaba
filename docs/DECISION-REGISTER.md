@@ -26,6 +26,11 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-020 | Project-local `.mayasaba` is portable manifest/import-export only; SQLite app-data remains the sole runtime source of truth | HARD_LOCK |
 | DEC-021 | MCF-v2 and Tauri bridge identifiers use machine-readable canonical registries | HARD_LOCK |
 | DEC-022 | The implementation target uses exactly 12 Rust crates defined by WORKSPACE-MANIFEST.md | HARD_LOCK |
+| DEC-023 | MCF ACK is receipt/persistence only; processing success/failure is reported separately | HARD_LOCK |
+| DEC-024 | Privileged shell/process/package/install/admin execution is controller-mediated through ExecutionService; scoped agent file edits remain subject to lease/workspace policy | HARD_LOCK |
+| DEC-025 | Context state digests use SHA-256 over RFC 8785 JCS canonicalized authoritative scope input | HARD_LOCK |
+| DEC-026 | Bus remains a transport/routing subsystem; PolicyService authorization is completed before material dispatch rather than adding a bus→policy dependency | HARD_LOCK |
+| DEC-027 | Material-action idempotency is keyed by project_id + operation_id; message_id identifies individual delivery records | HARD_LOCK |
 
 ## Change procedure
 
