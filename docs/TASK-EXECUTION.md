@@ -108,3 +108,8 @@ Default scope is the selected project root. Outside-root access requires explici
 Before any material state-changing action:
 
 identity + session + project + workspace + capability + policy + task lease + current context/epoch + relevant requirements/decisions/contracts must be valid.
+
+
+Detailed workspace lifecycle, Git worktree admission, integration, conflict handling and rollback are defined in `WORKSPACE-INTEGRATION-DESIGN.md`.
+
+Detailed local process supervision and evidence capture are defined in `EXECUTION-KERNEL-DESIGN.md`.
