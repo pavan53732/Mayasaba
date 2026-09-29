@@ -64,7 +64,9 @@ Silence never means agreement.
 
 ## 6. Handoff
 
-Owner: Task/Agent integration boundary.
+Owner: TaskService.
+
+AgentService supplies session facts; TaskService owns handoff ownership state and persistence.
 
 REQUESTED → PACKAGE_BUILT → OFFERED → RECEIVER_ACCEPTED → OWNERSHIP_TRANSFERRED → VERIFIED → CLOSED.
 
@@ -118,7 +120,9 @@ ACK is receipt only.
 
 ## 12. Barrier
 
-Owner: Council/Orchestrator.
+Owner: CouncilService.
+
+The Orchestrator evaluates barrier predicates and schedules follow-up actions, but cannot mutate barrier state directly. CouncilService persists barrier state and emits barrier events.
 
 OPEN → WAITING → SATISFIED or BLOCKED / TIMED_OUT.
 
@@ -157,3 +161,23 @@ Unknown, missing, stale, contradictory or unverifiable state cannot satisfy a po
 ## 16. Recovery rule
 
 Recovery reconstructs machine state from durable authoritative state and actual external state. It does not infer success from stale process/session messages.
+
+
+## 13. State-machine ownership matrix
+
+| State machine | Authoritative owner | Crate |
+|---|---|---|
+| Project lifecycle | LifecycleService / Orchestrator | crates/core |
+| Agent session | AgentService | crates/agents |
+| Task | TaskService | crates/tasks |
+| Lease | TaskService | crates/tasks |
+| Council round | CouncilService | crates/council |
+| Handoff | TaskService | crates/tasks |
+| Execution | ExecutionService | crates/execution |
+| Validation | ValidationService | crates/validation |
+| Repair | RepairService | crates/core |
+| Context | ContextService | crates/core |
+| Message delivery | Bus | crates/bus |
+| Barrier | CouncilService | crates/council |
+
+The Orchestrator coordinates these owners but is never a second owner. Cross-machine changes invoke the authoritative owner service.
