@@ -2,7 +2,7 @@
 
 ## Authority
 
-This is the implementation-level workspace/dependency ownership contract. It defines the target repository graph; it does not replace Cargo/npm/Tauri manifests once implementation begins.
+This is the human-readable workspace/dependency ownership contract. The machine-readable source is `workspace.manifest.json`; this document explains its intent and implementation alignment.
 
 ## Target repository layout
 
