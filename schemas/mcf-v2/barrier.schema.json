@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mayasaba.local/schemas/mcf-v2/barrier.schema.json",
+  "title": "Mayasaba Barrier",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "barrier_id",
+    "owner_round_id",
+    "state",
+    "predicate",
+    "participants"
+  ],
+  "properties": {
+    "barrier_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "owner_round_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "OPEN",
+        "WAITING",
+        "SATISFIED",
+        "BLOCKED",
+        "TIMED_OUT"
+      ]
+    },
+    "predicate": {
+      "type": "object"
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "satisfied_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "deadline": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "block_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
