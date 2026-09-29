@@ -283,7 +283,7 @@ When changing a canonical design:
 - update decision/requirement/traceability references when affected;
 - avoid duplicate or conflicting specifications.
 
-Do not recreate the deleted `docs/END-TO-END-DESIGN.md` pattern. End-to-end behavior must remain distributed across the correct canonical owner documents.
+Do not recreate a deleted monolithic cross-cutting design document. End-to-end behavior remains distributed across the correct canonical owner documents.
 
 ## 15. Git discipline
 
