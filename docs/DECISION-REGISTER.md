@@ -31,6 +31,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-025 | Context state digests use SHA-256 over RFC 8785 JCS canonicalized authoritative scope input | HARD_LOCK |
 | DEC-026 | Bus remains a transport/routing subsystem; PolicyService authorization is completed before material dispatch rather than adding a bus→policy dependency | HARD_LOCK |
 | DEC-027 | Material-action idempotency is keyed by project_id + operation_id; message_id identifies individual delivery records | HARD_LOCK |
+| DEC-028 | Mayasaba supports user-authorized local-file work across artifact types within a selected workspace; requested public-web research is read-only; external side effects and general control of unrelated applications are out of scope | HARD_LOCK |
 
 ## Change procedure
 

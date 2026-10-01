@@ -59,18 +59,21 @@ REQUESTED → PACKAGE_BUILT → OFFERED → RECEIVER_ACCEPTED → OWNERSHIP_TRAN
 
 ## 5. Workspace model
 
-Git projects:
+A workspace is a user-selected local folder plus task-scoped allowed paths. It may contain code, documents, research reports, datasets or other user-selected artifacts; it is not limited to Git repositories or particular application categories. Mayasaba does not scan the whole PC by default. Outside-scope reads/writes require explicit approval.
+
+Git software projects:
 
 - integration workspace
 - per-agent isolated worktree/branch
 - controlled merges/checkpoints
 
-Non-Git projects:
+Non-Git and file-focused workspaces:
 
-- project-root sandboxing
+- scoped filesystem isolation
 - controlled agent scopes
 - checkpoints before risky changes
 - serialized integration where isolation cannot be guaranteed
+- preview and recoverable checkpoint for bulk/destructive data edits where feasible
 
 ## 6. Execution kernel
 
@@ -88,7 +91,7 @@ Mayasaba records executable, arguments, working directory, timestamps, exit stat
 
 Execution may use locally discovered:
 
-PowerShell, CMD, Git, Node/npm/pnpm/yarn, Python, .NET/MSBuild, Java/Gradle/Android SDK, browsers/browser automation, database CLIs, compilers and package managers.
+PowerShell, CMD, Git, Node/npm/pnpm/yarn, Python, .NET/MSBuild, Java/Gradle/Android SDK, database CLIs, compilers and package managers. User-requested research may additionally use read-only retrieval/rendering of publicly accessible web pages; this does not permit authenticated interaction with public/external services, public form submissions, posting, messaging, account changes, purchases, or general control of unrelated apps. Scoped UI automation may still validate the selected local target app for software tasks when it causes no external side effects.
 
 No command is invented merely because a framework is expected to have one; repository/toolchain evidence should determine the command.
 
@@ -101,7 +104,9 @@ EXECUTE
 INSTALL
 ADMIN_REQUIRED
 
-Default scope is the selected project root. Outside-root access requires explicit escalation.
+Public-web research uses `READ_ONLY` scoped to user-requested access to publicly available sources; it grants no external side effects.
+
+Default filesystem scope is the user-selected workspace and task allowed paths. Outside-scope access requires explicit approval. Project-local installs are allowed within the authorized task policy; global/admin installs require approval.
 
 ## 9. Material action gate
 
@@ -120,3 +125,5 @@ Agent file-editing is permitted only inside the leased workspace when the adapte
 Shell, process, package, install, compiler and administrative operations are not direct agent authority. They are requested through MCF `EXECUTION_REQUEST` and executed by Mayasaba `ExecutionService`.
 
 An adapter must enforce or prove this separation. If the installed CLI cannot provide the required mediation, the session is not admitted for tasks that require privileged execution.
+
+Agent-native capabilities do not authorize external side-effect actions or general control of unrelated applications. Email/messages, online posting, public/external form submission, purchases and account changes are outside product scope; permitted public-web access is limited to user-requested read-only research.

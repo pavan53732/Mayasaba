@@ -2,7 +2,9 @@
 
 ## 1. Product definition
 
-Mayasaba is a Windows-only, local-first autonomous software-engineering control plane. A user provides a project idea and a local project path. Mayasaba coordinates four independent coding CLIs—Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline—through a deterministic communication, council, task, execution, validation, repair and evidence system until a full working project is delivered.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. A user selects a local workspace and asks for work on its files. Supported work includes software engineering and other local artifact tasks such as documents, research reports, data cleanup, and code refactors. Mayasaba coordinates four independent coding CLIs—Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline—through deterministic task, workspace, policy, execution, validation, repair and evidence workflows.
+
+For a user-requested research task, Mayasaba may read public web sources and save the resulting report and citations locally. This is read-only retrieval, not permission to send messages, publish, submit forms, purchase, change accounts, or control unrelated applications.
 
 Mayasaba is not a fifth AI brain. The four agents retain independent intelligence, model/provider choice, tools, authentication, sessions and reasoning.
 
@@ -12,7 +14,9 @@ Mayasaba is not a fifth AI brain. The four agents retain independent intelligenc
 - All Mayasaba-controlled execution occurs on the user's Windows PC.
 - No cloud VM, hosted workspace or remote executor.
 - No mandatory Mayasaba login/account.
-- User-selected local path is the project boundary.
+- A user-selected local workspace path and task-scoped allowed paths define the filesystem boundary; Mayasaba does not scan the whole PC by default.
+- User-requested public-web research may read public sources; this is read-only retrieval, not permission for external side effects.
+- Mayasaba does not send email/messages, publish posts, submit forms, make purchases, change accounts, or generally control unrelated desktop applications.
 - Initial supported agents are exactly Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline.
 - CLI-native protocols remain adapter-internal.
 - SQLite is the local durable source of Mayasaba state/history.
@@ -34,21 +38,29 @@ Mayasaba is not a fifth AI brain. The four agents retain independent intelligenc
 12. Policy Engine
 13. SQLite Storage
 
-## 4. Canonical lifecycle
+## 4. Canonical software-engineering lifecycle
 
 ~~~text
 PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS → CROSS_CRITIQUE → REBUTTAL_AND_REVISION → DISAGREEMENT_RESOLUTION → USER_INTERVIEW → PRODUCT_AND_UX_DESIGN → TECH_STACK_DEBATE → ARCHITECTURE_REVIEW → ARCHITECTURE_LOCKED → TASK_PLANNING → IMPLEMENTATION → INTEGRATION → BUILD → TEST → E2E → CROSS_AGENT_REVIEW → REPAIR (when needed) → FINAL_VALIDATION → PACKAGE → COMPLETE
 ~~~
 
-Global states include PAUSED, STOPPED, BLOCKED and RECOVERING.
+Global states include PAUSED, STOPPED, BLOCKED and RECOVERING. This full lifecycle applies to software-engineering projects. Other local artifact tasks use the same scope, ownership, policy, validation and evidence principles, but execute only the stages applicable to their acceptance criteria; they do not require irrelevant build, E2E or packaging gates.
 
-## 6. Core engineering loop
+## 6. Core work loops
 
-The system must perform real work, not merely generate advice:
+Mayasaba must perform the requested work, not merely generate advice. Every task uses an explicit objective, authorized workspace/paths, acceptance criteria, validation plan and evidence.
 
-idea → requirements → architecture → task DAG → isolated implementation → integration → build → run → tests → E2E/UI validation → review → diagnosis → repair → regression → certification → package.
+### Software-engineering tasks
 
-An agent's “done” message never closes this loop.
+idea → requirements → architecture → task DAG → isolated implementation → integration → build → run → tests → E2E/UI validation where applicable → review → diagnosis → repair → regression → certification → package where required.
+
+### Local artifact tasks
+
+request → workspace/file scope → plan → local document/report/data/code changes → task-appropriate integrity and acceptance checks → review → evidence-backed handoff.
+
+For research reports, public-source retrieval is read-only; citations and source metadata are recorded locally. For data cleanup, proposed destructive changes are previewed and recoverable where feasible.
+
+No task type is excluded solely by its app or file category. Completion is limited by available local tools and evidence; unavailable validation is reported as blocked or unverified, never silently treated as passing. An agent's “done” message never closes a task.
 
 ## 7. Authoritative truth
 
@@ -56,7 +68,7 @@ An agent's “done” message never closes this loop.
 2. HARD_LOCK decisions
 3. Versioned architecture/contracts
 4. Verified workspace/repository facts
-5. Objective build/test/E2E evidence
+5. Objective task-appropriate evidence (build/test/E2E for software where applicable; citations and integrity checks for other artifacts)
 6. Persisted Mayasaba orchestration state
 7. Agent proposals/reports
 
@@ -92,29 +104,17 @@ The orchestrator derives aggregate project state from these systems.
 
 ## 9. Workspace and execution
 
-Git repositories use isolated worktrees/branches when possible. The integration workspace is Mayasaba-controlled. Non-Git projects use scoped filesystem isolation and checkpoints.
+A workspace is a user-selected local folder and task-scoped set of allowed paths. It may contain source code, documents, reports, datasets or other user-selected files; work is not restricted to Git repositories or a fixed application category. Mayasaba does not scan the entire PC by default. Out-of-scope file access or writes require explicit scope approval.
 
-Commands are observable and recorded with executable, arguments, working directory, timing, exit result, stdout/stderr references and relevant task/session IDs.
+Git software projects use isolated worktrees/branches when possible. The integration workspace is Mayasaba-controlled. Non-Git and file-focused workspaces use scoped filesystem isolation and checkpoints. Destructive or bulk data changes require a preview and a recoverable checkpoint where feasible.
+
+Commands are observable and recorded with executable, arguments, working directory, timing, exit result, stdout/stderr references and relevant task/session IDs. Local build, test, formatting and data-processing tools are policy-mediated. Project-local installs may proceed within the authorized workspace policy; global/admin installs require approval.
 
 ## 10. Completion contract
 
-COMPLETE requires:
+Completion requires the user's acceptance criteria and all validation gates applicable to the task, with evidence and controller-owned certification. Software-engineering tasks retain the applicable build, runtime, test, E2E/UI, review, regression and packaging gates. Document, research and data tasks use relevant checks such as source citations, format/schema validation, diff review, record counts, invariants and recoverability.
 
-- requirements coverage
-- architecture/contract consistency
-- source completeness
-- successful build
-- successful required runtime launch
-- critical workflows functioning
-- persistence functioning where applicable
-- tests passing
-- E2E/UI validation where applicable
-- cross-agent review passing
-- high-severity findings resolved
-- regression passing
-- final package/build artifact
-- evidence bundle
-- controller certification
+A task is BLOCKED or UNVERIFIED when a required local toolchain or runtime is unavailable; Mayasaba must not claim success based only on an agent report. Irrelevant software-only gates are not imposed on non-software artifact tasks.
 
 ## 11. Non-goals
 
@@ -127,6 +127,8 @@ Mayasaba is not:
 - a UI-only chat application
 - a prompt-only “autonomous” wrapper
 - an agent-controlled final authority
+- a general-purpose desktop/app automation agent
+- an external side-effect agent that sends messages, publishes content, submits forms, purchases items, changes accounts or controls unrelated applications
 
 ## 12. Internal application contract
 

@@ -4,7 +4,7 @@
 
 This file defines the repository-local operating contract for **Claude Code CLI** when working inside the Mayasaba repository.
 
-Mayasaba is a Windows-only, local-first autonomous software-engineering control plane. Claude Code is an **agent adapter participant**, not the owner of Mayasaba's orchestration authority.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on local files, including software engineering and document, research-report and data tasks. Requested public-web research is read-only; external side effects and general control of unrelated applications are out of scope. Claude Code is an **agent adapter participant**, not the owner of Mayasaba's orchestration authority.
 
 This file is Claude-specific guidance. It does not replace or redefine canonical Mayasaba architecture, protocol, state-machine, security, validation, or governance documents.
 
@@ -68,7 +68,7 @@ Claude Code must:
 - perform work assigned by Mayasaba;
 - respect the task scope, lease, project epoch, context snapshot, workspace scope, and policy;
 - communicate agent-facing state through the adapter/MCF-v2 boundary;
-- produce implementation artifacts and evidence;
+- produce assigned task artifacts (code, documents, research reports or data changes) and evidence;
 - report failures honestly;
 - stop or pause when the controller requires it;
 - support handoff with sufficient evidence for another agent to continue.
@@ -84,21 +84,23 @@ Claude Code must not:
 - certify its own implementation;
 - bypass MCF-v2 for agent-to-agent communication;
 - bypass execution/workspace/security policy;
+- read or write outside the task-authorized workspace without explicit approval;
+- send email/messages, post online, submit forms to public/external services, make purchases, change accounts, or generally control unrelated applications;
 - weaken acceptance criteria to make a task pass;
 - delete or disable tests merely to remove a failure;
 - silently overwrite another agent's changes.
 
 ## 4. Work protocol
 
-For every assigned implementation task:
+For every assigned task:
 
 1. Read the supplied ContextPack and task contract.
 2. Verify the project epoch/context snapshot is current.
-3. Inspect the relevant repository files before editing.
-4. Identify the smallest correct change satisfying the task.
-5. Preserve existing architecture and contracts.
-6. Implement the change.
-7. Run relevant formatting, type-checking, build, unit, integration, and/or E2E validation available for the affected scope.
+3. Inspect the relevant workspace/files before editing or researching.
+4. Identify the smallest correct change or research workflow satisfying the task.
+5. Preserve existing architecture and contracts where applicable.
+6. Make the assigned local artifact, code, or research changes.
+7. Run task-appropriate checks; include relevant formatting, type-checking, build, unit, integration, and/or E2E validation for software changes.
 8. Inspect the resulting diff.
 9. Report changed files, validation performed, failures, unresolved risks, and follow-up work.
 10. Provide a proof-carrying handoff when ownership transfers.
@@ -120,7 +122,8 @@ Prefer:
 
 Do not:
 
-- modify files outside the authorized project root;
+- scan the whole PC by default;
+- read or modify files outside the authorized workspace/task scope without explicit approval;
 - introduce unrelated refactors;
 - add dependencies without justification;
 - replace established infrastructure merely for convenience;
@@ -208,7 +211,7 @@ When working on execution behavior:
 - do not assume POSIX-only tooling;
 - keep process cancellation and cleanup explicit;
 - capture command, arguments, working directory, timing, exit code, stdout/stderr, and relevant metadata according to the execution contract;
-- respect permission levels and project-root boundaries.
+- respect permission levels and the user-selected workspace/task-path boundaries; outside-scope access requires approval.
 
 Never introduce cloud execution, hosted workspaces, remote executors, or mandatory online services.
 

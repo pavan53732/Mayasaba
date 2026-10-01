@@ -38,13 +38,16 @@ Runtime capability facts may include:
 - interrupt
 - resume
 - autonomous execution
-- file modification
-- shell
-- browser automation
+- scoped file modification
+- shell (reported capability only; policy and ExecutionService control admission)
+- read-only public-web retrieval for user-requested research, if supported
+- scoped UI automation for the selected local target app during software validation, if supported
 - Git
 - patching
 - artifact/evidence reporting
 - structured errors
+
+Capabilities describe detected CLI behavior, not permission grants. User-requested public-web access remains read-only; email/messages, public posting/form submission, purchases, account changes and general unrelated-app control are never authorized by a probe result. Scoped UI automation may validate the selected local target app for a software task when it causes no external side effects.
 
 ## Agent readiness
 

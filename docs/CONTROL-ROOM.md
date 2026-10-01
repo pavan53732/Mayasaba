@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Control Room is the primary Windows desktop interface for observing and controlling the autonomous engineering lifecycle.
+The Control Room is the primary Windows desktop interface for observing and controlling user-authorized work on local files. It presents the full software-engineering lifecycle where relevant and task-appropriate workflows for documents, research reports and data cleanup.
 
 ## Primary navigation
 
@@ -25,6 +25,12 @@ Current project sections:
 - Logs
 - Evidence
 
+The same workspace, task, evidence and review surfaces cover non-software artifacts; build/run/test sections are shown or gated as applicable to the task.
+
+## Workspace and task scope
+
+Show the user-selected local workspace and task-scoped allowed paths. Do not treat the whole PC as a default scan scope. For user-requested research, display public-source retrieval as read-only and present locally saved citations/report artifacts. External side effects and general control of unrelated applications are not available actions.
+
 ## Header
 
 Persistent project header shows:
@@ -38,7 +44,7 @@ Persistent project header shows:
 
 ## Main center
 
-The center view is the engineering timeline/chat:
+The center view is the work timeline/chat:
 
 - user messages
 - agent messages
@@ -46,7 +52,9 @@ The center view is the engineering timeline/chat:
 - phase markers
 - decisions
 - task events
-- build/test events
+- build/test events when relevant
+- document/report/data artifact changes
+- research source/citation records
 - failures
 - repairs
 - evidence
@@ -61,7 +69,7 @@ Show:
 - active agents
 - task owners
 - task status
-- build/test health
+- applicable build/test or artifact-validation health
 - blockers
 - communication lag
 - message ACK/processing state
@@ -95,6 +103,8 @@ Every important completion claim links to observable evidence:
 - test result
 - build result
 - artifact
+- source citations/metadata for research reports
+- format/schema checks, record counts, invariants or recoverability evidence for document/data tasks where applicable
 - screenshot/UI evidence where applicable
 - validation result
 
@@ -107,7 +117,7 @@ User may:
 - retry
 - reassign
 - reopen an explicit decision
-- approve a blocked operation
+- approve a blocked operation only when the requested scope/action is within product policy
 - stop
 
 Controls must map to actual controller state transitions, not merely UI state.

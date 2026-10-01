@@ -44,6 +44,12 @@ An adapter:
 
 An adapter does not own project state, task truth or certification.
 
+## Product-scope boundary
+
+Agents work on user-authorized files within the leased workspace, which may include source code, documents, research reports and datasets. Public-web access is permitted only as read-only retrieval for a user-requested research task; any output is saved locally with citations/source metadata.
+
+No agent capability or native CLI feature authorizes sending email/messages, posting to external services, submitting forms to public/external services, making purchases, changing accounts or generally controlling unrelated applications. These restrictions apply even when an installed CLI advertises browser, terminal or general automation capabilities. Runtime capability probes report what a CLI can do; policy determines what Mayasaba allows.
+
 ## Native protocol boundary
 
 Where a CLI supports a structured machine transport, use it rather than ANSI scraping. ANSI scraping is a fallback only.
@@ -93,7 +99,7 @@ Capabilities are runtime-detected, including where applicable:
 - file write
 - execution request via Mayasaba ExecutionService
 - native terminal/shell use is admitted only when the adapter probe proves it can be restricted or fully supervised
-- browser automation
+- read-only retrieval/rendering of public web sources for user-requested research, if explicitly supported and policy-gated; no authenticated interaction with public/external services or side-effecting public-web actions. Scoped UI automation may validate the selected local target app for software tasks when it causes no external side effects.
 - Git
 - patching
 - artifact reporting

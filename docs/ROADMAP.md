@@ -67,16 +67,18 @@ M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - affected-context dependency mapping
 - recovery rehydration
 
-## M5 — Task/workspace execution
-- requirements-to-task DAG
+## M5 — Task/workspace execution for code and local artifacts
+- request/acceptance-criteria-to-task DAG
 - task leases
 - lease renewal/expiry
 - proof-carrying handoffs
-- Git worktrees
-- non-Git isolation
-- checkpoints
-- local command execution
-- policy gates
+- user-selected workspace and task-scoped allowed paths
+- Git worktrees for software repositories
+- non-Git/file-focused isolation
+- checkpoints and outside-scope approval
+- local command execution and project-local installs under policy
+- preview/recovery for bulk or destructive data edits
+- task-appropriate evidence and validation gates
 - process lifecycle
 
 ## M6 — Council
@@ -90,7 +92,7 @@ M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - council barriers
 - participation/timeout semantics
 
-## M7 — Build/run/test/E2E
+## M7 — Software build/run/test/E2E
 - toolchain discovery
 - repository-based command discovery
 - build execution
@@ -117,18 +119,18 @@ M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - tasks
 - agent sessions
 - files/worktrees
-- build/run/test
+- local document/report/data artifact review and preview
+- build/run/test where applicable
 - repair
 - evidence
-- preview
 - communication observability
 - pause/resume/stop
 
-## M10 — Autonomous end-to-end delivery
-- idea → working project
-- continuous synchronization
-- build/test/repair loop
-- certification
+## M10 — Evidence-backed end-to-end delivery
+- software path: idea → working project, with synchronization, build/test/repair and certification
+- local-artifact path: user request → scoped document/report/data/code changes → task-appropriate validation and evidence
+- read-only public-source research and local citation/report delivery when requested
+- certification against only the applicable acceptance criteria and gates
 
 ## M11 — Packaging
 - final evidence bundle

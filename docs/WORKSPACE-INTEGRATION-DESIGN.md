@@ -47,8 +47,8 @@ Before merge, create recoverable checkpoint. After merge, run affected validatio
 ## Rollback
 Rollback targets a known checkpoint. It does not delete event/evidence history. The failed changeset remains auditable.
 
-## Non-Git projects
-Use scoped project-root access, checkpoints and serialized integration when concurrent writes cannot be proven safe.
+## Non-Git and file-focused workspaces
+Use the user-selected local workspace and task-scoped allowed paths, checkpoints and serialized integration when concurrent writes cannot be proven safe. Mayasaba does not scan the whole PC by default; outside-scope reads/writes require explicit approval.
 
 ## Dirty/unexpected workspace
 Unexpected changes are a blocker. Mayasaba must not silently overwrite or discard user/other-agent changes.

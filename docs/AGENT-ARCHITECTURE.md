@@ -53,7 +53,7 @@ Agents never communicate through an uncontrolled direct channel. All agent commu
 
 ## Capability model
 
-Capabilities are runtime facts, not documentation assumptions. Examples include structured transport, streaming, interrupt, resume, autonomous execution, file access, shell execution, Git, browser automation, artifact reporting, structured errors and working-directory support.
+Capabilities are runtime facts, not documentation assumptions. Examples include structured transport, streaming, interrupt, resume, autonomous execution, scoped file access, shell execution, Git, scoped UI automation of the selected local target app for software validation, read-only retrieval of public web sources for requested research, artifact reporting, structured errors and working-directory support. A probed capability is not itself permission: authenticated interactions with public/external services, external side-effect actions and general control of unrelated applications are outside product scope. Software tasks may still use scoped UI automation to validate the user-selected local target app when it causes no external side effects.
 
 Capability loss stops new work requiring that capability and triggers deterministic recovery/reassignment rules.
 

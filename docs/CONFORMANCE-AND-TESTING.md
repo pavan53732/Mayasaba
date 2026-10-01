@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Mayasaba's autonomy is accepted only when its coordination and engineering behavior are testable.
+Mayasaba's autonomy is accepted only when its coordination, software-engineering behavior, local-artifact workflows and action boundaries are testable.
 
 ## Protocol conformance
 
@@ -64,18 +64,24 @@ Must simulate:
 
 ## Workspace tests
 
-- concurrent Git worktree isolation
+- concurrent Git worktree isolation for software repositories
 - integration conflict handling
-- non-Git checkpointing
-- path-scope enforcement
-- outside-root escalation
+- non-Git checkpointing for file-focused tasks
+- user-selected workspace and task-path enforcement
+- no whole-PC scan by default
+- outside-scope escalation
 - process cleanup
+- preview and recovery behavior for bulk/destructive data edits
 
-## Engineering loop tests
+## Software-engineering loop tests
 
 At minimum, exercise:
 
 idea → requirements → architecture → task → implementation → integration → build → test → E2E → review → failure → diagnosis → repair → regression → certification.
+
+## Local artifact workflow tests
+
+Exercise representative user-authorized tasks for document/report edits, read-only public-source research with local citations, and data cleanup. Validate task-appropriate acceptance checks (for example, format/schema checks, source metadata, record counts, invariants and recoverability) without imposing irrelevant build/E2E gates. Use fixtures or controlled public-read test inputs; test that retrieval has no authenticated or side-effecting path.
 
 ## Anti-hallucination tests
 
@@ -97,10 +103,15 @@ The system must prove that:
 - unauthorized tool invocation
 - destructive/admin escalation
 - hidden command detection
+- denial of out-of-scope file access/writes without approval
+- no whole-PC scan by default
+- public-web research remains read-only and user-requested
+- external side-effect attempts are denied even through native agent tools
+- no general control of unrelated applications
 
 ## Release gate
 
-A Mayasaba release must have passing conformance results for protocol, adapters, storage, recovery, workspace, execution, validation and certification. Failed mandatory suites block release.
+A Mayasaba release must have passing conformance results for protocol, adapters, storage, recovery, workspace scope, local artifact workflows, execution policy, validation and certification. Failed mandatory suites—including external-action boundary tests—block release.
 
 
 ## M0.5 integration-seam tests

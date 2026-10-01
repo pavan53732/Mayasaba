@@ -56,6 +56,8 @@ PROJECT_CREATED
 → PACKAGE
 → COMPLETE
 ```
+This is the full canonical software-engineering sequence. Other local artifact tasks use the shared task/workspace/council/validation authorities and enter only phases applicable to their acceptance criteria; they do not require irrelevant build, E2E or packaging stages.
+
 Repair/recovery may re-enter the applicable phase. BLOCKED, PAUSED, FAILED and RECOVERING are orthogonal controller conditions.
 
 ## Ready-condition evaluation

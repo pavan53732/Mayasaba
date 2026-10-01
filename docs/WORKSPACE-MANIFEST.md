@@ -52,7 +52,7 @@ Mayasaba/
 | tasks | requirements-to-task graph, leases, handoffs | protocol, storage, agents, workspace |
 | workspace | filesystem scope, Git worktrees, checkpoints, integration | storage, policy |
 | execution | PowerShell/CMD/process lifecycle | storage, policy |
-| validation | build/test/E2E/review gates | execution, workspace, evidence, storage |
+| validation | task-appropriate integrity/review gates; software build/test/E2E when applicable | execution, workspace, evidence, storage |
 | evidence | artifacts/evidence provenance | storage |
 | policy | permission and security decisions | storage |
 | storage | SQLite schema, migrations, transactions | OS/filesystem primitives only |

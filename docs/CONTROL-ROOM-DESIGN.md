@@ -16,7 +16,7 @@ Chat, Council, Requirements, Architecture, Decisions, Tasks, Agents, Files, Buil
 
 Center content is feature-specific. A project timeline can aggregate authoritative events without becoming a second state machine.
 
-Right context rail shows active agents, tasks, blockers, build/test health, communication health, epoch, context snapshot, lease expiry, barriers, retries and dead letters.
+Right context rail shows the user-selected workspace/task scope, active agents, tasks, blockers, task-applicable build/test or artifact-validation health, communication health, epoch, context snapshot, lease expiry, barriers, retries and dead letters.
 
 ## State presentation
 UI distinguishes:
@@ -32,6 +32,12 @@ Every user action maps to a typed Tauri command and displays:
 request → pending → accepted/rejected → resulting event/state.
 
 Buttons are disabled when the controller reports the action is not admissible; UI disablement is not itself an authorization mechanism.
+
+## Workspace and action boundary
+
+Present task-scoped allowed paths within the user-selected local workspace; the whole PC is not an implicit scan scope. User-requested public research may retrieve publicly accessible sources read-only and save citations/results locally. The UI must not expose email, messaging, external posting/form submission, purchases, account changes, or general controls for unrelated applications.
+
+Build, runtime and E2E surfaces remain first-class for software tasks. Other local artifacts use applicable review, validation and evidence surfaces without irrelevant software-only gates.
 
 ## Agent/council views
 Agent view shows runtime identity, session, capabilities, health, active task, lease and recent evidence.

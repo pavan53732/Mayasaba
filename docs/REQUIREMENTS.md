@@ -2,14 +2,14 @@
 
 ## Functional requirements
 
-### FR-001 Project creation
-The user can create a project, select a local Windows path, and start the Mayasaba lifecycle.
+### FR-001 Project/workspace creation
+The user can create a workspace, select a local Windows path, describe a software or local-artifact task, and start the applicable Mayasaba workflow.
 
 ### FR-002 Agent preflight
 Mayasaba detects the four supported CLIs, versions, executable paths, authentication/readiness, working-directory support, transports and capabilities at runtime.
 
 ### FR-003 Independent analysis
-Each available agent can independently analyze the project idea before seeing other agents' proposals.
+Each available agent can independently analyze the user request and scoped workspace facts before seeing other agents' proposals.
 
 ### FR-004 Council deliberation
 Agents can propose, question, critique, rebut, revise, agree, disagree, block, accept, reject and abstain through MCF-v2.
@@ -32,11 +32,11 @@ Concurrent agent work is isolated using Git worktrees/branches where possible, o
 ### FR-010 Local execution
 Mayasaba executes commands/processes locally with policy enforcement, timeouts, cancellation and evidence capture.
 
-### FR-011 Build/run/test
-Mayasaba discovers and executes project-appropriate build, launch, test and E2E/UI workflows using observed repository/toolchain facts.
+### FR-011 Software build/run/test
+For software-engineering tasks, Mayasaba discovers and executes applicable build, launch, test and E2E/UI workflows using observed repository/toolchain facts.
 
 ### FR-012 Evidence
-Material implementation and execution results produce evidence and artifact references.
+Material task changes and execution results produce evidence and artifact references.
 
 ### FR-013 Cross-agent review
 Implementing agents cannot self-certify important changes; independent review creates actionable findings.
@@ -48,10 +48,22 @@ Failures are fingerprinted, diagnosed, assigned for repair and retested with bou
 Mayasaba survives UI/controller restart, individual CLI crashes, adapter restart, duplicate messages, delayed delivery and stale contexts without losing authoritative project state.
 
 ### FR-016 Control
-User can pause, resume, retry, reassign, reopen explicit decisions, approve blocked operations and stop execution.
+User can pause, resume, retry, reassign, reopen explicit decisions, approve permitted in-scope operations that require escalation, and stop execution. Approval cannot authorize external side-effect actions or general control of unrelated applications.
 
 ### FR-017 Certification
-Only the controller can certify the project complete after objective gates pass.
+Only the controller can certify the requested work complete after its applicable objective gates pass.
+
+### FR-018 Local artifact work
+Mayasaba supports user-authorized tasks on files in the selected workspace, including documents, research reports, datasets/data cleanup and code refactors. Support is not restricted by application or file category; actual work and verification depend on available local tools and evidence.
+
+### FR-019 Read-only public research
+For a user-requested research task, Mayasaba may retrieve information from public web sources and save a report with citations/source metadata in the selected local workspace. Retrieval must not submit forms, authenticate, publish, send messages, make purchases, change accounts or otherwise cause external side effects.
+
+### FR-020 External-action boundary
+Mayasaba does not provide general control of unrelated applications or external side-effect actions such as sending email/messages, posting online, submitting forms to public/external services, purchasing, or changing accounts. Agent-native capabilities do not override this product boundary.
+
+### FR-021 Scoped local file access
+File reads and writes are limited to user-selected workspace/task scope. Mayasaba does not scan the entire PC by default; outside-scope access or writes require explicit approval.
 
 ## Non-functional requirements
 
@@ -71,7 +83,7 @@ Communication uses at-least-once delivery, deduplication, bounded retry, dead-le
 Emergency control traffic must not be starved by model streaming or bulk telemetry.
 
 ### NFR-006 Security
-Secrets remain out of normal messages/logs/evidence. Permissions use least privilege and project-root scoping.
+Secrets remain out of normal messages/logs/evidence. Permissions use least privilege and user-selected workspace/task-path scoping. Public-web retrieval, when user-requested for research, is read-only; external side effects and general unrelated-app control are prohibited.
 
 ### NFR-007 Compatibility
 MCF-v2 uses explicit schema/version compatibility. Agent adapters isolate native CLI changes from the canonical protocol.
@@ -80,7 +92,7 @@ MCF-v2 uses explicit schema/version compatibility. Agent adapters isolate native
 Core operation requires no Mayasaba cloud service.
 
 ### NFR-009 Evidence-backed correctness
-Completion claims must map to observable files, commands, outputs, tests and artifacts.
+Completion claims must map to observable artifacts and task-appropriate checks: files/diffs, commands and tests when relevant, citations for research, and integrity/invariant evidence for data transformations.
 
 ## Acceptance principle
 

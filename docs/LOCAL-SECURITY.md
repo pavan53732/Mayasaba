@@ -2,9 +2,9 @@
 
 ## Security boundary
 
-Mayasaba operates entirely on the local Windows machine for orchestration and execution.
+Mayasaba's orchestration, workspace access and execution operate on the local Windows machine. There is no required Mayasaba cloud backend or remote executor.
 
-There is no required Mayasaba cloud backend or remote executor.
+For a user-requested research task, outbound retrieval from publicly accessible web sources may be used in read-only mode, with the report and citations saved locally. This does not authorize login, form submission, messages, posting, purchases, account changes, or control of unrelated applications. Agent-native tools do not widen this boundary.
 
 ## Least privilege
 
@@ -17,7 +17,9 @@ EXECUTE
 INSTALL
 ADMIN_REQUIRED
 
-The selected project root is the default filesystem scope.
+`READ_ONLY` may cover public web retrieval only for a user-requested research task, limited to publicly accessible sources and no external state changes.
+
+The user-selected workspace and task-scoped allowed paths define the default filesystem scope. Mayasaba does not scan the whole PC by default; outside-scope access/writes require explicit approval.
 
 ## Agent identity
 
@@ -49,7 +51,11 @@ Every command must be:
 - timeout protected
 - cleaned up after abnormal termination
 
-ADMIN_REQUIRED or destructive operations require explicit approval unless a project policy explicitly authorizes them.
+ADMIN_REQUIRED operations and writes outside the selected workspace/task scope require explicit approval. Project-local installs may proceed under the authorized project policy; global installs/admin actions require approval. Bulk or destructive data/file changes require a preview and recoverable checkpoint where feasible.
+
+## External-action denial
+
+Do not expose general automation of unrelated applications or actions that change external state. This includes sending email/messages, posting, form submissions, purchases and account changes. Public-web retrieval is limited to user-requested, read-only research on publicly accessible sources. Policy enforcement must apply even when an agent CLI has broader native capabilities.
 
 ## Project isolation
 
@@ -93,6 +99,9 @@ On Mayasaba restart:
 - no stale-context writes
 - no expired-lease writes
 - no unscoped destructive actions
+- no whole-PC scan by default
+- no external side-effect action
+- no general control of unrelated applications
 
 ## Execution mediation invariant
 

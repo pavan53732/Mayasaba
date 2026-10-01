@@ -31,12 +31,14 @@ Environment variables are assembled from an explicit allow/deny policy. Secrets 
 PATH/tool discovery uses actual local runtime discovery.
 
 ## Scope
-Default working directory and filesystem access are the task workspace/project root. Outside-root access requires explicit policy escalation.
+The default working directory and filesystem access are the user-selected workspace and task-scoped allowed paths. Mayasaba does not scan the whole PC by default. Outside-scope access or writes require explicit approval.
+
+For user-requested research only, `READ_ONLY` access may retrieve publicly accessible sources; reports/citations are stored locally. It does not grant login, form submission, messaging, posting, purchase, account-change or unrelated-app automation.
 
 ## Command classes
 READ_ONLY, SAFE_WRITE, PROJECT_WRITE, EXECUTE, INSTALL, ADMIN_REQUIRED.
 
-Classification is recorded with the execution.
+Classification is recorded with the execution and retains the existing MCF-v2 enumeration. Project-local installs follow the authorized task policy; global/admin installs require approval. Agent-native capabilities do not bypass policy.
 
 ## Timeouts
 Each execution has a configured timeout and cancellation grace period. Timeout produces durable evidence and a failure packet; it does not silently count as success.

@@ -2,7 +2,7 @@
 
 ## 1. System role
 
-Mayasaba is the deterministic local control plane for autonomous software engineering using four independent coding CLIs.
+Mayasaba is the deterministic local control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks, using four independent coding CLIs.
 
 It coordinates, but does not replace, the intelligence of:
 
@@ -79,13 +79,13 @@ Independent analysis, debate, questions, barriers, disagreement resolution and d
 Requirement-to-task transformation, DAG scheduling, task ownership and leases.
 
 ### crates/workspace
-Project-root scope, Git worktrees, checkpoints, integration workspace and non-Git isolation.
+User-selected workspace/task-path scope, Git worktrees, checkpoints, integration workspace and non-Git isolation.
 
 ### crates/execution
 PowerShell/CMD/process execution, timeouts, cancellation, child-process cleanup and command evidence.
 
 ### crates/validation
-Build/test/E2E/review gates and deterministic pass/fail rules.
+Task-appropriate deterministic checks: software build/test/E2E/review gates when applicable, plus document, research and data-artifact integrity checks.
 
 ### crates/evidence
 Content-addressed artifacts and evidence bundles.
@@ -138,11 +138,11 @@ A failed gate produces an explicit blocker/error and no unauthorized action.
 
 ## 8. Workspace model
 
-Git worktrees/branches are preferred for concurrent agents.
+A workspace is a user-selected local folder and task-scoped set of allowed paths. It may contain code or other local artifacts such as documents, reports and datasets; Mayasaba does not scan the entire PC by default. Out-of-scope file access or writes require explicit scope approval.
 
-The integration workspace is controller-owned. Agents work in isolated scopes and submit changes/evidence for integration.
+Git worktrees/branches are preferred for concurrent agents on software repositories. The integration workspace is controller-owned. Agents work in isolated scopes and submit changes/evidence for integration.
 
-Non-Git projects use scoped filesystem isolation and checkpoints.
+Non-Git and file-focused workspaces use scoped filesystem isolation and checkpoints.
 
 ## 9. Recovery
 
@@ -162,7 +162,9 @@ Recovery uses durable events, outbox/inbox reconciliation, process verification,
 
 ## 10. Completion
 
-An agent can never certify the project. The controller may enter COMPLETE only after evidence-backed validation and packaging gates pass.
+An agent can never certify the work. The controller may enter COMPLETE only after the task's applicable acceptance and validation gates pass with evidence. Build, runtime, E2E and packaging gates apply to software work when required; they are not universal gates for document, research or data tasks.
+
+Mayasaba supports user-requested read-only retrieval from public web sources for local research reports. It does not provide email, posting, form-submission, purchase, account-change or general desktop-control actions.
 
 
 The detailed orchestration contract is defined in `ORCHESTRATOR-DESIGN.md` and authoritative internal transitions in `DOMAIN-STATE-MACHINES.md`.

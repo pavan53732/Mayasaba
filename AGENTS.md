@@ -19,7 +19,7 @@ These instructions apply to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cl
 
 Repository: pavan53732/Mayasaba
 
-Mayasaba is a Windows-only, local-first autonomous software-engineering control plane.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks.
 
 Initial supported coding agents:
 1. Claude Code CLI
@@ -37,7 +37,9 @@ AI agents working in this repository MUST preserve:
 - Local execution on the user's Windows machine.
 - No cloud VM or remote development executor.
 - No mandatory Mayasaba cloud service/account.
-- User-selected local project paths.
+- User-authorized work on files in a selected local workspace, including software engineering, documents, research reports and data cleanup.
+- Workspace/task-path scope is authoritative; no whole-PC scan by default and no writes outside the authorized scope without approval.
+- Public web retrieval is allowed only as read-only access for user-requested research; external side effects and general control of unrelated applications are out of scope.
 - MSI-only user-facing distribution.
 - Tauri 2 + React 19 + TypeScript + Vite frontend baseline.
 - Rust + Tokio controller/core baseline.
@@ -92,7 +94,7 @@ The domain-crate ownership is:
 - `crates/tasks` — task DAG and leases
 - `crates/workspace` — workspaces/checkpoints/integration support
 - `crates/execution` — local process execution
-- `crates/validation` — validation/build/test/review gates
+- `crates/validation` — task-appropriate validation/review gates, including software build/test where applicable
 - `crates/evidence` — evidence/artifacts
 - `crates/policy` — permissions and security policy
 - `crates/storage` — SQLite persistence
@@ -255,7 +257,9 @@ A successful compile is not equivalent to a completed feature.
 
 For material changes, validate the applicable chain:
 
-requirement -> implementation -> build -> test -> evidence -> review -> validation.
+requirement -> scoped artifact/code change or research -> task-appropriate checks -> evidence -> review -> validation.
+
+For software-engineering changes, include applicable build, test, runtime and E2E gates. Document, research and data tasks use their relevant checks; do not impose irrelevant software-only gates.
 
 For orchestration changes also test:
 - duplicate events

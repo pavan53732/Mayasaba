@@ -2,7 +2,7 @@
 
 ## 1. Validation principle
 
-Mayasaba treats implementation claims as untrusted until observable evidence and deterministic checks support them.
+Mayasaba treats work-completion claims as untrusted until observable local-artifact evidence and task-appropriate deterministic checks support them.
 
 ## 2. Validation lifecycle
 
@@ -49,7 +49,7 @@ Diagnosis records candidate root causes, selected cause, confidence when useful,
 ## 6. Repair loop
 
 ~~~text
-FAILURE → DIAGNOSIS → REPAIR_REQUEST → REPAIR_ACTIVE → REBUILD/RETEST → REGRESSION → PASS or another bounded repair cycle
+FAILURE → DIAGNOSIS → REPAIR_REQUEST → REPAIR_ACTIVE → RUN_APPLICABLE_CHECKS (rebuild/retest for software where relevant) → REGRESSION_WHERE_REQUIRED → PASS or another bounded repair cycle
 ~~~
 
 ## 7. Anti-loop rules
@@ -75,19 +75,20 @@ High-risk changes may require multiple independent reviews.
 
 Certification is emitted only by the Mayasaba controller.
 
-Required evidence includes:
+Required evidence is derived from the task's acceptance criteria and includes applicable items:
 
-- requirements coverage
-- architecture/contract consistency
-- build result
-- runtime/critical workflow result
-- test result
+- requirements and acceptance-criteria coverage
+- architecture/contract consistency where applicable
+- build, runtime and critical-workflow results for software tasks where required
+- tests or other task-appropriate deterministic integrity checks
 - E2E/UI result where applicable
-- review result
-- resolved high-severity issues
-- regression result
-- package/artifact
-- evidence bundle
+- source citations/metadata for research reports
+- format/schema checks, diff review, record counts, invariants and recoverability evidence for document/data tasks where applicable
+- review result and resolved high-severity issues
+- regression result where required
+- requested package/artifact and evidence bundle
+
+Software build, runtime and packaging evidence is not a universal gate for non-software local artifact work.
 
 ## 10. Completion
 

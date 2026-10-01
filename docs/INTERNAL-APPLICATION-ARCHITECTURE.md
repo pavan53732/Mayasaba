@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document defines the internal application architecture required to implement Mayasaba as a complete Windows desktop application.
+This document defines the internal application architecture required to implement Mayasaba as a complete Windows desktop application for software engineering and other user-authorized local-file tasks.
 
 It extends the Master Specification and MCF-v2 documents. It does not replace them.
 
@@ -24,6 +24,8 @@ MCF-v2 remains the only canonical communication contract between Mayasaba and ag
 12. The integration workspace is controller-controlled.
 13. Completion is evidence-backed and controller-certified.
 14. No subsystem may create a competing authority for another subsystem.
+15. User-selected local artifacts may be worked on within task scope; public-web retrieval is read-only and limited to user-requested research.
+16. External side-effect actions and general control of unrelated applications are outside product scope.
 
 ## 3. Internal system topology
 
@@ -99,7 +101,7 @@ Rules:
 Core aggregates:
 
 ### Project
-Owns project identity, selected local path, lifecycle status, current epoch and high-level status.
+Owns workspace identity, user-selected local path, task context, lifecycle status, current epoch and high-level status.
 
 ### AgentSession
 Owns runtime identity, adapter state, capabilities, process state and session lifecycle.
@@ -120,10 +122,10 @@ Owns structured architecture artifacts and version relationships.
 Owns immutable context packs, epoch, digest and affected scope.
 
 ### Task
-Owns objective, dependencies, ownership, status, lease and validation criteria.
+Owns objective, dependencies, ownership, status, lease, allowed paths and task-appropriate validation criteria. Objectives may target source code or other local artifacts such as documents, reports and datasets.
 
 ### Workspace
-Owns project/worktree identity and isolation state.
+Owns the user-selected local root, allowed paths, project/worktree identity and isolation state. Whole-PC scanning is not the default.
 
 ### Execution
 Owns local command/process lifecycle and evidence references.
@@ -654,32 +656,31 @@ Rust validates every command before performing privileged work.
 
 The UI cannot directly execute PowerShell, spawn arbitrary processes, write arbitrary files, or access unrestricted filesystem paths.
 
-All such actions pass through policy + execution/workspace services.
+All such actions pass through policy + execution/workspace services. File reads/writes are limited to the user-selected workspace and task allowed paths; out-of-scope access requires explicit approval. Public-web retrieval is read-only and limited to user-requested research. No service or adapter may expose messaging, posting to external services, form submission to public/external services, purchasing, account changes, or general control of unrelated applications.
 
-## 24. Build/run/test lifecycle inside Mayasaba
+## 24. Software build/run/test lifecycle inside Mayasaba
 
 The system separates:
 
 DISCOVERY → BUILD_PLAN → BUILD → LAUNCH → RUNTIME_VERIFY → TEST_PLAN → TEST → E2E → REVIEW → CERTIFICATION
 
-A successful process launch does not equal runtime correctness.
+A successful process launch does not equal runtime correctness. This lifecycle is for software tasks; non-software artifact tasks use only applicable acceptance and integrity checks.
 
 ## 25. Final certification path
 
 ~~~text
-Requirements Coverage
-+ Decision/Contract Consistency
+Acceptance-Criteria Coverage
++ Decision/Contract Consistency where applicable
 + Workspace Integrity
-+ Build PASS
-+ Runtime PASS
-+ Test PASS
-+ E2E PASS where applicable
++ Task-Appropriate Validation PASS
 + Review PASS
-+ Repair/Regression PASS
++ Repair/Regression PASS where applicable
 + Evidence Complete
 → MAYASABA CERTIFICATION
-→ PACKAGE
+→ PACKAGE where required
 ~~~
+
+For software-engineering tasks, task-appropriate validation includes the applicable build, runtime, test, E2E and packaging gates defined by the software workflow. For document, research and data tasks, it includes relevant checks such as citation/format validation, diff review, record counts, invariants and recoverability. Missing required tools or evidence must yield BLOCKED/UNVERIFIED, not a passing certification.
 
 ## 26. Implementation guardrails
 

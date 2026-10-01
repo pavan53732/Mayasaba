@@ -6,6 +6,8 @@ This document defines internal state machines and transition ownership. It is se
 
 Each state machine has one authoritative owner.
 
+The project-phase sequence below preserves the full software-engineering lifecycle. Other local artifact tasks use the same generic task/lease, validation and completion states, but enter only applicable project phases; build, E2E and software packaging are not universal gates.
+
 ## 1. Project lifecycle
 
 Owner: LifecycleService / Orchestrator.
@@ -20,6 +22,8 @@ Rules:
 - COMPLETE is controller-owned.
 - an agent cannot advance lifecycle.
 - a failed mandatory gate prevents advancement.
+- BUILD, TEST, E2E and PACKAGE apply when required by the software task's acceptance criteria; they are not imposed on document, research or data tasks when irrelevant.
+- task validation predicates are declared per task and are enforced by ValidationService.
 - material reopening moves to the applicable prior phase and increments epoch when project truth changes.
 
 ## 2. Agent session

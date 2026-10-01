@@ -58,6 +58,16 @@ MCF-v2 is defined by versioned JSON Schema contracts, typed registries, transiti
 ### D-015 — Memory/design collision prevention
 Future design changes must explicitly declare ADDITIVE, REFINEMENT, REPLACEMENT or DEPRECATION and identify ownership, compatibility and migration impact.
 
+### D-016 — Local artifact work with a strict external-action boundary
+
+- **Affected subsystems:** product scope, workspace/task execution, policy, agent integration, Control Room and validation.
+- **Previous behavior:** canonical product descriptions centered on software engineering, and several completion surfaces presented software gates as the default.
+- **New behavior:** user-authorized work may target local files across artifact types, including documents, research reports and data cleanup. User-requested public-web retrieval is read-only and results are saved locally. External side-effect actions and general control of unrelated applications remain out of scope.
+- **Compatibility:** additive. The full software-engineering lifecycle remains first-class; task-irrelevant build/E2E/package gates do not apply to other artifact tasks. MCF-v2 envelope and schemas are unchanged.
+- **Migration/reconciliation:** documentation-only update; no code, schema or database migration.
+- **Tests required before implementation:** workspace-scope enforcement, read-only public research, task-appropriate artifact validation and denial of native-agent external side effects.
+- **Classification:** ADDITIVE.
+
 ## Current canonical hierarchy
 
 Master Specification

@@ -1,6 +1,6 @@
 # Mayasaba
 
-Mayasaba is a Windows-only, local-first autonomous software engineering platform that coordinates Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline through a deterministic council, communication fabric, task engine, execution kernel, validation, repair, and evidence-backed delivery pipeline.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. Software engineering remains first-class, alongside document work, research reports, data cleanup, and code refactors. Mayasaba coordinates Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline through a deterministic council, communication fabric, task engine, execution kernel, validation, repair, and evidence-backed delivery pipeline.
 
 ## Canonical repository
 
@@ -12,9 +12,9 @@ All Mayasaba source code, architecture, specifications, protocol schemas, tests,
 
 ## What Mayasaba is
 
-Mayasaba is a **control plane for four independent coding agents**.
+Mayasaba is a **control plane for four independent CLI agents**. It can coordinate user-authorized tasks on local files across supported task types; the available agent capabilities and evidence determine what can be completed and verified.
 
-It is not a fifth AI brain. Each supported CLI keeps its own model/provider, context, reasoning, tools, authentication and runtime. Mayasaba supplies the shared deterministic project state, communication, orchestration, workspace, execution, validation and evidence systems.
+It is not a fifth AI brain. Each supported CLI keeps its own model/provider, context, reasoning, tools, authentication and runtime. Mayasaba supplies the shared deterministic workspace state, communication, orchestration, execution, validation and evidence systems.
 
 ## Four initial agents
 
@@ -31,15 +31,19 @@ The architecture is adapter-based for future extension, but no additional agent 
 - Local-only execution on the user's Windows PC.
 - No cloud VM, remote executor or hosted development workspace.
 - No required Mayasaba login/account.
-- User-selected local project path is authoritative.
+- The user-selected local workspace and task-scoped allowed paths are authoritative; Mayasaba does not scan the whole PC by default.
+- User-requested research may retrieve public web sources in read-only mode; reports and citations are saved locally.
+- External side-effect actions (email/messages, posts, public/external form submissions, purchases, account changes) and general control of unrelated applications are outside product scope.
 - Git worktrees/branches are preferred for concurrent agent isolation.
 - SQLite is the durable Mayasaba source of truth.
 - Tauri 2 + React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui.
 - Rust + Tokio for the controller/core.
 - User-facing distribution is MSI only.
-- Full working software delivery is mandatory; planning-only completion is not accepted.
+- Completion must deliver the requested local artifacts with evidence; software tasks require a working, validated software deliverable rather than planning alone.
 
 ## Architecture at a glance
+
+The execution/validation chain below depicts the software-engineering path; other local artifact tasks use the applicable checks described in the canonical specification.
 
 ~~~text
 USER
@@ -65,7 +69,9 @@ MCF-v2 COMMUNICATION FABRIC
                      PACKAGE
 ~~~
 
-## Canonical lifecycle
+## Canonical software-engineering lifecycle
+
+The lifecycle below is the full software-engineering workflow. Other local artifact tasks use only applicable planning, editing, review, validation and evidence stages; they do not inherit irrelevant software build/package gates.
 
 ~~~text
 PROJECT_CREATED
@@ -146,7 +152,7 @@ It provides:
 2. HARD_LOCK decisions
 3. Versioned architecture/contracts
 4. Verified repository/workspace facts
-5. Objective build/test/E2E evidence
+5. Objective task-appropriate evidence (build/test/E2E for software where applicable; citations and integrity checks for other artifact tasks)
 6. Persisted Mayasaba orchestration state
 7. Agent proposals/reports
 
