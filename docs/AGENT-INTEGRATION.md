@@ -44,6 +44,17 @@ An adapter:
 
 An adapter does not own project state, task truth or certification.
 
+## Policy and project-context bootstrap
+
+The controller MUST deliver the same applicable Mayasaba policy and task context to every supported agent—Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline—before issuing a task lease. This is a controller/adapter contract, not a feature that may depend on a CLI's native instruction-file discovery.
+
+- Assemble the bootstrap from the canonical Mayasaba instructions and the task's current ContextPack; use each CLI's supported structured input or instruction mechanism, but do not assume it discovers `AGENTS.md`, `CLAUDE.md` or any other repository file.
+- Apply the same policy meaning and applicable source references across all four adapters. Native agent-specific instructions may supplement this bootstrap but MUST NOT replace or weaken it.
+- A session MUST NOT reach `READY` or receive a task lease until delivery of the required bootstrap is confirmed. Preserve its source/version references with the session/task context so resume and ContextPack regeneration do not silently omit it.
+- For Mayasaba architecture/co-design tasks, include the co-design rule in root `AGENTS.md` §14 and the relevant accepted decisions, open proposals and canonical owner-document/schema references in the ContextPack, following `MEMORY-CONTEXT.md`. This requirement applies equally to all adapters.
+
+`MEMORY-CONTEXT.md` defines the ContextPack contents and existing-field mapping. These requirements do not authorize changes to the MCF-v2 envelope or payload schema.
+
 ## Product-scope boundary
 
 Agents work on user-authorized files within the leased workspace, which may include source code, documents, research reports and datasets. Public-web access is permitted only as read-only retrieval for a user-requested research task; any output is saved locally with citations/source metadata.

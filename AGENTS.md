@@ -226,15 +226,30 @@ Agent work is accepted only after appropriate integration, tests, review, and va
 
 ## 14. Documentation behavior
 
-Documentation is part of the product contract.
+Documentation is part of the product contract and must not become a competing source of truth.
 
-When discovering a design gap:
-1. identify the canonical owner
-2. update or create the correct canonical document
-3. link it from docs/INDEX.md
-4. update affected cross-references
-5. classify the change
-6. add implementation/test implications
+### Architecture co-design and ambiguity resolution
+
+When assigned Mayasaba architecture work, every agent MUST:
+
+1. inspect the current canonical owner documents, machine-readable schemas, HARD_LOCKs/decision register and relevant implementation facts;
+2. state the current contract, the concrete ambiguity or gap, a recommended normative resolution, and affected document/schema/SQLite/migration/test implications;
+3. actively recommend concrete semantics, distinguish accepted decisions from open proposals, and neither silently promote a discussion draft to contract nor merely repeat a conflict;
+4. preserve accepted user decisions, product boundaries and the full MCF-v2 envelope/payload contracts unless an explicit governed change is authorized;
+5. for discussion-only work, return a dependency-ordered change plan without modifying files; when asked to implement an agreed design, update the canonical owners in dependency order and validate cross-document consistency.
+
+Do not repeatedly request approval for matters already settled by a current HARD_LOCK or explicit user decision. Escalate genuine unresolved product choices.
+
+### Applying canonical documentation changes
+
+When a design is agreed and a change is requested:
+
+1. identify the canonical owner;
+2. update that document or contract;
+3. update `docs/INDEX.md` when a document is added or its role changes;
+4. update affected cross-references;
+5. classify the change;
+6. record implementation, migration and test implications.
 
 Do not create a new document merely to duplicate an existing authority.
 

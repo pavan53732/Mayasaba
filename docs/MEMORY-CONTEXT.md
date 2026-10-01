@@ -86,6 +86,18 @@ A task-specific ContextPack can include:
 
 Only relevant project context should be provided.
 
+### Architecture-task ContextPacks
+
+For any task that proposes or changes Mayasaba architecture, contracts, schemas or canonical architecture documentation, the ContextPack MUST carry:
+
+- the applicable architecture co-design instruction from root `AGENTS.md` §14 in `policy_constraints` (include the operative instruction, not just a path the agent may be unable to discover);
+- relevant accepted decisions and HARD_LOCKs, plus any unresolved questions or proposals clearly labeled as such, in `decisions`;
+- canonical owner-document and schema references in `architecture_refs`, and relevant interface/data-contract references in `contracts`.
+
+The instruction requires agents to establish the current contract, identify the concrete gap, recommend a normative resolution and its impacts, distinguish accepted decisions from proposals, and honor the discussion-versus-implementation boundary. Keep the ContextPack scoped to the task and preserve source references so agents can trace each rule and decision to its owner.
+
+Use only existing ContextPack fields. This requirement does not change the MCF-v2 envelope or payload schema; in particular, it adds no ContextPack fields.
+
 ## Shared truth is not shared reasoning
 
 Two agents may disagree even when they received the same ContextPack. Mayasaba preserves both positions and resolves the issue through evidence, council deliberation or user input.
