@@ -23,8 +23,20 @@ agents:
       KILO_DISABLE_AUTOUPDATE: "1"
       KILO_AUTO_SHARE: "0"
       KILO_DISABLE_SHARE: "1"
+      KILO_DISABLE_CODEBASE_INDEXING: "1"
     required_config:
       share: disabled
+    config_injection:
+      channel: KILO_CONFIG_CONTENT
+      origin: local
+      default_deny: true
+      expected_enabled_tools:
+        - read
+        - glob
+        - grep
+        - edit
+        - write
+        - semantic_search
   OPEN_CODE:
     transport: OPEN_CODE_JSON
     execution_mediation_required: true
@@ -39,6 +51,29 @@ agents:
       OPENCODE_DISABLE_DEFAULT_PLUGINS: "1"
       OPENCODE_DISABLE_AUTOUPDATE: "1"
       OPENCODE_AUTO_SHARE: "0"
+      OPENCODE_DISABLE_SHARE: "1"
+    required_environment_by_line:
+      "1.x": all five variables exist and are required
+      "2.x": only OPENCODE_DISABLE_AUTOUPDATE exists; the other four are absent from the 2.0.22 binary
     required_config:
       share: disabled
+    config_injection:
+      channel: OPENCODE_CONFIG_CONTENT
+      origin: local
+      default_deny: true
+      expected_enabled_tools:
+        - read
+        - glob
+        - grep
+        - edit
+        - write
+    required_flags_by_line:
+      "1.x": none
+      "2.x": "--standalone (private per-invocation server; required, not forbidden)"
+    forbidden_commands_by_line:
+      "1.x": "serve, web, attach, github, pr, import"
+      "2.x": "serve, service, pair, api, mcp, plugin, upgrade, uninstall, models, reload, mini, stats"
+    vector_admissibility:
+      "1.x": all vectors valid as written (--dir, acp --cwd, --pure)
+      "2.x": "all vectors are 1.x-shaped and invalid; --dir, acp --cwd and --pure are all rejected"
 rule: runtime probe results override documentation claims

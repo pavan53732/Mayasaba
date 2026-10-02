@@ -68,14 +68,119 @@ for(const name of canonicalAgents){
   if(!transportEnum.includes(t)) fail(`Contract transport ${t} (${name}) is not in probe-result transport enum`);
 }
 // The conformance YAML declares itself subordinate to the transport contract. No YAML parser is
-// available (this repo has zero dependencies), so guard the one dimension that actually drifts:
-// the agent set. Every canonical agent must appear as a top-level key, and no other agent may.
-const capYaml=fs.readFileSync(path.join(root,"schemas/mcf-v2/conformance/adapter-capabilities.yaml"),"utf8");
+// available (this repo has zero dependencies), so these guards are targeted line-based checks.
+// Agent set: every canonical agent must appear as a top-level key, and no other agent may.
+const capYamlPath="schemas/mcf-v2/conformance/adapter-capabilities.yaml";
+const capYaml=fs.readFileSync(path.join(root,capYamlPath),"utf8");
 for(const name of canonicalAgents){
   if(!new RegExp(`^  ${name}:`,"m").test(capYaml)) fail(`Conformance YAML missing agent block: ${name}`);
 }
 const capAgentBlocks=[...capYaml.matchAll(/^  ([A-Z][A-Z0-9_]*):/gm)].map(m=>m[1]);
 for(const name of capAgentBlocks) if(!canonicalAgents.includes(name)) fail(`Conformance YAML declares non-canonical agent: ${name}`);
+
+// Values, not just keys. The guard above proved insufficient: mutating a YAML VALUE (e.g. a
+// transport id, acp_supported, or a required_environment entry) passed silently, and two of those
+// mutations would re-open the session-upload hole. Extract each agent block by indentation and
+// assert its scalar values agree with the authoritative transport contract.
+const capBlock=(agent)=>{
+  const lines=capYaml.split(/\r?\n/);
+  const start=lines.findIndex(l=>l===`  ${agent}:`);
+  if(start<0) return null;
+  const out=[];
+  for(let i=start+1;i<lines.length;i++){
+    const l=lines[i];
+    if(/^  [A-Z][A-Z0-9_]*:$/.test(l)) break;      // next agent block
+    if(/^\S/.test(l)) break;                        // left the agents mapping entirely
+    out.push(l);
+  }
+  return out.join("\n");
+};
+for(const name of canonicalAgents){
+  const block=capBlock(name);
+  const def=contract.agents[name];
+  if(!block) fail(`Conformance YAML agent block unreadable: ${name}`);
+  const scalar=(key)=>{
+    const m=block.match(new RegExp(`^    ${key}:[ ]*(.*)$`,"m"));
+    if(!m) return null;
+    return m[1].trim().replace(/^["']|["']$/g,"");
+  };
+  const wantTransport=def.transport;
+  const gotTransport=scalar("transport");
+  if(gotTransport!==wantTransport) fail(`Conformance YAML ${name}.transport "${gotTransport}" != contract "${wantTransport}"`);
+  // The contract states ACP support two ways: an explicit acp_supported boolean (HERMES_AGENT) or
+  // the presence of an `acp` launch vector (KILO_CODE, OPEN_CODE). Accept either, and require the
+  // YAML boolean to agree with whichever the contract uses.
+  const wantAcpBool=def.acp_supported!==undefined ? def.acp_supported===true : Array.isArray(def.acp)&&def.acp.length>0;
+  const gotAcp=scalar("acp_supported");
+  if(gotAcp!==null){
+    if(gotAcp!=="true" && gotAcp!=="false") fail(`Conformance YAML ${name}.acp_supported must be a boolean, got "${gotAcp}"`);
+    if(gotAcp!==String(wantAcpBool)) fail(`Conformance YAML ${name}.acp_supported "${gotAcp}" != contract "${wantAcpBool}" (from ${def.acp_supported!==undefined?"acp_supported":"acp vector"})`);
+  }
+  // required_environment: every contract var must be present with the same value, and no extras.
+  const envBlock=(block.match(/^    required_environment:\n((?:      .*\n?)*)/m)||[])[1];
+  if(envBlock!==undefined){
+    const got={};
+    for(const m of envBlock.matchAll(/^      ([A-Z][A-Z0-9_]*):[ ]*(.*)$/gm)) got[m[1]]=m[2].trim().replace(/^["']|["']$/g,"");
+    const want=def.required_environment||{};
+    for(const [k,v] of Object.entries(want)){
+      if(!(k in got)) fail(`Conformance YAML ${name}.required_environment missing ${k}`);
+      else if(got[k]!==String(v)) fail(`Conformance YAML ${name}.required_environment ${k}="${got[k]}" != contract "${v}"`);
+    }
+    for(const k of Object.keys(got)) if(!(k in want)) fail(`Conformance YAML ${name}.required_environment has extra ${k} not in contract`);
+  }
+  // required_config: same shape/value as the contract's required_config.
+  const cfgBlock=(block.match(/^    required_config:\n((?:      .*\n?)*)/m)||[])[1];
+  if(cfgBlock!==undefined){
+    const got={};
+    for(const m of cfgBlock.matchAll(/^      ([A-Za-z0-9_.-]+):[ ]*(.*)$/gm)) got[m[1]]=m[2].trim().replace(/^["']|["']$/g,"");
+    const want=def.required_config||{};
+    for(const [k,v] of Object.entries(want)){
+      if(!(k in got)) fail(`Conformance YAML ${name}.required_config missing ${k}`);
+      else if(got[k]!==String(v)) fail(`Conformance YAML ${name}.required_config ${k}="${got[k]}" != contract "${v}"`);
+    }
+  }
+  // The share setting is the session-upload kill switch; a YAML value of "auto" or "manual" here
+  // while the contract says "disabled" is exactly the drift that would re-open the hole.
+  if(def.required_config?.share!==undefined){
+    const m=block.match(/^      share:[ ]*(.*)$/m);
+    if(m){
+      const v=m[1].trim().replace(/^["']|["']$/g,"");
+      if(v!==String(def.required_config.share)) fail(`Conformance YAML ${name}.share "${v}" != contract "${def.required_config.share}"`);
+    }
+  }
+  // The config-injection block is the permission kill switch. If the contract requires an
+  // injection, the YAML must record the same channel and must not drop the default-deny base.
+  if(def.required_config_injection!==undefined){
+    const want=def.required_config_injection;
+    // The injection's own keys sit at 6-space indent under config_injection:, one level deeper
+    // than the agent-level scalars, so they need their own reader.
+    // block has no trailing newline after its final line; add one so the lazy line repeat
+    // can consume that last line too.
+    const injBlock=(block+"\n").match(/^    config_injection:\n((?:(?:      .*)?\n)*)/m)?.[1];
+    const injScalar=(key)=>{
+      if(injBlock===undefined) return null;
+      const m=injBlock.match(new RegExp(`^      ${key}:[ ]*(.*)$`,"m"));
+      return m?m[1].trim().replace(/^["']|["']$/g,""):null;
+    };
+    const gotChannel=injScalar("channel");
+    if(gotChannel===null) fail(`Conformance YAML ${name} omits config_injection.channel though the contract requires an injection`);
+    else if(gotChannel!==want.channel) fail(`Conformance YAML ${name}.config_injection.channel "${gotChannel}" != contract "${want.channel}"`);
+    const gotOrigin=injScalar("origin");
+    if(gotOrigin===null) fail(`Conformance YAML ${name} omits config_injection.origin though the contract requires an injection`);
+    else if(gotOrigin!==want.origin) fail(`Conformance YAML ${name}.config_injection.origin "${gotOrigin}" != contract "${want.origin}"`);
+    const gotDefaultDeny=injScalar("default_deny");
+    if(gotDefaultDeny===null) fail(`Conformance YAML ${name} omits config_injection.default_deny though the contract requires an injection`);
+    else if(gotDefaultDeny!=="true") fail(`Conformance YAML ${name}.config_injection.default_deny must be true, got "${gotDefaultDeny}"`);
+    // The wildcard base rule is what closes tools with no named permission key; it must exist.
+    if(want.permission?.["*"]!==undefined && want.permission["*"]!=="deny") fail(`Contract ${name} config injection must default-deny, got "*": "${want.permission["*"]}"`);
+    if(injBlock!==undefined){
+      const listed=[...injBlock.matchAll(/^        - (.+)$/gm)].map(m=>m[1].trim());
+      const wantTools=want.expected_enabled_tools||[];
+      for(const t of wantTools) if(!listed.includes(t)) fail(`Conformance YAML ${name}.config_injection.expected_enabled_tools missing ${t}`);
+      for(const t of listed) if(!wantTools.includes(t)) fail(`Conformance YAML ${name}.config_injection.expected_enabled_tools has extra ${t} not in contract`);
+    }
+  }
+}
 
 // native_kind enum and the native->MCF mapping keys must stay in lockstep.
 const nativeKinds=read("schemas/agent-adapter-v1/native-event.schema.json").properties.native_kind.enum;
@@ -84,6 +189,127 @@ for(const k of nativeKinds) if(!(k in nativeMap)) fail(`native_kind ${k} has no 
 for(const k of Object.keys(nativeMap)) if(!nativeKinds.includes(k)) fail(`native-to-MCF mapping ${k} is not a native_kind`);
 for(const [k,v] of Object.entries(nativeMap)){
   if(v!==null && !messages.includes(v)) fail(`native-to-MCF mapping ${k} -> ${v} is not an MCF message type`);
+}
+
+// The native-event transport field must not be a free string: a normalized event could otherwise
+// carry a transport that no probe can produce, and the agent_type/transport pairing would be
+// unenforceable. Constrain it to the same enum probe-result uses, and require every transport the
+// contract names to be in it.
+const nativeTransport=read("schemas/agent-adapter-v1/native-event.schema.json").properties.transport;
+const transportSet=nativeTransport.enum ?? (nativeTransport.const!==undefined?[nativeTransport.const]:null);
+if(transportSet===null) fail("native-event.schema.json transport is unconstrained (no enum/const); a normalized event could carry an unknown transport");
+for(const name of canonicalAgents){
+  const t=contract.agents[name].transport;
+  if(!transportSet.includes(t)) fail(`Contract transport ${t} (${name}) is not in native-event transport ${JSON.stringify(transportSet)}`);
+}
+
+// Structural validation of the transport contract. The contract is the machine-readable owner of
+// DEC-024-critical adapter controls, but until now verify.mjs read only its `agents` keys and each
+// agent's `transport` — so a required control field could be deleted and verification still passed.
+// REQUIRED_CONTROLS pins, per agent, the fields whose absence would silently drop a gate. This is a
+// per-agent map rather than a generic list because the controls differ: only OPEN_CODE is
+// version-gated (its version_gate carries the fail-closed 2.x PWD-hazard branch), and only the
+// fork-lineage agents carry the env hardening. Deleting a whole control object must fail here, not
+// pass, so the map names the control even when nothing else in the file would reveal its absence.
+const FORK_AGENTS=["KILO_CODE","OPEN_CODE"];
+const REQUIRED_CONTROLS={
+  HERMES_AGENT:["executable","launch","resume","version","transport","permission_enforcement","output_contract"],
+  KILO_CODE:["executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection"],
+  OPEN_CODE:["executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection","version_gate","required_environment_by_line","required_flags_by_line","determinism_flags_by_line","forbidden_commands_by_line","scope_hazards_2x","remote_forbidden_subcommands"],
+};
+for(const [name,def] of Object.entries(contract.agents)){
+  const required=REQUIRED_CONTROLS[name];
+  if(!required) fail(`Contract agent ${name} has no REQUIRED_CONTROLS entry; add one when the agent set changes`);
+  for(const f of required){
+    if(def[f]===undefined || (Array.isArray(def[f])&&def[f].length===0) || def[f]==="") fail(`Contract ${name} is missing required control: ${f}`);
+  }
+  // Any agent whose launch vector carries a flag that auto-approves must state how that is mediated.
+  if(JSON.stringify(def.launch||[]).includes("--auto") && !def.permission_enforcement) fail(`Contract ${name} passes --auto but declares no permission_enforcement`);
+  // The fork-lineage agents must carry the env hardening that closes the .claude leak and share paths.
+  if(FORK_AGENTS.includes(name) && !def.required_environment) fail(`Contract ${name} is missing required_environment`);
+  // A version-gated agent must carry a version_gate whose admitted_lines is non-empty. This is a
+  // REQUIRED field for agents that declare admitted_version_lines or a versioned workspace_flag —
+  // deleting the whole object (the fail-closed 2.x PWD-hazard control) must fail, not pass.
+  const needsGate=def.admitted_version_lines!==undefined || def.version_gate!==undefined;
+  if(needsGate){
+    if(!def.version_gate) fail(`Contract ${name} declares versioned admission but has no version_gate object`);
+    if(!Array.isArray(def.version_gate.admitted_lines) || def.version_gate.admitted_lines.length===0) fail(`Contract ${name}.version_gate has no admitted_lines`);
+  }
+  // Agents with no version gate must not silently gain one; and every agent must declare the
+  // fail-closed posture when its version cannot be classified.
+  if(def.version_gate && !def.version_gate.rationale) fail(`Contract ${name}.version_gate has no rationale`);
+  // ACP support must agree with the launch vectors: an `acp` vector means supported; an explicit
+  // acp_supported must not contradict it.
+  const hasAcpVector=Array.isArray(def.acp)&&def.acp.length>0;
+  if(def.acp_supported!==undefined && def.acp_supported!==hasAcpVector) fail(`Contract ${name}.acp_supported=${def.acp_supported} contradicts acp vector presence (${hasAcpVector})`);
+  // A forbidden flag or command must never appear in the agent's own launch/resume/acp vectors —
+  // the contract must not forbid a token it simultaneously passes.
+  const vectors=[...(def.launch||[]),...(def.resume||[]),...(def.acp||[])].map(String);
+  for(const tok of [...(def.remote_forbidden_flags||[]),...(def.remote_forbidden_commands||[])]){
+    if(vectors.includes(tok)) fail(`Contract ${name} forbids "${tok}" but passes it in its own launch/resume/acp vectors`);
+  }
+  // A forbidden SUBcommand must be disjoint from the agent's vectors too, or the entry forbids a
+  // path its own admitted vector walks. Checked on the first token of each subcommand ("auth export"
+  // -> "auth") against the vector's first token, since a vector begins with its subcommand.
+  if(vectors.length){
+    const head=vectors[0];
+    for(const sub of def.remote_forbidden_subcommands||[]){
+      const [parent]=String(sub).split(/\s+/);
+      if(parent===head) fail(`Contract ${name} forbids subcommand "${sub}" but its own launch vector begins with "${head}"`);
+    }
+  }
+  // A permission_enforcement that names a forbidden flag in prose (e.g. OPEN_CODE's "do not pass
+  // --auto") must also be absent from that agent's vectors.
+  const m=String(def.permission_enforcement||"").match(/do not pass\s+(--[A-Za-z0-9-]+)/i);
+  if(m && vectors.includes(m[1])) fail(`Contract ${name}.permission_enforcement says "do not pass ${m[1]}" but the vector passes it`);
+  // --- Version-line scoping (OPEN_CODE). A vector, environment variable or determinism flag that is
+  // valid only on one line must be marked as such, and a line that a control does not cover must
+  // record its own mitigation. Without this, a 1.x-only vector silently reads as universal and an
+  // adapter that keys on transport name rather than probed line fails at launch on the other line.
+  if(def.version_gate){
+    const lines=def.version_gate.admitted_lines||[];
+    const unverified=def.version_gate.unverified_lines||[];
+    // Every non-admitted line named in the gate must have an explicit admissibility statement, so a
+    // line cannot be gated for the workspace flag alone while its launch/acp vectors go unscoped.
+    if(unverified.length>0 && !def.version_gate.vector_admissibility_by_line) fail(`Contract ${name}.version_gate declares unverified lines ${JSON.stringify(unverified)} but no vector_admissibility_by_line; a 1.x-shaped launch/acp/determinism vector would read as universal`);
+    if(def.version_gate.vector_admissibility_by_line){
+      for(const line of [...lines,...unverified]){
+        if(!def.version_gate.vector_admissibility_by_line[line]) fail(`Contract ${name}.version_gate.vector_admissibility_by_line has no entry for line "${line}"`);
+      }
+    }
+    // A control that is line-scoped must be scoped for BOTH lines, so neither is left implicitly open.
+    for(const field of ["required_environment_by_line","required_flags_by_line","determinism_flags_by_line","forbidden_commands_by_line"]){
+      const scoped=def[field];
+      if(!scoped) continue;
+      for(const line of [...lines,...unverified]){
+        if(!scoped[line]) fail(`Contract ${name}.${field} has no entry for line "${line}"`);
+      }
+    }
+    // A union command list must say which line each name belongs to, or a name that exists on only one
+    // line reads as a control for both. This is the staleness that produced a false "these commands are
+    // missing" finding during the 2.x audit: the prose drifted from the array.
+    if(unverified.length>0 && def.forbidden_commands_by_line){
+      const attribution=Object.values(def.forbidden_commands_by_line).join(" ");
+      for(const cmd of def.remote_forbidden_commands||[]){
+        if(!new RegExp(`\\b${cmd.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}\\b`).test(attribution)) fail(`Contract ${name}.remote_forbidden_commands names "${cmd}" but no forbidden_commands_by_line entry attributes it to a line`);
+      }
+    }
+    // A line-scoped environment/flag statement that mentions a variable or flag must not contradict
+    // the base list: a token required on one line must not be forbidden on it.
+    const forbidden=new Set([...(def.remote_forbidden_flags||[]),...(def.remote_forbidden_commands||[])]);
+    for(const [line,stmt] of Object.entries(def.required_flags_by_line||{})){
+      for(const tok of String(stmt).match(/--[A-Za-z0-9-]+/g)||[]){
+        if(forbidden.has(tok)) fail(`Contract ${name}.required_flags_by_line["${line}"] names ${tok} as required but it is also in remote_forbidden_flags`);
+      }
+    }
+    // Every forbidden flag must be scoped or justified for each line: a flag that exists on only one
+    // line must not be presented as a control for both without a line note.
+    const rationale=String(def.remote_forbidden_rationale||"");
+    if(unverified.length>0 && !/2\.x/.test(rationale)) fail(`Contract ${name}.remote_forbidden_rationale does not address the 2.x line though the gate declares it`);
+  }
+  // The 2.x line's scope hazards are load-bearing (workspace/config/watcher/credential). If the gate
+  // names 2.x, the entry must record how each is mitigated, or the gate is a version label only.
+  if(def.version_gate?.unverified_lines?.includes("2.x") && !def.scope_hazards_2x) fail(`Contract ${name} gates 2.x but records no scope_hazards_2x; the 2.x workspace/config/watcher mitigations would be unstated`);
 }
 
 console.log("Mayasaba contract verification passed.");
