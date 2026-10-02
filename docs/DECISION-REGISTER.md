@@ -35,6 +35,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-029 | The supported agent set is exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI | HARD_LOCK |
 | DEC-030 | A versioned ProjectBrief is the canonical representation of user project intent; the brief version current at DISCOVERY close is the immutable analysis anchor; only the owning authoritative service determines materiality, and only material project-truth change increments the epoch | HARD_LOCK |
 | DEC-031 | DISCOVERY establishes the brief baseline and objective workspace facts; USER_INTERVIEW is reserved for deliberation-produced material questions; free-text post-intake input is advisory and never bypasses existing mediated commands | SOFT_DECISION |
+| DEC-032 | Control Room visual language: minimal/functional base with bento-grid layout; frosted-glass accents restricted to header/status chips; no competing design language | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -90,6 +91,20 @@ Classification: ADDITIVE. Date: 2026-10-03. Adds two decisions; supersedes none.
 | Tests affected | Contract verification (`tools/contracts/verify.mjs`) must pass. New entity schemas need conformance fixtures. Epoch-effect tests must cover the three materiality outcomes (material change, non-material context change, commentary) and must prove a mislabeled classification cannot itself cause or avoid an epoch transition. |
 
 `UserContribution` is a durable record of what the user contributed and its advisory classification/outcome. It is **not** an authority for project truth: the owning domain service remains authoritative for the resulting requirement, decision, epoch or context mutation.
+
+## DEC-032 visual-language record
+
+Classification: ADDITIVE. Date: 2026-10-03. Adds one decision; supersedes none.
+
+| Field | Value |
+|---|---|
+| Affected subsystem | Control Room UI (presentation only). |
+| Previous behavior | No visual-language decision existed. DEC-014 locked the desktop stack (Tauri 2 + React 19 + TypeScript + Vite + Tailwind/shadcn) but defined no visual language, so any design language was implicitly admissible. |
+| New behavior | The Control Room uses a minimal/functional base with a bento-grid layout for the persistent shell; frosted-glass/blur accents are permitted only on the header bar and status chips; competing design languages are prohibited. |
+| Reason | A single locked visual language prevents the interface drifting into competing or decorative styles, keeps state and authority legible, and keeps presentation clearly subordinate to controller-owned truth. |
+| Compatibility impact | None (additive). No schema, crate, application or contract change; contract verification is unaffected because no contract or registry is touched. |
+| Migration/reconciliation | None. |
+| Tests affected | WCAG 2.1 AA contrast plus visible-focus and keyboard-navigation checks when the Control Room is implemented. |
 
 ## Change procedure
 

@@ -39,6 +39,10 @@ Free-text input after creation is recorded as a `UserContribution`. Show its adv
 
 The chat surface is the user's interface; typed state transitions determine what becomes project truth.
 
+## Visual language
+
+The Control Room uses the locked minimal/functional base with a bento-grid layout (DEC-032). Composition details are owned by `CONTROL-ROOM-DESIGN.md`.
+
 ## Header
 
 Persistent project header shows:

@@ -18,6 +18,18 @@ Center content is feature-specific. A project timeline can aggregate authoritati
 
 Right context rail shows the user-selected workspace/task scope, active agents, tasks, blockers, task-applicable build/test or artifact-validation health, communication health, epoch, context snapshot, lease expiry, barriers, retries and dead letters.
 
+## Visual language
+
+Base: minimal/functional. A neutral palette, generous whitespace, typographic hierarchy and a system font stack carry the interface; decorative surfaces are not used.
+
+Layout: the persistent shell (header, navigation, center, right rail) uses a bento-grid composition.
+
+Frosted-glass/blur accents are permitted only on the header bar and status chips. They must never fall below WCAG 2.1 AA contrast or obscure state.
+
+Prohibited as design languages: spatial/3D, claymorphism, neomorphism, skeuomorphism, glassmorphism and maximalism.
+
+Visual language is presentation only. It never encodes authority, state or permission; authoritative truth remains in Rust and the event stream. See DEC-032.
+
 ## State presentation
 UI distinguishes:
 - authoritative server state

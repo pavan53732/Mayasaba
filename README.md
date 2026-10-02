@@ -36,6 +36,7 @@ The architecture is adapter-based for future extension, but changing this set is
 - Git worktrees/branches are preferred for concurrent agent isolation.
 - SQLite is the durable Mayasaba source of truth.
 - Tauri 2 + React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui.
+- Control Room visual language: minimal/functional base with bento-grid layout (DEC-032).
 - Rust + Tokio for the controller/core.
 - User-facing distribution is MSI only.
 - Completion must deliver the requested local artifacts with evidence; software tasks require a working, validated software deliverable rather than planning alone.
