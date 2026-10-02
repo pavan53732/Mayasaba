@@ -777,7 +777,7 @@ Canonical event types: `PROJECT_UPDATED`, `PROJECT_PHASE_CHANGED`, `PROJECT_STAT
 
 ## 29. Bridge code generation
 
-The source of truth is `schemas/tauri-bridge-v1/bridge.schema.json` → generated Rust DTO/command metadata + generated TypeScript bridge types. Generated files carry a generated marker and are not hand-edited. CI regenerates and compares output to detect drift.
+The source of truth is `schemas/tauri-bridge-v1/bridge.schema.json` → generated Rust DTO/command metadata + generated TypeScript bridge types. Generated files carry a generated marker and must not be hand-edited. The local contract gate (`npm run verify:contracts`) verifies bridge command/query/event identifiers and their ownership against `workspace.manifest.json`; it does not read the generated files themselves. A regeneration-and-diff drift check is not yet implemented, and the checked-in outputs are not currently reproducible from the generator: `tools/codegen/generate-bridge.mjs` emits only `apps/desktop/src/generated/bridge.ts` (its emitted source header differs from the checked-in file's), never emits `apps/desktop/src-tauri/src/generated/bridge.rs` (which is nonetheless checked in), and no local check byte-compares either file. Until such a check exists, the regeneration-and-diff guarantee is not asserted, and the "not hand-edited" rule is not yet mechanically enforced.
 
 ## 30. Crate/service reconciliation
 

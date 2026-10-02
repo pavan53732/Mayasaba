@@ -87,7 +87,7 @@ When implementation starts, the following files must encode this graph:
 - `apps/desktop/package.json`: React/Tauri frontend dependencies.
 - `apps/desktop/src-tauri/tauri.conf.json`: Windows/MSI packaging and resource declarations.
 
-No dependency may exist only in prose after implementation begins; CI must compare manifests with this matrix.
+No dependency may exist only in prose after implementation begins; the local contract gate (`npm run verify:contracts`) must compare manifests with this matrix. As implemented today the gate checks that each declared manifest exists and that every crate's `Cargo.toml` names its declared `mayasaba-*` dependencies; a full content comparison of the root `Cargo.toml`, desktop `package.json` and `tauri.conf.json` against this matrix is not yet implemented.
 
 
 ## Application-service ownership
@@ -124,7 +124,7 @@ Rust bridge DTO/metadata + TypeScript bridge types
 Tauri command/event runtime
 ```
 
-Generated outputs are checked for drift in CI and are not hand-edited.
+Generated outputs are checked in and must not be hand-edited. The local contract gate (`npm run verify:contracts`) verifies their identifiers and ownership against `workspace.manifest.json`; it does not read the generated files themselves, and a regeneration-and-diff drift check is not yet implemented, so the "not hand-edited" rule is not yet mechanically enforced.
 
 ## Runtime schema distribution
 
@@ -134,4 +134,4 @@ The embedding owner is `crates/protocol`; compile-time embedding such as Rust `i
 
 ## Implementation-manifest gate
 
-Before M0.5 exits, the repository must contain the root `Cargo.toml`, desktop `package.json`, Tauri configuration and crate manifests matching `workspace.manifest.json`. CI must reject dependency drift.
+Before M0.5 exits, the repository must contain the root `Cargo.toml`, desktop `package.json`, Tauri configuration and crate manifests matching `workspace.manifest.json`. The local contract gate (`npm run verify:contracts`) must reject dependency drift.

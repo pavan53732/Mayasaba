@@ -191,6 +191,16 @@ mayasaba/
 
 Architecture changes must be classified as ADDITIVE, REFINEMENT, REPLACEMENT or DEPRECATION. Existing canonical terms, schemas, state owners and sources of truth must not be silently redefined.
 
+## Local validation
+
+Contract verification runs locally on the user's Windows PC — there is no hosted CI (DEC-036). From the repository root:
+
+~~~text
+npm run verify:contracts
+~~~
+
+This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
+
 ## Current status
 
 The repository is in a **documentation-first architecture baseline**. The next implementation gate is the actual MCF-v2 machine-readable schema package and Rust/SQLite conformance implementation, followed by the three adapters, council, tasks, execution, validation/repair and Control Room.

@@ -89,7 +89,7 @@ The canonical schema package lives at repository root under `schemas/mcf-v2/`. T
 
 For the Windows MSI build:
 
-1. CI validates the complete schema package before compilation.
+1. The local contract gate (`npm run verify:contracts`) checks that every file named in `schemas/mcf-v2/manifest.json` exists, before compilation. It does not validate the contents of the schema package (no JSON-Schema validity or cross-file reference resolution); that remains a build-time concern.
 2. The Rust `crates/protocol` build embeds the required schema files with Rust compile-time inclusion (for example `include_str!`) so runtime validation does not depend on the user's filesystem.
 3. The same schema package may also be included as a read-only Tauri resource for diagnostics, but that resource is not authoritative.
 4. Runtime validators report protocol/schema version and registry version in errors and evidence.

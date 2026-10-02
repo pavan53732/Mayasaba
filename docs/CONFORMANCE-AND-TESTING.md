@@ -173,11 +173,13 @@ This suite belongs to M0.5 and must run before M1/M2/M3 vertical integration. It
 
 ## Cross-contract drift tests
 
-CI must compare:
+The local contract gate — `npm run verify:contracts`, which runs `tools/contracts/verify.mjs` from the repository root on the user's Windows PC — must compare:
 
-- `schemas/mcf-v2/registry.json` against protocol/message/event enums;
-- `schemas/tauri-bridge-v1/bridge.schema.json` against generated Rust and TypeScript bridge identifiers;
-- `docs/WORKSPACE-MANIFEST.md` against Cargo/npm/Tauri manifests once implementation exists;
-- adapter probe results against the adapter capability contract.
+- `schemas/mcf-v2/registry.json` against protocol/message/event enums — performed by the gate;
+- `schemas/tauri-bridge-v1/bridge.schema.json` bridge identifiers against their declared owners in `workspace.manifest.json` — performed by the gate. The gate compares the identifier **enums** against the manifest's ownership maps; it does not read the generated `bridge.ts`/`bridge.rs` files or compare them for regeneration drift, which is not yet implemented (see `INTERNAL-APPLICATION-ARCHITECTURE.md` §29);
+- `docs/WORKSPACE-MANIFEST.md` against Cargo/npm/Tauri manifests once implementation exists — **partially** performed: the gate currently checks that the declared manifests exist and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. It does not yet parse the root `Cargo.toml`, desktop `package.json` or `tauri.conf.json` contents for a full dependency-graph comparison;
+- adapter probe results against the adapter capability contract — **not** performed by the gate. This is a runtime comparison against a live probe result; the gate checks the adapter set, transports and declared controls statically.
 
-Any mismatch is a build failure, not a warning.
+Any mismatch the gate detects is a verification failure, not a warning. The gate is a manual local command (no hook or wrapper runs it), so a mismatch is only caught when the gate is run; running it before handoff and commit is required, not optional.
+
+This gate runs locally; there is no hosted CI. See the DEC-036 record in `docs/DECISION-REGISTER.md`.
