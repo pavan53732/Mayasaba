@@ -67,6 +67,16 @@ M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - affected-context dependency mapping
 - recovery rehydration
 
+## M4.5 — Council collaboration proof (simulated)
+Before broad task execution or full Control Room implementation, prove Mayasaba's central collaboration loop with four deterministic simulated participants and the real CouncilService/MCF/context path:
+- independent proposals on one shared project snapshot;
+- controller-assigned critique targets, references to prior positions, and rebuttal/revision;
+- a material unresolved question deduplicated and shown in a minimal Control Room question surface;
+- a user answer persisted through `answer_user_question`, followed by a scoped `CONTEXT_UPDATE`, a new/current ContextPack and agent revision;
+- a recorded council outcome/decision candidate without allowing an agent to commit an authoritative lock.
+
+No live AI CLI is required for this proof. The slice passes only when the question/answer is durable, targeted agents receive the new context, stale context cannot authorize work, duplicate delivery is safe, and non-participation is explicit. M6 completes the production Council Engine after this behavior is demonstrated.
+
 ## M5 — Task/workspace execution for code and local artifacts
 - request/acceptance-criteria-to-task DAG
 - task leases

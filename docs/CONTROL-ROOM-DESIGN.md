@@ -43,6 +43,12 @@ Build, runtime and E2E surfaces remain first-class for software tasks. Other loc
 Agent view shows runtime identity, session, capabilities, health, active task, lease and recent evidence.
 Council view shows round state, participation, proposals, critiques, disagreements, questions, decisions and locks without private chain-of-thought.
 
+## User question and answer flow
+
+When CouncilService requires user input, show a consolidated question queue rather than interrupting for every agent message. Each question displays its impact/blocking status, concise reason it remains unresolved, affected agents and links to the source positions/evidence where available. The project clearly shows WAITING_FOR_USER while a blocking question is open; silence is never rendered as agreement.
+
+Submitting an answer calls the existing `answer_user_question` command. Show the answer's persisted status, its redistribution scope, and the resulting context snapshot/epoch. Track delivery/synchronization for affected agents separately from transport ACK; do not report the answer as applied until the agents resume from current context. A council answer is not a blanket permission or action approval—PolicyService approval remains a separate control.
+
 ## Evidence UX
 Claims link to evidence. Failed validations expose failure packet, affected scope and repair state.
 

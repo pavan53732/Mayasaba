@@ -112,6 +112,7 @@ Every important completion claim links to observable evidence:
 
 User may:
 
+- answer a consolidated open Council question and see which agents are affected
 - pause
 - resume
 - retry

@@ -83,6 +83,21 @@ idea → requirements → architecture → task → implementation → integrati
 
 Exercise representative user-authorized tasks for document/report edits, read-only public-source research with local citations, and data cleanup. Validate task-appropriate acceptance checks (for example, format/schema checks, source metadata, record counts, invariants and recoverability) without imposing irrelevant build/E2E gates. Use fixtures or controlled public-read test inputs; test that retrieval has no authenticated or side-effecting path.
 
+## Council collaboration vertical-slice tests (M4.5)
+
+Use four deterministic simulated participants over the real CouncilService, MCF bus, ContextService and minimal Control Room question surface. No live model/provider is required. The slice must prove:
+
+1. each participant receives the same initial project/round snapshot and submits an independent proposal before seeing peers' proposals;
+2. CouncilService persists each position with its author, source message, message type, response targets and evidence references, then assigns critique targets before the critique phase;
+3. critiques, rebuttals, revisions, stance messages and agent decision/lock candidates reference valid position IDs; missing, self-referential or out-of-round targets are rejected;
+4. equivalent question candidates are deduplicated, evidence-check results are retained, and only material unresolved questions are shown to the user;
+5. `answer_user_question` durably records the answer and redistribution scope; affected agents receive the current snapshot/digest through existing MCF-v2 context synchronization and revise against it;
+6. an agent holding the previous snapshot is rejected from material work; duplicate and delayed delivery does not duplicate the answer or state change;
+7. a transport ACK is not treated as proof of context application, and non-participation/timeouts are visible rather than represented as agreement;
+8. agent-sent DECISION/LOCK messages cannot create an authoritative decision or HARD_LOCK without the controller/user decision path.
+
+The test must use only existing MCF-v2 message types and payload schemas. It demonstrates the collaboration and user-answer flow without modifying the MCF-v2 envelope or payload contract.
+
 ## Anti-hallucination tests
 
 The system must prove that:

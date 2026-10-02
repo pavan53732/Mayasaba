@@ -100,6 +100,16 @@ The Mayasaba repository's root `AGENTS.md` is guidance for coding agents working
 
 Use only existing ContextPack fields. This requirement does not change the MCF-v2 envelope or payload schema; in particular, it adds no ContextPack fields.
 
+### Council answer propagation
+
+When a user answers a Council question, CouncilService first persists the full immutable `UserAnswer`—including its source question and effective redistribution scope, not just free-text—and routes any accepted requirement/decision change through its owning service. If the submitted scope is omitted, resolve it from the question's affected agents before persisting. ContextService then rebuilds the affected ContextPacks from authoritative state; the answer is not treated as an authoritative project fact merely because it appeared in chat.
+
+- If the answer changes material requirements, decisions, contracts, scope or other project truth, update the owning record and increment `project_epoch` under the existing epoch rules.
+- If the answer changes an agent's applicable context without changing project truth, create a new snapshot and digest at the current epoch. In either case, supersede or invalidate prior snapshots for affected work so stale context cannot authorize writes.
+- Use the answer's `redistribution_scope` when provided, restricted to affected agents in the same project/round. Otherwise use the question's `affected_agents`; if that set was not established, CouncilService must resolve the recipients from the active round before asking the user.
+- Distribute the new snapshot through the existing MCF-v2 `CONTEXT_UPDATE` mechanism, which carries the snapshot ID, epoch and digest. Send `DECISION` only if a formal decision was persisted. Do not introduce a new MCF-v2 message type or payload field for user answers.
+- Resume the council with a linked revision/continuation round. A receipt ACK alone does not prove an agent has rehydrated; material work remains gated on current context and lease validation.
+
 ## Shared truth is not shared reasoning
 
 Two agents may disagree even when they received the same ContextPack. Mayasaba preserves both positions and resolves the issue through evidence, council deliberation or user input.

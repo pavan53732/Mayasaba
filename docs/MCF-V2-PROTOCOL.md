@@ -99,6 +99,10 @@ Material task/action messages carry:
 
 Material changes create a new project epoch. Affected context becomes stale and cannot authorize new material work.
 
+### Council and user-answer routing
+
+Council contributions use the existing `council` channel and typed MCF message types; `COUNCIL-ENGINE.md` defines the semantic contents of round positions and review targets. A project owner's answer enters Mayasaba through the Tauri `answer_user_question` command and is persisted by CouncilService—it is not a new agent-facing MCF message type. After the answer is incorporated into authoritative project/task context, ContextService sends the existing `CONTEXT_UPDATE` to the affected agent sessions with the new snapshot ID, epoch and digest. Send the existing `DECISION` message as well only when a formal decision has been recorded. No MCF-v2 envelope, message type or payload schema change is implied.
+
 ## 7. ACK, NACK and retry
 
 ACK = received.
