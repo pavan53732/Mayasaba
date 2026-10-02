@@ -8,7 +8,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-002 | pavan53732/Mayasaba is the canonical implementation repository | HARD_LOCK |
 | DEC-003 | Windows-only | HARD_LOCK |
 | DEC-004 | Local-only execution; no cloud/remote executor | HARD_LOCK |
-| DEC-005 | Initial supported agents are Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline | HARD_LOCK |
+| DEC-005 | Initial supported agents are Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline | SUPERSEDED_BY_DEC-029 |
 | DEC-006 | Mayasaba is a control plane, not a fifth AI brain | HARD_LOCK |
 | DEC-007 | Agent communication is brokered by MCF-v2 | HARD_LOCK |
 | DEC-008 | MCF-v2 uses at-least-once delivery + idempotency | HARD_LOCK |
@@ -32,6 +32,22 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-026 | Bus remains a transport/routing subsystem; PolicyService authorization is completed before material dispatch rather than adding a bus→policy dependency | HARD_LOCK |
 | DEC-027 | Material-action idempotency is keyed by project_id + operation_id; message_id identifies individual delivery records | HARD_LOCK |
 | DEC-028 | Mayasaba supports user-authorized local-file work across artifact types within a selected workspace; requested public-web research is read-only; external side effects and general control of unrelated applications are out of scope | HARD_LOCK |
+| DEC-029 | The supported agent set is exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI | HARD_LOCK |
+
+## DEC-029 supersession record
+
+Classification: REPLACEMENT. Supersedes DEC-005.
+
+| Field | Value |
+|---|---|
+| Previous behavior | DEC-005 locked the agent set to exactly four CLIs: Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline. Each had an `agent_type` wire identity, an adapter-capability record and a native transport contract. |
+| New behavior | The agent set is exactly three CLIs: Hermes Agent CLI (`HERMES_AGENT`), Kilo Code CLI (`KILO_CODE`), OpenCode CLI (`OPEN_CODE`). `CLAUDE_CODE` and `CLINE` are removed from every machine-readable registry. Hermes and Kilo are unchanged. |
+| Reason | Product decision to restrict Mayasaba's coordination surface to the three retained CLIs. OpenCode CLI is admitted as a new agent; Claude Code CLI and Cline are withdrawn from the product. |
+| Compatibility impact | Breaking wire-contract change. `agent_type` is a closed enum in six schemas, so any retained handshake, native event, probe result or doctor report carrying `CLAUDE_CODE` or `CLINE` becomes invalid. Native transport identifiers `CLAUDE_STREAM_JSON` and `CLINE_JSON` are removed. |
+| Migration/reconciliation | No data migration is required. `agents.agent_type` in `schemas/sqlite-v1/schema.sql` is `TEXT NOT NULL` with no CHECK constraint, so SQLite does not constrain the value, and no Mayasaba database has been created yet. There are no installed adapters and no persisted sessions to reconcile. Reject-with-diagnosis is the only runtime path for a legacy `CLAUDE_CODE` or `CLINE` value. |
+| Tests affected | Contract verification (`tools/contracts/verify.mjs`) must pass. MCF-v2 fixtures that assert agent identity must use a retained `agent_type`. Adapter conformance fixtures are required for `HERMES_AGENT`, `KILO_CODE` and `OPEN_CODE` before any adapter is admitted. |
+
+Scope note: this decision governs the agent set Mayasaba coordinates at runtime. It does not change which coding agents may contribute to this repository. `AGENTS.md` §1 applicability and the contributor rules in `AGENTS.md` are unchanged by DEC-029.
 
 ## Change procedure
 

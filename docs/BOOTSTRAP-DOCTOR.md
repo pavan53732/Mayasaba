@@ -14,7 +14,7 @@ Before any project work begins, Mayasaba performs deterministic local preflight.
 
 ## Agent checks
 
-For each of Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline:
+For each of Hermes Agent CLI, Kilo Code CLI and OpenCode CLI:
 
 1. detect executable
 2. resolve actual executable path
@@ -63,7 +63,7 @@ Only READY agents receive task leases.
 
 ## Missing agents
 
-The user may proceed with fewer than four if an agent is unavailable or intentionally disabled. The Control Room must show actual capacity, for example 3/4 ready.
+The user may proceed with fewer than three if an agent is unavailable or intentionally disabled. The Control Room must show actual capacity, for example 2/3 ready.
 
 Missing agents must never be represented as silently participating.
 

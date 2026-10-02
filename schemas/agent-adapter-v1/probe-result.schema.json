@@ -5,13 +5,13 @@
   "required":["schema_version","agent_type","probe_time","executable","version","platform","transport","invocation","capabilities","exit_semantics","authentication"],
   "properties":{
     "schema_version":{"const":"1.0.0"},
-    "agent_type":{"enum":["CLAUDE_CODE","HERMES_AGENT","KILO_CODE","CLINE"]},
+    "agent_type":{"enum":["HERMES_AGENT","KILO_CODE","OPEN_CODE"]},
     "probe_time":{"type":"string","format":"date-time"},
     "executable":{"type":"string"},
     "resolved_path":{"type":["string","null"]},
     "version":{"type":"string"},
     "platform":{"type":"string"},
-    "transport":{"enum":["CLAUDE_STREAM_JSON","HERMES_STREAM_JSON","ACP_STDIO","KILO_JSON","CLINE_JSON","UNSUPPORTED"]},
+    "transport":{"enum":["HERMES_STREAM_JSON","KILO_JSON","OPEN_CODE_JSON","ACP_STDIO","UNSUPPORTED"]},
     "invocation":{"type":"object","required":["argv","cwd","stdin_mode","stdout_mode","stderr_mode"],"properties":{
       "argv":{"type":"array","items":{"type":"string"}},
       "cwd":{"type":"string"},

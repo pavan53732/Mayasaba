@@ -4,12 +4,12 @@
   "event_id":"018f4a20-0000-7000-8000-000000000002",
   "project_id":"018f4a20-0000-7000-8000-000000000003",
   "session_id":"018f4a20-0000-7000-8000-000000000004",
-  "sender":{"actor_type":"AGENT","actor_id":"018f4a20-0000-7000-8000-000000000005","agent_id":"018f4a20-0000-7000-8000-000000000005","agent_type":"CLAUDE_CODE","session_id":"018f4a20-0000-7000-8000-000000000004"},
+  "sender":{"actor_type":"AGENT","actor_id":"018f4a20-0000-7000-8000-000000000005","agent_id":"018f4a20-0000-7000-8000-000000000005","agent_type":"KILO_CODE","session_id":"018f4a20-0000-7000-8000-000000000004"},
   "recipients":[{"actor_type":"MAYASABA","actor_id":"mayasaba-controller"}],
   "channel":"agent","message_type":"HANDSHAKE","phase":"UNSCOPED","correlation_id":"018f4a20-0000-7000-8000-000000000006","causation_id":null,
   "sequence":0,"project_epoch":0,"priority":"SYNCHRONIZATION","created_at":"2026-01-01T00:00:00Z",
   "requires_ack":true,"requires_response":true,"blocking":false,"operation_id":null,
   "context_snapshot_id":null,"state_digest":null,"idempotency_key":null,"expires_at":null,"authorization_context":null,
-  "payload":{"agent_id":"018f4a20-0000-7000-8000-000000000005","agent_type":"CLAUDE_CODE","adapter_version":"1.0.0","protocol_versions":["MCF-2"],"capabilities":[]},
+  "payload":{"agent_id":"018f4a20-0000-7000-8000-000000000005","agent_type":"KILO_CODE","adapter_version":"1.0.0","protocol_versions":["MCF-2"],"capabilities":[]},
   "security":{"classification":"INTERNAL_PROJECT","secret_refs":[],"contains_secret_material":false}
 }

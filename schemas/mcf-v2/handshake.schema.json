@@ -6,7 +6,7 @@
   "required":["agent_id","agent_type","adapter_version","protocol_versions","capabilities"],
   "properties":{
     "agent_id":{"type":"string","format":"uuid"},
-    "agent_type":{"enum":["CLAUDE_CODE","HERMES_AGENT","KILO_CODE","CLINE"]},
+    "agent_type":{"enum":["HERMES_AGENT","KILO_CODE","OPEN_CODE"]},
     "adapter_version":{"type":"string"},
     "protocol_versions":{"type":"array","items":{"const":"MCF-2"}},
     "capabilities":{"type":"array","items":{"type":"string"},"uniqueItems":true},

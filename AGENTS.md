@@ -13,9 +13,9 @@ It tells an AI agent:
 - how to validate changes
 - where canonical documentation lives
 
-These instructions apply to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline, and any future coding agent explicitly admitted to the project.
+These instructions apply to any AI coding agent contributing to this repository.
 
-This file is canonical for all rules shared between AI coding agents working on this repository. Claude Code additionally has a Claude-specific overlay in `CLAUDE.md`; that overlay must not contradict this file, and any shared repository rule added here applies to every supported coding agent, including Claude Code.
+This file is the single canonical repository instruction file. It is canonical for all rules shared between AI coding agents working on this repository, and there is no agent-specific overlay.
 
 ## 2. Repository identity
 
@@ -23,13 +23,9 @@ Repository: pavan53732/Mayasaba
 
 Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks.
 
-Initial supported coding agents:
-1. Claude Code CLI
-2. Hermes Agent CLI
-3. Kilo Code CLI
-4. Cline
+At runtime, Mayasaba coordinates exactly three coding CLIs through its adapters (DEC-029): Hermes Agent CLI, Kilo Code CLI, OpenCode CLI.
 
-Codex CLI is not part of the initial supported agent set.
+That is the product's adapter set, not the set of agents governed by this file. As stated in §1, these instructions apply to any AI coding agent contributing to this repository; the two sets are separate, and DEC-029 does not restrict who may contribute here. Product adapter details are owned by `docs/AGENT-INTEGRATION.md`.
 
 Mayasaba is not a fifth AI brain.
 

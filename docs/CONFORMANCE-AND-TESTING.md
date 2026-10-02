@@ -25,7 +25,7 @@ Every MCF-v2 implementation must test:
 
 ## Adapter conformance
 
-Each of the four initial adapters must pass the same behavioral contract:
+Each of the three supported adapters must pass the same behavioral contract:
 
 - discovery
 - version
@@ -85,7 +85,7 @@ Exercise representative user-authorized tasks for document/report edits, read-on
 
 ## Council collaboration vertical-slice tests (M4.5)
 
-Use four deterministic simulated participants over the real CouncilService, MCF bus, ContextService and minimal Control Room question surface. No live model/provider is required. The slice must prove:
+Use three deterministic simulated participants — one per supported agent under DEC-029 — over the real CouncilService, MCF bus, ContextService and minimal Control Room question surface. No live model/provider is required. The slice must prove:
 
 1. each participant receives the same initial project/round snapshot and submits an independent proposal before seeing peers' proposals;
 2. CouncilService persists each position with its author, source message, message type, response targets and evidence references, then assigns critique targets before the critique phase;

@@ -96,7 +96,7 @@ For a runtime task that proposes or changes Mayasaba architecture, contracts, sc
 
 The co-design instruction is part of this runtime ContextPack contract; it is not sourced from repository contributor files. It directs the agent to establish the current contract, identify the concrete gap, recommend a normative resolution and its impacts, distinguish accepted decisions from proposals, and honor the discussion-versus-implementation boundary. Keep the pack task-scoped and preserve source references so agents can trace each rule and decision to its owner.
 
-The Mayasaba repository's root `AGENTS.md` is guidance for coding agents working in that repository, and `CLAUDE.md` is a Claude Code-specific overlay. They are not universal runtime-policy sources. If the selected task workspace is the Mayasaba repository, the applicable repository instructions may be included as task-scoped workspace guidance, clearly distinguished from controller-owned policy; `CLAUDE.md` applies only to Claude Code.
+The Mayasaba repository's root `AGENTS.md` is guidance for coding agents working in that repository. It is the single canonical repository instruction file and is not a universal runtime-policy source. If the selected task workspace is the Mayasaba repository, the applicable repository instructions may be included as task-scoped workspace guidance, clearly distinguished from controller-owned policy.
 
 Use only existing ContextPack fields. This requirement does not change the MCF-v2 envelope or payload schema; in particular, it adds no ContextPack fields.
 

@@ -4,36 +4,6 @@
   "authority": "schemas/agent-adapter-v1/native-transport-contract.json",
   "runtime_probe_authoritative": true,
   "agents": {
-    "CLAUDE_CODE": {
-      "executable": "claude",
-      "launch": [
-        "-p",
-        "<prompt>",
-        "--output-format",
-        "stream-json",
-        "--input-format",
-        "stream-json"
-      ],
-      "resume": [
-        "-p",
-        "-r",
-        "<native_session_id>",
-        "<prompt>",
-        "--output-format",
-        "stream-json",
-        "--input-format",
-        "stream-json"
-      ],
-      "version": [
-        "--version"
-      ],
-      "auth": [
-        "auth",
-        "status"
-      ],
-      "transport": "CLAUDE_STREAM_JSON",
-      "interrupt": "controller terminates the local process tree after bounded graceful cancellation; no protocol success until process state is verified"
-    },
     "HERMES_AGENT": {
       "executable": "hermes",
       "launch": [
@@ -81,34 +51,58 @@
       "permission_enforcement": "adapter must configure native permissions so terminal/command operations are controller-mediated or fail admission",
       "auth_probe": "readiness probe; kilo auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result"
     },
-    "CLINE": {
-      "executable": "cline",
+    "OPEN_CODE": {
+      "executable": "opencode",
       "launch": [
+        "run",
         "<prompt>",
-        "--json",
-        "--cwd",
+        "--format",
+        "json",
+        "--dir",
         "<workspace>"
       ],
       "resume": [
+        "run",
         "<prompt>",
-        "--json",
-        "--cwd",
-        "<workspace>",
-        "--id",
-        "<native_session_id>"
+        "--session",
+        "<native_session_id>",
+        "--format",
+        "json",
+        "--dir",
+        "<workspace>"
       ],
       "version": [
         "--version"
       ],
       "auth": [
-        "auth"
+        "auth",
+        "list"
       ],
-      "transport": "CLINE_JSON",
+      "transport": "OPEN_CODE_JSON",
       "acp": [
-        "--acp"
+        "acp",
+        "--cwd",
+        "<workspace>"
       ],
-      "permission_enforcement": "use --auto-approve false when controller-mediated tool approval is required; otherwise fail admission for tasks requiring execution mediation",
-      "auth_probe": "readiness probe; cline auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result"
+      "remote_forbidden": [
+        "serve",
+        "web",
+        "attach",
+        "share",
+        "github"
+      ],
+      "required_environment": {
+        "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
+        "OPENCODE_DISABLE_AUTOUPDATE": "1"
+      },
+      "environment_rationale": "OPENCODE_DISABLE_CLAUDE_CODE (OpenCode's own documented variable name) stops OpenCode ingesting ~/.claude/CLAUDE.md and .claude/skills. Those paths are outside Mayasaba-authorized scope and must never act as an instruction source. Default plugins and autoupdate are disabled so adapter behavior stays deterministic and offline.",
+      "determinism_flags": [
+        "--pure"
+      ],
+      "permission_enforcement": "do not pass --auto; select an explicit agent via --agent whose permission map denies privileged operations, otherwise fail admission for tasks requiring execution mediation",
+      "auth_probe": "readiness probe; opencode auth login is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result",
+      "output_contract": "run --format accepts default|json and emits a raw JSON event stream, not a fixed-shape document; the adapter must normalize the typed event sequence and must not assume a single result object"
     }
   }
 }

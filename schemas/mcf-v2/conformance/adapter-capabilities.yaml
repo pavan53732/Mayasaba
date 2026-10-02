@@ -1,15 +1,14 @@
 version: 1
 agents:
-  CLAUDE_CODE:
-    transport: CLAUDE_STREAM_JSON
-    execution_mediation_required: true
   HERMES_AGENT:
     transport: HERMES_STREAM_JSON
     execution_mediation_required: true
   KILO_CODE:
     transport: KILO_JSON
     execution_mediation_required: true
-  CLINE:
-    transport: CLINE_JSON
+  OPEN_CODE:
+    transport: OPEN_CODE_JSON
     execution_mediation_required: true
+    required_environment:
+      OPENCODE_DISABLE_CLAUDE_CODE: "1"
 rule: runtime probe results override documentation claims

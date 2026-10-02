@@ -19,6 +19,8 @@ Mayasaba executes on the user's Windows machine. Cloud workspaces and remote exe
 ### D-002 — Four initial coding agents
 The initial agent set is exactly Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline.
 
+> **Superseded by DEC-029.** The supported agent set is now exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI. Claude Code CLI and Cline were withdrawn and OpenCode CLI was admitted. This entry is retained as the historical record of the original decision; the authoritative current contract is DEC-029 in `DECISION-REGISTER.md` and `AGENT-INTEGRATION.md`.
+
 ### D-003 — Mayasaba is a control plane
 Mayasaba is not a fifth AI brain. Agent intelligence remains independent.
 

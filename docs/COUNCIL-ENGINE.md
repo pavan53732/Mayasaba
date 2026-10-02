@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Council Engine coordinates the four independent agents as a virtual council for user-authorized local work—including software engineering and other file-based tasks—without turning them into a single shared mind.
+The Council Engine coordinates the three independent agents as a virtual council for user-authorized local work—including software engineering and other file-based tasks—without turning them into a single shared mind.
 
 ## Deliberation model
 

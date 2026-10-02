@@ -8,7 +8,7 @@
   "properties":{
     "types":{"type":"object","additionalProperties":false,"properties":{
       "AgentInstallation":{"type":"object","required":["agent_type","executable","resolved_path","version","platform"],"properties":{
-        "agent_type":{"enum":["CLAUDE_CODE","HERMES_AGENT","KILO_CODE","CLINE"]},
+        "agent_type":{"enum":["HERMES_AGENT","KILO_CODE","OPEN_CODE"]},
         "executable":{"type":"string"},"resolved_path":{"type":"string"},"version":{"type":"string"},"platform":{"type":"string"}
       }},
       "AgentVersion":{"type":"object","required":["raw","major","minor","patch"],"properties":{

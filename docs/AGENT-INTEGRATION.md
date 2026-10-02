@@ -2,14 +2,13 @@
 
 ## Supported agents
 
-Initial support is exactly:
+Support is exactly:
 
-1. Claude Code CLI
-2. Hermes Agent CLI
-3. Kilo Code CLI
-4. Cline
+1. Hermes Agent CLI
+2. Kilo Code CLI
+3. OpenCode CLI
 
-Future agents require an explicit architecture/protocol extension and are not silently added.
+Future agents require an explicit architecture/protocol extension and are not silently added. Withdrawing or adding an agent is a governed change to DEC-029.
 
 ## Adapter contract
 
@@ -49,12 +48,12 @@ An adapter does not own project state, task truth or certification.
 Mayasaba distinguishes two instruction planes:
 
 1. **Runtime policy and task context** are controller-owned. They come from authoritative project/task state, the active lease and policy decisions, and the applicable product-owned contracts. They apply to every supported adapter and are delivered before a task lease.
-2. **Workspace instructions** are guidance found in the selected target workspace (for example, that workspace's `AGENTS.md` or `CLAUDE.md`). They are scoped to that workspace and task; they may refine how work is performed but cannot override Mayasaba policy, grant capabilities or expand the lease scope.
+2. **Workspace instructions** are guidance found in the selected target workspace (for example, that workspace's `AGENTS.md` or any other instruction file the workspace ships). They are scoped to that workspace and task; they may refine how work is performed but cannot override Mayasaba policy, grant capabilities or expand the lease scope.
 
-The controller MUST deliver the same applicable runtime policy meaning and task context to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline. Use each CLI's supported structured input or instruction mechanism; never depend on native file discovery to enforce Mayasaba policy.
+The controller MUST deliver the same applicable runtime policy meaning and task context to Hermes Agent CLI, Kilo Code CLI and OpenCode CLI. Use each CLI's supported structured input or instruction mechanism; never depend on native file discovery to enforce Mayasaba policy. Where a CLI would otherwise discover instruction files outside the authorized workspace — as OpenCode does with `~/.claude/CLAUDE.md` and `.claude/skills` — the adapter must disable that discovery explicitly.
 
-- The Mayasaba repository's root `AGENTS.md` is contributor guidance for AI coding agents working in that repository. Its `CLAUDE.md` is a Claude Code-specific overlay. Neither file is universal runtime policy or configuration for the adapters embedded in Mayasaba.
-- If a task's selected workspace is the Mayasaba repository, its repository instruction files may be supplied as task-scoped workspace guidance. Preserve their source and scope; `CLAUDE.md` applies only to Claude Code. Runtime policy remains authoritative if instructions conflict.
+- The Mayasaba repository's root `AGENTS.md` is contributor guidance for AI coding agents working in that repository. It is the single canonical repository instruction file; there is no agent-specific overlay. It is not universal runtime policy or configuration for the adapters embedded in Mayasaba.
+- If a task's selected workspace is the Mayasaba repository, its repository instruction files may be supplied as task-scoped workspace guidance. Preserve their source and scope. Runtime policy remains authoritative if instructions conflict.
 - A session MUST NOT reach `READY` or receive a task lease until delivery of the required runtime policy is confirmed. Preserve policy source/version references with the session/task context so resume and ContextPack regeneration do not silently omit them.
 - For Mayasaba architecture tasks, supply the task-scoped co-design instruction and relevant accepted decisions, HARD_LOCKs, open proposals, and canonical owner-document/schema references in the ContextPack as defined by `MEMORY-CONTEXT.md`; do not treat root `AGENTS.md` §14 as a universal runtime-policy source.
 
@@ -157,21 +156,6 @@ Concrete adapter behavior remains runtime-probed; native CLI quirks stay inside 
 
 The following are documented baseline facts. Runtime probing remains authoritative for the installed executable/version, so adapter configuration must record the probe result.
 
-### Claude Code CLI
-
-- executable: `claude`
-- primary automation entry point: `claude -p`
-- structured output: `--output-format json` or `--output-format stream-json`
-- structured input: `--input-format stream-json` with `-p` and stream-json output
-- session continuation: `--resume <session-id>` / `--continue`
-- working-directory control is available through the CLI environment/invocation model; adapter must launch with the leased workspace as cwd
-- permission controls include `--allowedTools`, `--disallowedTools`, and permission mode flags
-- native stream transport: JSONL/stream-JSON over stdio
-- exit status remains an OS process signal; final structured `result` is parsed separately from process exit
-- authentication is external to MCF-v2 and must never be copied into protocol payloads.
-
-Anthropic documents `claude -p`, JSON/stream-JSON, stream-JSON input, session resume and tool permission flags. Source: https://docs.anthropic.com/en/docs/claude-code/cli-usage
-
 ### Hermes Agent CLI
 
 - executable: `hermes`
@@ -198,30 +182,35 @@ Hermes documents both stream-json CLI output and ACP stdio operation. Source: ht
 
 Kilo documents `kilo run --auto`, JSON output, ACP, session controls and cwd options. Source: https://kilo.ai/docs/code-with-ai/platforms/cli
 
-### Cline CLI
+### OpenCode CLI
 
-- executable: `cline`
-- one-shot/headless entry point: `cline "<prompt>"`
-- structured output: `--json` (NDJSON)
-- working directory: `--cwd <path>`
-- session resume: `--id <session-id>`
-- autonomous approval: `--auto-approve true` / `--yolo`
-- ACP entry point: `cline --acp`
-- ACP is stdio based
-- adapter must keep Cline JSON/headless and ACP as separate native transport implementations.
+- executable: `opencode`
+- non-interactive entry point: `opencode run "<message>"`
+- structured output: `--format json`, which emits a raw JSON **event stream**; `--format` accepts only `default` or `json` for `run`
+- because the output is a typed event sequence rather than a single fixed-shape result document, the adapter must normalize the event sequence and must not assume a single terminal object
+- working directory: `--dir <path>`
+- session resume: `--session <session-id>` (or `--continue`); `--fork` forks rather than continuing in place
+- agent selection: `--agent <name>`, where an agent's frontmatter permission map denies anything not explicitly allowed
+- autonomous approval: `--auto` approves permissions that are not explicitly denied; Mayasaba MUST NOT pass `--auto` for tasks requiring controller-mediated execution, because approval would bypass the controller gate
+- ACP entry point: `opencode acp --cwd <path>`; ACP is newline-delimited JSON-RPC over stdio, protocol version 1, and the process serves multiple sessions until stdin closes
+- global flags: `--version`, `--print-logs`, and `--pure` (run without external plugins)
+- OpenCode ships server/web/attach/share/github subcommands; Mayasaba MUST NOT use them, because they imply a network service or external side effect. Only local `run` and local `acp` are supported, consistent with the local-only constraint.
+- by default OpenCode ingests `~/.claude/CLAUDE.md`, `.claude` prompt content and `.claude/skills`. The adapter MUST set `OPENCODE_DISABLE_CLAUDE_CODE=1` so that files outside Mayasaba-authorized scope can never act as an instruction source. `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` and `OPENCODE_DISABLE_AUTOUPDATE=1` are likewise required to keep adapter behavior deterministic and offline.
+- provider credentials live in `~/.local/share/opencode/auth.json`; `opencode auth list` is a readiness probe only. Credentials are external to MCF-v2 and must never be copied into protocol payloads.
 
-Cline documents headless JSON/NDJSON, cwd, session IDs, autonomous approval and ACP. Source: https://github.com/cline/cline/blob/main/docs/cli/cli-reference.mdx
+OpenCode documents `opencode run`, `--format json`, `--dir`, `--session`, `--agent`, `--auto`, `opencode acp`, global flags and the `OPENCODE_*` environment variables. Source: https://opencode.ai/docs/cli/ and https://opencode.ai/docs/acp/
+
+A `stream-json` output mode for `opencode run` appears in an unmerged third-party pull request and is NOT documented as available. The adapter must not depend on it, and runtime probe remains authoritative for the installed version.
 
 ## Adapter transport decision
 
 | Agent | Native automation transport | Session model | Adapter strategy |
 |---|---|---|---|
-| Claude Code | stream-JSON stdio | Claude session ID | dedicated stream-JSON adapter |
 | Hermes | stream-JSON stdio or ACP stdio | Hermes session ID | dedicated stream-JSON adapter; ACP optional capability |
 | Kilo | JSON stdio or ACP | Kilo session ID | dedicated JSON adapter; ACP optional capability |
-| Cline | NDJSON stdio or ACP | Cline session ID | dedicated JSON adapter; ACP optional capability |
+| OpenCode | JSON event stream stdio or ACP stdio | OpenCode session ID | dedicated JSON event-stream adapter; ACP optional capability |
 
-Mayasaba does not force all four agents through ACP. Native structured transports are preferred when they provide the required capabilities; ACP is selected only where the adapter capability matrix confirms it is the correct runtime path.
+Mayasaba does not force all three agents through ACP. Native structured transports are preferred when they provide the required capabilities; ACP is selected only where the adapter capability matrix confirms it is the correct runtime path.
 
 ## Runtime probe contract
 
@@ -276,9 +265,9 @@ Mayasaba uses a hybrid adapter model:
 
 ## Native invocation baseline
 
-The current documented native automation surfaces are runtime facts and must be recorded in the probe result. Claude Code supports `claude -p` with JSON/stream-JSON output and stream-JSON input; Hermes supports `hermes chat -q` with `--format stream-json`; Kilo supports `kilo run` with `--format json` and `--auto`; Cline supports `cline <prompt>` with `--json`, `--cwd`, session IDs and ACP via `--acp`. Runtime probe remains authoritative for the installed version.
+The current documented native automation surfaces are runtime facts and must be recorded in the probe result. Hermes supports `hermes chat -q` with `--format stream-json`; Kilo supports `kilo run` with `--format json` and `--auto`; OpenCode supports `opencode run` with `--format json`, `--dir`, `--session` and ACP via `opencode acp`. Runtime probe remains authoritative for the installed version.
 
-Sources: Anthropic Claude Code CLI reference; NousResearch Hermes CLI reference; Kilo Code CLI documentation; Cline CLI reference.
+Sources: NousResearch Hermes CLI reference; Kilo Code CLI documentation; OpenCode CLI and ACP documentation.
 
 ## Native event normalization
 

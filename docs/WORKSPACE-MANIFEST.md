@@ -9,7 +9,6 @@ This is the human-readable workspace/dependency ownership contract. The machine-
 ```
 Mayasaba/
   AGENTS.md
-  CLAUDE.md
   README.md
   Cargo.toml
   package.json

@@ -1,6 +1,6 @@
 # Mayasaba
 
-Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. Software engineering remains first-class, alongside document work, research reports, data cleanup, and code refactors. Mayasaba coordinates Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline through a deterministic council, communication fabric, task engine, execution kernel, validation, repair, and evidence-backed delivery pipeline.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. Software engineering remains first-class, alongside document work, research reports, data cleanup, and code refactors. Mayasaba coordinates Hermes Agent CLI, Kilo Code CLI, and OpenCode CLI through a deterministic council, communication fabric, task engine, execution kernel, validation, repair, and evidence-backed delivery pipeline.
 
 ## Canonical repository
 
@@ -12,18 +12,17 @@ All Mayasaba source code, architecture, specifications, protocol schemas, tests,
 
 ## What Mayasaba is
 
-Mayasaba is a **control plane for four independent CLI agents**. It can coordinate user-authorized tasks on local files across supported task types; the available agent capabilities and evidence determine what can be completed and verified.
+Mayasaba is a **control plane for three independent CLI agents**. It can coordinate user-authorized tasks on local files across supported task types; the available agent capabilities and evidence determine what can be completed and verified.
 
 It is not a fifth AI brain. Each supported CLI keeps its own model/provider, context, reasoning, tools, authentication and runtime. Mayasaba supplies the shared deterministic workspace state, communication, orchestration, execution, validation and evidence systems.
 
-## Four initial agents
+## Supported agents
 
-1. Claude Code CLI
-2. Hermes Agent CLI
-3. Kilo Code CLI
-4. Cline
+1. Hermes Agent CLI
+2. Kilo Code CLI
+3. OpenCode CLI
 
-The architecture is adapter-based for future extension, but no additional agent is part of the initial supported set.
+The architecture is adapter-based for future extension, but changing this set is a governed change to DEC-029, not a documentation edit.
 
 ## Locked boundaries
 
@@ -54,9 +53,9 @@ MAYASABA ORCHESTRATOR
   ↓
 MCF-v2 COMMUNICATION FABRIC
   ↓
-┌──────────────┬──────────────┬──────────────┬──────────────┐
-│ Claude Code  │ Hermes Agent │ Kilo Code    │ Cline        │
-└──────────────┴──────────────┴──────────────┴──────────────┘
+┌──────────────┬──────────────┬──────────────┐
+│ Hermes Agent │ Kilo Code    │ OpenCode     │
+└──────────────┴──────────────┴──────────────┘
                          ↓
              WORKSPACE + EXECUTION
                          ↓
@@ -123,7 +122,7 @@ No subsystem may create a competing authority for another subsystem.
 
 ## MCF-v2
 
-MCF-v2 is the canonical communication protocol connecting Mayasaba and the four CLIs.
+MCF-v2 is the canonical communication protocol connecting Mayasaba and the three CLIs.
 
 It provides:
 
@@ -193,4 +192,4 @@ Architecture changes must be classified as ADDITIVE, REFINEMENT, REPLACEMENT or 
 
 ## Current status
 
-The repository is in a **documentation-first architecture baseline**. The next implementation gate is the actual MCF-v2 machine-readable schema package and Rust/SQLite conformance implementation, followed by the four adapters, council, tasks, execution, validation/repair and Control Room.
+The repository is in a **documentation-first architecture baseline**. The next implementation gate is the actual MCF-v2 machine-readable schema package and Rust/SQLite conformance implementation, followed by the three adapters, council, tasks, execution, validation/repair and Control Room.

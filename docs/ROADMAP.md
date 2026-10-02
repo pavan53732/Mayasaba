@@ -47,10 +47,9 @@
 ## M3 — Agent gateway
 
 M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
-- Claude Code CLI adapter
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
-- Cline adapter
+- OpenCode CLI adapter
 - runtime discovery
 - handshake
 - capability negotiation
@@ -68,7 +67,7 @@ M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
 - recovery rehydration
 
 ## M4.5 — Council collaboration proof (simulated)
-Before broad task execution or full Control Room implementation, prove Mayasaba's central collaboration loop with four deterministic simulated participants and the real CouncilService/MCF/context path:
+Before broad task execution or full Control Room implementation, prove Mayasaba's central collaboration loop with three deterministic simulated participants — one per supported agent under DEC-029 — and the real CouncilService/MCF/context path:
 - independent proposals on one shared project snapshot;
 - controller-assigned critique targets, references to prior positions, and rebuttal/revision;
 - a material unresolved question deduplicated and shown in a minimal Control Room question surface;

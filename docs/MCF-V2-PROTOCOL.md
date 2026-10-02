@@ -1,6 +1,6 @@
 # MCF-v2 Protocol Contract
 
-MCF-v2 is the single canonical communication protocol between Mayasaba and the four supported CLI agents.
+MCF-v2 is the single canonical communication protocol between Mayasaba and the three supported CLI agents.
 
 ## 1. Communication path
 

@@ -11,7 +11,7 @@ MCF-v2 remains the only canonical communication contract between Mayasaba and ag
 ## 2. Architectural invariants
 
 1. Mayasaba is a Windows-only local control plane.
-2. The initial agent set is Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline.
+2. The supported agent set is Hermes Agent CLI, Kilo Code CLI and OpenCode CLI (DEC-029).
 3. There is no fifth reasoning model inside Mayasaba.
 4. No uncontrolled direct agent-to-agent communication exists.
 5. MCF-v2 is the only canonical agent communication contract.

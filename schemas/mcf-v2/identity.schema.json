@@ -27,10 +27,9 @@
     },
     "agent_type": {
       "enum": [
-        "CLAUDE_CODE",
         "HERMES_AGENT",
         "KILO_CODE",
-        "CLINE",
+        "OPEN_CODE",
         null
       ]
     },

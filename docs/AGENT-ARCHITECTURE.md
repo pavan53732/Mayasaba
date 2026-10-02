@@ -25,9 +25,9 @@ The subsystem owns:
 
 It does not own requirements, architecture decisions, task truth, final validation, or certification.
 
-## Initial agents
+## Supported agents
 
-Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, and Cline.
+Hermes Agent CLI, Kilo Code CLI, and OpenCode CLI. See DEC-029.
 
 ## Internal topology
 

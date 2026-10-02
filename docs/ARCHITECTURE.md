@@ -2,18 +2,17 @@
 
 ## 1. System role
 
-Mayasaba is the deterministic local control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks, using four independent coding CLIs.
+Mayasaba is the deterministic local control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks, using three independent coding CLIs.
 
 It coordinates, but does not replace, the intelligence of:
 
-- Claude Code CLI
 - Hermes Agent CLI
 - Kilo Code CLI
-- Cline
+- OpenCode CLI
 
 ## 2. Architectural principle
 
-**One project reality, four independent intelligences.**
+**One project reality, three independent intelligences.**
 
 Agents do not share an implicit brain. Mayasaba maintains authoritative project facts, requirements, decisions, task ownership, context versions, workspace scope, execution evidence and validation state.
 
@@ -37,12 +36,12 @@ All agent communication is brokered through MCF-v2.
 │ protocol • routing • ACK • retry • dedupe • replay  │
 └───────────────────────┬──────────────────────────────┘
                         │
-          ┌─────────────┼─────────────┬─────────────┐
-          ▼             ▼             ▼             ▼
-       Claude         Hermes         Kilo          Cline
-       Adapter        Adapter        Adapter       Adapter
-          │             │             │             │
-          └─────────────┴─────────────┴─────────────┘
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+        Hermes         Kilo        OpenCode
+        Adapter        Adapter       Adapter
+           │             │             │
+           └─────────────┴─────────────┘
                         │
              ┌──────────▼──────────┐
              │ Workspace Manager   │

@@ -6,7 +6,7 @@
 The user can create a workspace, select a local Windows path, describe a software or local-artifact task, and start the applicable Mayasaba workflow.
 
 ### FR-002 Agent preflight
-Mayasaba detects the four supported CLIs, versions, executable paths, authentication/readiness, working-directory support, transports and capabilities at runtime.
+Mayasaba detects the three supported CLIs, versions, executable paths, authentication/readiness, working-directory support, transports and capabilities at runtime.
 
 ### FR-003 Independent analysis
 Each available agent can independently analyze the user request and scoped workspace facts before seeing other agents' proposals.
