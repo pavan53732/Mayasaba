@@ -2,7 +2,9 @@
 
 ## Purpose
 
-The Council Engine coordinates the three independent agents as a virtual council for user-authorized local work—including software engineering and other file-based tasks—without turning them into a single shared mind.
+The Council Engine coordinates the three agents as a virtual council for user-authorized local work—including software engineering and other file-based tasks—without turning them into a single shared mind.
+
+The three sessions are architecturally separate, but they are not three independent implementations: Kilo Code CLI is a fork of OpenCode CLI. Council deliberation must not treat agreement between Kilo and OpenCode as independent corroboration. Model/provider diversity across the three remains real and is the diversity the council relies on. See `ARCHITECTURE.md` §2.
 
 ## Deliberation model
 

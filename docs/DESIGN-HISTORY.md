@@ -24,6 +24,8 @@ The initial agent set is exactly Claude Code CLI, Hermes Agent CLI, Kilo Code CL
 ### D-003 — Mayasaba is a control plane
 Mayasaba is not a fifth AI brain. Agent intelligence remains independent.
 
+> **Refined 2026-10-03.** "Independent" here means each agent keeps its own model/provider, session and reasoning — not that the three are independent implementations. Kilo Code CLI is a fork of OpenCode CLI, so Kilo and OpenCode must not be treated as independent corroboration. The current statement of this is `ARCHITECTURE.md` §2 and `MASTER-SPECIFICATION.md` §1.
+
 ### D-004 — Council model
 Agents independently analyze, then propose, critique, rebut, revise and resolve disagreements. Material unresolved decisions can require user input.
 

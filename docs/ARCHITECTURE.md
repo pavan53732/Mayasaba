@@ -2,7 +2,7 @@
 
 ## 1. System role
 
-Mayasaba is the deterministic local control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks, using three independent coding CLIs.
+Mayasaba is the deterministic local control plane for user-authorized work on local files, including software engineering and document, research-report, and data tasks, using three coding CLIs.
 
 It coordinates, but does not replace, the intelligence of:
 
@@ -12,9 +12,11 @@ It coordinates, but does not replace, the intelligence of:
 
 ## 2. Architectural principle
 
-**One project reality, three independent intelligences.**
+**One project reality, three separate agent sessions.**
 
 Agents do not share an implicit brain. Mayasaba maintains authoritative project facts, requirements, decisions, task ownership, context versions, workspace scope, execution evidence and validation state.
+
+**Independence caveat.** The three sessions are architecturally separate — each holds its own model/provider choice, authentication, session and reasoning — but they are not three independent implementations. Kilo Code CLI is a fork of OpenCode CLI and shares its codebase lineage, config surface and much of its permission model. Do not treat Kilo and OpenCode as independent corroboration of each other in council deliberation: agreement between them is weaker evidence than agreement between either and Hermes. Model/provider diversity remains real and is the property the council actually relies on.
 
 All agent communication is brokered through MCF-v2.
 

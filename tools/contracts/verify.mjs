@@ -41,6 +41,51 @@ for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e
 const requiredRefs=workspace.schema_sources ?? [];
 for(const p of requiredRefs) if(!exists(p)) fail("Missing workspace schema source: "+p);
 
+// --- Agent adapter set (DEC-029): the closed agent set must not drift between schemas. ---
+const canonicalAgents=["HERMES_AGENT","KILO_CODE","OPEN_CODE"];
+const sameSet=(a,b)=>a.length===b.length&&canonicalAgents.every(x=>a.includes(x)&&b.includes(x));
+const agentEnums=[
+  ["schemas/agent-adapter-v1/adapter-types.schema.json",s=>s.properties.types.properties.AgentInstallation.properties.agent_type.enum],
+  ["schemas/agent-adapter-v1/native-event.schema.json",s=>s.properties.agent_type.enum],
+  ["schemas/agent-adapter-v1/probe-result.schema.json",s=>s.properties.agent_type.enum],
+  ["schemas/doctor-v1/doctor-report.schema.json",s=>s.properties.agents.items.properties.agent_type.enum],
+  ["schemas/mcf-v2/handshake.schema.json",s=>s.properties.agent_type.enum],
+  ["schemas/mcf-v2/identity.schema.json",s=>s.properties.agent_type.enum.filter(x=>x!==null)],
+];
+for(const [file,pick] of agentEnums){
+  const got=pick(read(file));
+  if(!sameSet(got,canonicalAgents)) fail(`Agent set drift in ${file}: [${got.join(",")}] != [${canonicalAgents.join(",")}]`);
+}
+const contract=read("schemas/agent-adapter-v1/native-transport-contract.json");
+const contractAgents=Object.keys(contract.agents);
+if(!sameSet(contractAgents,canonicalAgents)) fail(`Transport contract agent set drift: [${contractAgents.join(",")}]`);
+for(const [name,def] of Object.entries(contract.agents)){
+  if(!def.transport) fail(`Transport contract missing transport for ${name}`);
+}
+const transportEnum=read("schemas/agent-adapter-v1/probe-result.schema.json").properties.transport.enum;
+for(const name of canonicalAgents){
+  const t=contract.agents[name].transport;
+  if(!transportEnum.includes(t)) fail(`Contract transport ${t} (${name}) is not in probe-result transport enum`);
+}
+// The conformance YAML declares itself subordinate to the transport contract. No YAML parser is
+// available (this repo has zero dependencies), so guard the one dimension that actually drifts:
+// the agent set. Every canonical agent must appear as a top-level key, and no other agent may.
+const capYaml=fs.readFileSync(path.join(root,"schemas/mcf-v2/conformance/adapter-capabilities.yaml"),"utf8");
+for(const name of canonicalAgents){
+  if(!new RegExp(`^  ${name}:`,"m").test(capYaml)) fail(`Conformance YAML missing agent block: ${name}`);
+}
+const capAgentBlocks=[...capYaml.matchAll(/^  ([A-Z][A-Z0-9_]*):/gm)].map(m=>m[1]);
+for(const name of capAgentBlocks) if(!canonicalAgents.includes(name)) fail(`Conformance YAML declares non-canonical agent: ${name}`);
+
+// native_kind enum and the native->MCF mapping keys must stay in lockstep.
+const nativeKinds=read("schemas/agent-adapter-v1/native-event.schema.json").properties.native_kind.enum;
+const nativeMap=read("schemas/agent-adapter-v1/native-to-mcf.registry.json").mappings;
+for(const k of nativeKinds) if(!(k in nativeMap)) fail(`native_kind ${k} has no native-to-MCF mapping`);
+for(const k of Object.keys(nativeMap)) if(!nativeKinds.includes(k)) fail(`native-to-MCF mapping ${k} is not a native_kind`);
+for(const [k,v] of Object.entries(nativeMap)){
+  if(v!==null && !messages.includes(v)) fail(`native-to-MCF mapping ${k} -> ${v} is not an MCF message type`);
+}
+
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);

@@ -12,7 +12,7 @@ All Mayasaba source code, architecture, specifications, protocol schemas, tests,
 
 ## What Mayasaba is
 
-Mayasaba is a **control plane for three independent CLI agents**. It can coordinate user-authorized tasks on local files across supported task types; the available agent capabilities and evidence determine what can be completed and verified.
+Mayasaba is a **control plane for three CLI agents**. It can coordinate user-authorized tasks on local files across supported task types; the available agent capabilities and evidence determine what can be completed and verified.
 
 It is not a fifth AI brain. Each supported CLI keeps its own model/provider, context, reasoning, tools, authentication and runtime. Mayasaba supplies the shared deterministic workspace state, communication, orchestration, execution, validation and evidence systems.
 

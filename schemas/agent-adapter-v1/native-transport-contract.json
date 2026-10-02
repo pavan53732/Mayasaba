@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "authority": "schemas/agent-adapter-v1/native-transport-contract.json",
   "runtime_probe_authoritative": true,
   "agents": {
@@ -13,12 +13,49 @@
         "--format",
         "stream-json"
       ],
+      "resume": [
+        "chat",
+        "-q",
+        "<prompt>",
+        "--format",
+        "stream-json",
+        "--resume",
+        "<native_session_id>"
+      ],
       "version": [
         "--version"
       ],
       "auth_probe": "hermes doctor (diagnostic readiness probe); credentials are never copied into MCF payloads",
       "transport": "HERMES_STREAM_JSON",
-      "interrupt": "OS process cancellation; terminal result exit_code is reconciled with observed process state"
+      "interrupt": "OS process cancellation; terminal result exit_code is reconciled with observed process state",
+      "required_config": {
+        "updates.check": false
+      },
+      "config_rationale": "Hermes defaults updates.check to true and issues an outbound update check on chat startup; no launch flag disables it and --safe-mode does not either. Set it with `hermes config set updates.check false`. A local-first product must not ship an adapter whose default startup reaches the network.",
+      "isolation_flags": [
+        "--ignore-rules"
+      ],
+      "isolation_rationale": "Hermes auto-injects AGENTS.md (git-root to cwd chain), SOUL.md from HERMES_HOME, memory, .cursorrules and preloaded skills. --ignore-rules suppresses that injection and is the correct narrow control. Do NOT use --safe-mode: it implies --ignore-user-config, discards the default model and custom provider base_url, and fails the run with exit 1.",
+      "permission_enforcement": "adapter MUST NOT pass --yolo or --accept-hooks; both bypass approval prompts and would contradict controller-mediated execution. Fail admission when required execution mediation cannot be enforced.",
+      "remote_forbidden_commands": [
+        "send",
+        "slack",
+        "whatsapp",
+        "whatsapp-cloud",
+        "webhook",
+        "peer",
+        "gateway",
+        "portal",
+        "egress",
+        "proxy",
+        "cron",
+        "kanban",
+        "sync"
+      ],
+      "remote_forbidden_rationale": "These subcommands perform outbound messaging, service or credential-injection work. Product policy forbids the behavior; this list makes the prohibition explicit at the adapter boundary.",
+      "acp_supported": false,
+      "acp_rationale": "Hermes ACP builds its agent without skip_context_files/skip_memory, and HERMES_IGNORE_RULES does not gate that path, so ACP cannot suppress context injection. ACP is not admissible for Hermes until Hermes exposes a flag that gates context/memory injection on that path. stream-json is the sole Hermes transport.",
+      "output_contract": "chat -q --format stream-json emits newline-delimited JSON on stdout (record types include system/init, text, tool_use, tool_result and a terminal result carrying exit_code). Diagnostics and the session-id line go to stderr. The adapter must reconcile the terminal result exit_code with observed process state and must not infer session identity from stdout alone."
     },
     "KILO_CODE": {
       "executable": "kilo",
@@ -27,7 +64,9 @@
         "<prompt>",
         "--auto",
         "--format",
-        "json"
+        "json",
+        "--dir",
+        "<workspace>"
       ],
       "resume": [
         "run",
@@ -35,7 +74,9 @@
         "--session",
         "<native_session_id>",
         "--format",
-        "json"
+        "json",
+        "--dir",
+        "<workspace>"
       ],
       "version": [
         "--version"
@@ -44,12 +85,44 @@
         "auth"
       ],
       "transport": "KILO_JSON",
-      "remote_forbidden": [
-        "cloud",
-        "remote"
+      "acp": [
+        "acp"
       ],
-      "permission_enforcement": "adapter must configure native permissions so terminal/command operations are controller-mediated or fail admission",
-      "auth_probe": "readiness probe; kilo auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result"
+      "workspace_flag": "--dir <workspace>; the adapter MUST pass an ABSOLUTE path",
+      "workspace_rationale": "Verified against the installed binary (kilo 7.8.1, `kilo run --help`) and its embedded resolver, which mirrors the OpenCode 1.x lineage: `if (!dir) return attach ? undefined : root; ... process.chdir(isAbsolute(dir) ? dir : join(root, dir))`. An absolute --dir is resolved directly and is therefore safe. A RELATIVE --dir is joined onto the root, which Kilo derives from the environment's PWD rather than the true working directory, so a stale PWD would resolve the workspace to the wrong place. Pass an absolute path; do not rely on a relative one.",
+      "remote_forbidden_commands": [
+        "cloud",
+        "remote",
+        "serve",
+        "attach",
+        "github",
+        "pr",
+        "daemon",
+        "import"
+      ],
+      "remote_forbidden_flags": [
+        "--share",
+        "--cloud-fork",
+        "--attach"
+      ],
+      "remote_forbidden_rationale": "--share uploads the session to a public share URL, --cloud-fork fetches a session from cloud, --attach connects to a running kilo server, and the listed subcommands start services or reach remote endpoints. Kilo is an OpenCode fork and carries the same cloud/share surface, so its prohibition list is kept aligned with OPEN_CODE.",
+      "required_environment": {
+        "KILO_DISABLE_CLAUDE_CODE": "1",
+        "KILO_DISABLE_CLAUDE_CODE_SKILLS": "1",
+        "KILO_DISABLE_CLAUDE_CODE_PROMPT": "1",
+        "KILO_DISABLE_DEFAULT_PLUGINS": "1",
+        "KILO_DISABLE_AUTOUPDATE": "1",
+        "KILO_AUTO_SHARE": "0",
+        "KILO_DISABLE_SHARE": "1"
+      },
+      "environment_rationale": "Kilo is a fork of OpenCode and by default ingests ~/.claude/CLAUDE.md, ~/.claude/skills and ~/.claude.json, which are outside Mayasaba-authorized scope. Kilo reads the KILO_-prefixed variables; OPENCODE_DISABLE_CLAUDE_CODE has no effect on the Kilo binary and must not be relied on. Default plugins and autoupdate are disabled so adapter behavior stays deterministic and offline. KILO_AUTO_SHARE=0 closes the env share path and KILO_DISABLE_SHARE=1 is Kilo's own hard kill switch for the share subsystem; both are required because the config key alone is not the only trigger.",
+      "required_config": {
+        "share": "disabled"
+      },
+      "config_rationale": "Session upload in Kilo has three independent triggers, and the adapter must close all three. The share step runs unless `config.share !== \"auto\" && !autoShare && !args.share` — i.e. a session is uploaded when the config key share is \"auto\", OR the KILO_AUTO_SHARE env var is truthy, OR the --share flag is passed. Blocking only the flag (remote_forbidden_flags) leaves the config and env paths open. The config value is a STRING enum (\"manual\" default, \"auto\", \"disabled\"), not a boolean: the adapter must set share: \"disabled\", which is also the value Kilo itself tests for when deciding whether the share action is enabled. This mirrors OPEN_CODE, which is the same codebase lineage.",
+      "permission_enforcement": "HARD ADMISSION PRECONDITION: --auto is retained in the launch vector, but the adapter MUST fail admission for any task requiring execution mediation unless it first proves that Kilo's resolved permission map denies privileged terminal/command operations. --auto approves everything not explicitly denied, so a permissive native config would otherwise let Kilo approve shell execution and bypass the controller gate (DEC-024). Verify the resolved permission map from the probe; do not assume Kilo's defaults are restrictive.",
+      "auth_probe": "readiness probe; kilo auth is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result",
+      "output_contract": "run --format json emits a raw newline-delimited JSON event stream (observed types include step_start, step_finish, text, tool_use, reasoning and error). There is no session-level start/end record, and tool call plus result are fused into a single tool_use record. The adapter must normalize the event sequence, must not assume a single result object, and must not treat the process exit code as the sole completion signal."
     },
     "OPEN_CODE": {
       "executable": "opencode",
@@ -84,25 +157,47 @@
         "--cwd",
         "<workspace>"
       ],
-      "remote_forbidden": [
+      "version_gate": {
+        "admitted_lines": [
+          "1.x"
+        ],
+        "unverified_lines": [
+          "2.x"
+        ],
+        "workspace_flag_by_line": {
+          "1.x": "--dir <workspace>; an absolute path is resolved directly",
+          "2.x": "no --dir flag exists on run (or on any command); set the child process working directory instead"
+        },
+        "pwd_hazard": "On 2.x the run command resolves its root as `options.root ?? process.env.PWD ?? process.cwd()` and never chdirs. A spawned child that inherits a stale PWD therefore runs against the wrong directory, and `opencode run` offers no flag to override it. The adapter MUST clear or set PWD to the workspace in the child environment, in addition to setting the working directory. This is a scope-integrity issue, not a cosmetic one: an inherited PWD can point the agent outside the authorized workspace.",
+        "rationale": "Verified against source at both refs. On 1.x, packages/opencode/src/cli/cmd/run.ts defines `.option(\"dir\", ...)` and chdirs to `path.isAbsolute(args.dir) ? args.dir : path.join(root, args.dir)`, so an absolute --dir is safe. On 2.x the CLI was restructured: packages/cli/src/commands/commands.ts defines no `dir` flag on run or on any other command, and the root-level `directory` positional is consumed only by the TUI default handler (packages/cli/src/commands/handlers/default.ts chdirs to it) and by the v1 compatibility bridge (packages/cli/src/run/v1.ts, marked `@internal Used only by the V1 command boundary`); the native run handler (packages/cli/src/commands/handlers/run.ts) does not chdir. The 2.x line is tagged (v2.0.16 through v2.0.22) but is NOT published to npm: the opencode-ai registry carries only majors 0 and 1, with latest = 1.18.34. The adapter must branch on the probed version rather than assume one line, and must fail closed on a version it cannot classify."
+      },
+      "remote_forbidden_commands": [
         "serve",
         "web",
         "attach",
-        "share",
         "github"
       ],
+      "remote_forbidden_flags": [
+        "--share"
+      ],
+      "remote_forbidden_rationale": "serve, web, attach and github are real subcommands that start network services or reach external endpoints. share is NOT a subcommand: it is a boolean flag on run that uploads the session to a public share URL. Blocking the token 'share' as a subcommand would not prevent `opencode run --share`, so commands and flags are listed separately.",
       "required_environment": {
         "OPENCODE_DISABLE_CLAUDE_CODE": "1",
         "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
-        "OPENCODE_DISABLE_AUTOUPDATE": "1"
+        "OPENCODE_DISABLE_AUTOUPDATE": "1",
+        "OPENCODE_AUTO_SHARE": "0"
       },
-      "environment_rationale": "OPENCODE_DISABLE_CLAUDE_CODE (OpenCode's own documented variable name) stops OpenCode ingesting ~/.claude/CLAUDE.md and .claude/skills. Those paths are outside Mayasaba-authorized scope and must never act as an instruction source. Default plugins and autoupdate are disabled so adapter behavior stays deterministic and offline.",
+      "required_config": {
+        "share": "disabled"
+      },
+      "config_rationale": "Session upload has three independent triggers, and the adapter must close all three. In run.ts the share step runs unless `cfg.data.share !== \"auto\" && !flags.autoShare && !args.share` — i.e. a session is uploaded when the config key share is \"auto\", OR the OPENCODE_AUTO_SHARE env var is truthy, OR the --share flag is passed. Blocking only the flag (remote_forbidden_flags) and the env var (required_environment) leaves the config path open, so the adapter must additionally require share: \"disabled\" in config. The documented values are \"manual\" (default), \"auto\" and \"disabled\"; only \"disabled\" is admissible. This is a config VALUE, not a flag, and it is a STRING enum — the same shape as KILO_CODE's share setting, which shares this codebase lineage.",
+      "environment_rationale": "OPENCODE_DISABLE_CLAUDE_CODE (OpenCode's own documented variable name) stops OpenCode ingesting ~/.claude/CLAUDE.md and .claude/skills. Those paths are outside Mayasaba-authorized scope and must never act as an instruction source. Default plugins and autoupdate are disabled so adapter behavior stays deterministic and offline. AUTO_SHARE is disabled so a session cannot be uploaded through the config/env path when the --share flag is already blocked.",
       "determinism_flags": [
         "--pure"
       ],
       "permission_enforcement": "do not pass --auto; select an explicit agent via --agent whose permission map denies privileged operations, otherwise fail admission for tasks requiring execution mediation",
       "auth_probe": "readiness probe; opencode auth login is interactive configuration, so the adapter must not treat its invocation as a machine-readable auth result",
-      "output_contract": "run --format accepts default|json and emits a raw JSON event stream, not a fixed-shape document; the adapter must normalize the typed event sequence and must not assume a single result object"
+      "output_contract": "run --format accepts default|json and emits a raw JSON event stream, not a fixed-shape document. Observed event types are tool_use, step_start, step_finish, text, reasoning and error, with no guaranteed terminal record. The adapter MUST treat the process exit code as non-authoritative, treat exit-0-with-empty-output as a failure, derive completion from observed event content rather than a terminator record, and preserve subagent-origin parts explicitly because parts are filtered to the root session."
     }
   }
 }

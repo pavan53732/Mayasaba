@@ -1,14 +1,44 @@
-version: 1
+version: 2
+# Conformance summary. The authoritative adapter facts live in
+# schemas/agent-adapter-v1/native-transport-contract.json; this file must not contradict it.
 agents:
   HERMES_AGENT:
     transport: HERMES_STREAM_JSON
     execution_mediation_required: true
+    acp_supported: false
+    isolation_flags:
+      - "--ignore-rules"
+    required_config:
+      updates.check: false
   KILO_CODE:
     transport: KILO_JSON
     execution_mediation_required: true
+    acp_supported: true
+    workspace_flag: "--dir (absolute path required)"
+    required_environment:
+      KILO_DISABLE_CLAUDE_CODE: "1"
+      KILO_DISABLE_CLAUDE_CODE_SKILLS: "1"
+      KILO_DISABLE_CLAUDE_CODE_PROMPT: "1"
+      KILO_DISABLE_DEFAULT_PLUGINS: "1"
+      KILO_DISABLE_AUTOUPDATE: "1"
+      KILO_AUTO_SHARE: "0"
+      KILO_DISABLE_SHARE: "1"
+    required_config:
+      share: disabled
   OPEN_CODE:
     transport: OPEN_CODE_JSON
     execution_mediation_required: true
+    acp_supported: true
+    admitted_version_lines:
+      - "1.x"
+    workspace_flag:
+      "1.x": "--dir (absolute path required)"
+      "2.x": none; set the child working directory and clear PWD
     required_environment:
       OPENCODE_DISABLE_CLAUDE_CODE: "1"
+      OPENCODE_DISABLE_DEFAULT_PLUGINS: "1"
+      OPENCODE_DISABLE_AUTOUPDATE: "1"
+      OPENCODE_AUTO_SHARE: "0"
+    required_config:
+      share: disabled
 rule: runtime probe results override documentation claims

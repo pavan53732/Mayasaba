@@ -7,7 +7,7 @@
   "properties":{
     "agent_type":{"enum":["HERMES_AGENT","KILO_CODE","OPEN_CODE"]},
     "transport":{"type":"string"},
-    "native_kind":{"enum":["SESSION_STARTED","TEXT","TOOL_CALL","TOOL_RESULT","FILE_CHANGE","COMMAND_REQUEST","COMMAND_RESULT","ERROR","RESULT","SESSION_ENDED","HEARTBEAT","UNKNOWN"]},
+    "native_kind":{"enum":["SESSION_STARTED","TEXT","REASONING","STEP_START","STEP_FINISH","TOOL_CALL","TOOL_RESULT","FILE_CHANGE","COMMAND_REQUEST","COMMAND_RESULT","ERROR","RESULT","SESSION_ENDED","HEARTBEAT","UNKNOWN"]},
     "native_session_id":{"type":["string","null"]},
     "received_at":{"type":"string","format":"date-time"},
     "raw_ref":{"type":"string"},

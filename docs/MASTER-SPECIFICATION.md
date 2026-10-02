@@ -2,11 +2,11 @@
 
 ## 1. Product definition
 
-Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. A user selects a local workspace and asks for work on its files. Supported work includes software engineering and other local artifact tasks such as documents, research reports, data cleanup, and code refactors. Mayasaba coordinates three independent coding CLIs—Hermes Agent CLI, Kilo Code CLI, and OpenCode CLI—through deterministic task, workspace, policy, execution, validation, repair and evidence workflows.
+Mayasaba is a Windows-only, local-first workspace control plane for user-authorized work on files on the user's PC. A user selects a local workspace and asks for work on its files. Supported work includes software engineering and other local artifact tasks such as documents, research reports, data cleanup, and code refactors. Mayasaba coordinates three coding CLIs—Hermes Agent CLI, Kilo Code CLI, and OpenCode CLI—through deterministic task, workspace, policy, execution, validation, repair and evidence workflows.
 
 For a user-requested research task, Mayasaba may read public web sources and save the resulting report and citations locally. This is read-only retrieval, not permission to send messages, publish, submit forms, purchase, change accounts, or control unrelated applications.
 
-Mayasaba is not a fifth AI brain. The three agents retain independent intelligence, model/provider choice, tools, authentication, sessions and reasoning.
+Mayasaba is not a fifth AI brain. The three agents retain their own intelligence, model/provider choice, tools, authentication, sessions and reasoning. They are architecturally separate sessions, not three independent implementations: Kilo Code CLI is a fork of OpenCode CLI, so Kilo and OpenCode must not be treated as independent corroboration of each other. Model/provider diversity across the three remains real.
 
 ## 2. Hard product boundaries
 
