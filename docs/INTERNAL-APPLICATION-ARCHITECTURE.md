@@ -287,6 +287,26 @@ Unsubmitted user input only.
 
 React must not independently invent lifecycle state.
 
+### Chat and intake composers
+
+Two distinct composer surfaces exist and must not be conflated:
+
+- **Initial Intake Composer** — shown when creating a new project. The user states the idea/concept and selects the local workspace. On submission the text creates `ProjectBrief` v1. It is project truth from that point on, not a chat message.
+- **Ongoing Chat Composer** — available after project creation. Free-text input creates a `UserContribution` with an advisory classification; the owning service decides whether authoritative state changes. It is never a second project-creation path.
+
+Ownership is split so the transcript is never treated as project truth:
+
+| Concern | Owner |
+|---|---|
+| User input interface / draft | Chat composer (React, draft state only) |
+| Project creation | ProjectService |
+| Durable representation of user intent | ProjectBrief |
+| Structured requirements derived from the brief | RequirementService |
+| Analysis context snapshot | ContextService |
+| Deliberation over the frozen context | CouncilService |
+
+The composer writes no requirement, decision or epoch directly. See `MEMORY-CONTEXT.md` and DEC-030/DEC-031.
+
 ## 9. Realtime event consumption
 
 The UI maintains a project event cursor.

@@ -63,7 +63,7 @@ Submitting an answer calls the existing `answer_user_question` command. Show the
 
 ## Intake and free-text contribution
 
-The intake surface is where the user states the project idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version and displayed back as project truth, not as a chat message. Show the brief version and mark the version that became the analysis anchor when DISCOVERY closes.
+The intake surface is the Control Room's Initial Intake Composer, shown when creating a new project. The user states the project idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version and displayed back as project truth, not as a chat message. Show the brief version and mark the version that became the analysis anchor when DISCOVERY closes.
 
 After creation, free-text input is recorded as a `UserContribution` and displayed with its advisory classification and its outcome. Display the outcome the owning service actually produced, not the advisory label: a contribution the service found non-material must not appear to have changed project truth. When a contribution does change truth, show the resulting epoch, the affected scope and the context regeneration; when it does not, show it as timeline/commentary.
 
