@@ -15,6 +15,8 @@ It tells an AI agent:
 
 These instructions apply to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline, and any future coding agent explicitly admitted to the project.
 
+This file is canonical for all rules shared between agents. Claude Code additionally has a Claude-specific overlay in `CLAUDE.md`; that overlay must not contradict this file, and any rule added here applies to every agent including Claude Code.
+
 ## 2. Repository identity
 
 Repository: pavan53732/Mayasaba
@@ -26,6 +28,8 @@ Initial supported coding agents:
 2. Hermes Agent CLI
 3. Kilo Code CLI
 4. Cline
+
+Codex CLI is not part of the initial supported agent set.
 
 Mayasaba is not a fifth AI brain.
 
@@ -190,6 +194,8 @@ After implementation:
 - verify no unrelated changes
 - update documentation when behavior changed
 
+Before adding a new service, subsystem, schema, event, state or protocol message, determine whether an existing canonical concept already covers it. Avoid speculative abstractions.
+
 ## 11. Frontend rules
 
 React is presentation and interaction state, not project truth.
@@ -211,6 +217,10 @@ Material mutations must pass through:
 identity + project + workspace + capability + policy + task lease + current context/epoch.
 
 Long-running operations must be cancellable and observable.
+
+SQLite is the durable local source of truth. React state is presentation/query state; authoritative lifecycle, task, agent, execution, validation and certification state belongs to the Rust/domain/persistence layer. Material state changes follow the controller's transactional orchestration and event/outbox rules.
+
+Preserve immutable history. Do not rewrite historical events to conceal failures or supersessions.
 
 ## 13. Agent behavior inside the repository
 
@@ -320,7 +330,25 @@ Determine whether it is:
 
 Then update the canonical source and affected dependents through the proper change process.
 
-## 20. Final rule
+## 20. Failure and repair behavior
+
+When something fails:
+
+- preserve the original failure evidence;
+- identify a reproducible failure fingerprint when possible;
+- diagnose before changing code;
+- make the smallest justified repair;
+- rerun the failing validation;
+- run regression validation;
+- stop after bounded repeated failures rather than endlessly rewriting.
+
+Never suppress a failure, weaken an assertion solely to pass, remove a failing test without a justified requirement change, replace unrelated code to hide a defect, or report a repair as successful without validation evidence.
+
+## 21. Working principle
+
+**Inspect → synchronize → plan minimally → implement → validate → inspect diff → report evidence → hand off.**
+
+## 22. Final rule
 
 When uncertain, prefer:
 repository evidence > explicit contract > deterministic validation > assumption.
