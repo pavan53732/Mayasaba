@@ -425,6 +425,7 @@ Configuration groups:
 - agent runtime limits
 - communication
 - retry/timeout
+- council (round cap and convergence policy)
 - workspace
 - execution
 - policy
@@ -719,6 +720,8 @@ If implementation needs behavior not specified by these documents, it is an arch
 ## 27. Command/query/event ownership map
 
 The machine-readable bridge contract is `schemas/tauri-bridge-v1/bridge.schema.json`. It is the single source for command, query and UI event identifiers.
+
+Admission is not a bridge command. `prepare_workspace`, `checkpoint_workspace` and `rollback_workspace` are owned by WorkspaceService, which persists the corresponding admission record as part of the operation rather than exposing the gate as a separately invocable command. The record is surfaced to the UI through `ADMISSION_RECORDED`; the frontend never decides a gate and never submits a verdict.
 
 ### Command ownership
 

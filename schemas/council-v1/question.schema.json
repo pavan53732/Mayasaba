@@ -6,6 +6,7 @@
   "properties":{
     "question_id":{"type":"string","format":"uuid"},"project_id":{"type":"string","format":"uuid"},"round_id":{"type":"string","format":"uuid"},
     "body":{"type":"string"},"normalized_key":{"type":"string"},"impact":{"enum":["LOW","MEDIUM","HIGH","BLOCKING"]},
-    "affected_agents":{"type":"array","items":{"type":"string","format":"uuid"}},"answer":{"type":["string","null"]},"status":{"enum":["OPEN","ANSWERED","RESOLVED_BY_EVIDENCE","CANCELED"]}
+    "affected_agents":{"type":"array","items":{"type":"string","format":"uuid"}},"answer":{"type":["string","null"]},"status":{"enum":["OPEN","ANSWERED","RESOLVED_BY_EVIDENCE","CANCELED"]},
+    "escalation_ref":{"type":["string","null"],"format":"uuid"}
   }
 }

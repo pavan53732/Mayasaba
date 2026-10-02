@@ -25,7 +25,7 @@ Software-engineering tasks retain the full requirements, product/UX, technology 
 
 ## Council messages
 
-IDEA, PROPOSAL, QUESTION, CRITIQUE, COUNTERARGUMENT, REBUTTAL, REVISION, AGREE, DISAGREE, BLOCK, ACCEPT, REJECT, ABSTAIN, DECISION, LOCK
+IDEA, PROPOSAL, QUESTION, CRITIQUE, COUNTERARGUMENT, REBUTTAL, REVISION, AGREE, DISAGREE, BLOCK, ACCEPT, REJECT, ABSTAIN, DECISION, LOCK, SYNTHESIS
 
 ### Position and review-target semantics
 
@@ -37,7 +37,7 @@ Each persisted agent position is immutable and carries these semantic fields:
 - `author_agent_id` and `source_message_id`: must match the MCF sender and source envelope;
 - `position_type`: must match the MCF `message_type`;
 - `body`: concise, user-visible conclusion and rationale, not private chain-of-thought;
-- `responds_to_position_ids`: IDs of earlier positions this contribution addresses; this is empty for an initial IDEA/PROPOSAL and required for CRITIQUE, COUNTERARGUMENT, REBUTTAL, REVISION, AGREE, DISAGREE, BLOCK, ACCEPT, REJECT, ABSTAIN and agent DECISION/LOCK candidates; a QUESTION retains its source position or task reference;
+- `responds_to_position_ids`: IDs of earlier positions this contribution addresses; this is empty for an initial IDEA/PROPOSAL and required for CRITIQUE, COUNTERARGUMENT, REBUTTAL, REVISION, AGREE, DISAGREE, BLOCK, ACCEPT, REJECT, ABSTAIN, SYNTHESIS and agent DECISION/LOCK candidates; a QUESTION retains its source position or task reference;
 - `claims`: claim ID and statement, with `evidence_refs` plus relevant requirement/contract references; an unsupported claim must be labeled as an assumption rather than presented as verified evidence;
 - `supersedes_position_id`: optional reference when a revision replaces an earlier position.
 
@@ -52,6 +52,7 @@ Message-type rules:
 | `AGREE`, `DISAGREE`, `BLOCK`, `ACCEPT`, `REJECT`, `ABSTAIN` | Records a reasoned stance on one or more referenced positions; it is not itself a controller decision. |
 | `QUESTION` | Creates a CouncilService question candidate linked to its source position; it is not an automatic user prompt. |
 | `DECISION`, `LOCK` | Agent-submitted candidates only; neither creates an authoritative decision nor a HARD_LOCK. |
+| `SYNTHESIS` | A merge of two or more referenced positions, submitted only by the round's temporary chair/synthesizer. Cites every contributing position in `responds_to_position_ids`. It is a proposed merge, not an authoritative decision, and it does not itself resolve a disagreement. |
 
 Transport ACK/NACK reports delivery state, not agreement or a council stance.
 
@@ -70,6 +71,28 @@ OPEN → RESPONSES_COLLECTING → CRITIQUE → REBUTTAL → REVISION → DISAGRE
 USER_INPUT_REQUIRED and explicit timeout/non-participation outcomes are supported.
 
 Silence is not agreement.
+
+### Termination
+
+A round ends for exactly one reason, recorded as the round's `outcome_type`:
+
+| Outcome | Meaning |
+|---|---|
+| `CONVERGED` | The position set reached a fixpoint: a full round produced no new or changed position. |
+| `SYNTHESIZED` | The round closed on a chair-submitted `SYNTHESIS` that merges the surviving positions. |
+| `CAP_REACHED` | `round_index` reached `max_rounds` before convergence. |
+| `ESCALATED` | Material disagreement survived review and requires a user decision. |
+| `SEALED_WITH_OPEN_QUESTION` | The round sealed with a question still open; the project shows WAITING_FOR_USER. |
+
+Termination uses convergence first and the round cap as a backstop. Convergence is a fixpoint test over the position set, not a count of agreeing agents: this is what keeps termination consistent with the rule below that simple majority voting is never the sole architecture authority. The cap (`max_rounds`, default 5) guarantees termination when the fixpoint test never fires; reaching the cap is not by itself evidence of disagreement, so `CAP_REACHED` is distinct from `ESCALATED`.
+
+### Escalation
+
+When a round ends `ESCALATED`, CouncilService emits `COUNCIL_USER_INPUT_REQUIRED` and persists a structured escalation packet validated by `schemas/council-v1/escalation.schema.json`. The packet carries the competing positions with their strongest arguments, a conflict matrix naming the requirement IDs actually in dispute and each side's stance, a non-authoritative default recommendation, and a timeout behavior fixed at `PAUSE`.
+
+The packet's recommendation is advisory: it is not a decision, and it never carries authority. `timeout_behavior` is constrained to `PAUSE` by the schema so that no answer, timeout or silence can be converted into assent.
+
+A round that ends `SEALED_WITH_OPEN_QUESTION` links its question to the packet through the question's `escalation_ref`.
 
 ## Independent-first rule
 
@@ -139,3 +162,5 @@ The Control Room displays model-provided messages, conclusions, rationales, tool
 ## Temporary chair
 
 One participating agent may act as temporary council chair/synthesizer for a round. This does not create a fifth intelligence or central reasoning model.
+
+The chair may submit a `SYNTHESIS` merging positions from other participants. A synthesis is a proposed merge: it cites every contributing position, it is not an authoritative decision, and it does not by itself close a material disagreement. The chair holds no vote, tie-break or override authority, and a synthesis by the chair of its own position alone is not a synthesis.

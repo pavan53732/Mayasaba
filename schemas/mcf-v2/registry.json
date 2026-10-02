@@ -46,6 +46,7 @@
     "ABSTAIN",
     "DECISION",
     "LOCK",
+    "SYNTHESIS",
     "TASK",
     "TASK_ACCEPT",
     "TASK_REJECT",
@@ -330,6 +331,7 @@
     "ABSTAIN": "council",
     "DECISION": "council",
     "LOCK": "council",
+    "SYNTHESIS": "council",
     "TASK": "task",
     "TASK_ACCEPT": "task",
     "TASK_REJECT": "task",
@@ -390,6 +392,7 @@
     "ABSTAIN": "COUNCIL",
     "DECISION": "COUNCIL",
     "LOCK": "COUNCIL",
+    "SYNTHESIS": "COUNCIL",
     "TASK": "TASK_CONTROL",
     "TASK_ACCEPT": "TASK_CONTROL",
     "TASK_REJECT": "TASK_CONTROL",
@@ -428,7 +431,8 @@
     "repair": "crates/core",
     "context": "crates/core",
     "barrier": "crates/council",
-    "evidence": "crates/evidence"
+    "evidence": "crates/evidence",
+    "workspace": "crates/workspace"
   },
   "event_to_ui": {
     "INTENT_RECORDED": "COMMUNICATION_CHANGED",
@@ -542,6 +546,7 @@
     "ARTIFACT_PUBLISHED": "ARTIFACT_PUBLISHED",
     "EVIDENCE_PUBLISHED": "EVIDENCE_PUBLISHED",
     "REVIEW_RECORDED": "REVIEW_RECORDED",
-    "CERTIFICATION_GRANTED": "PROJECT_UPDATED"
+    "CERTIFICATION_GRANTED": "PROJECT_UPDATED",
+    "ADMISSION_RECORDED": "TASK_CHANGED"
   }
 }

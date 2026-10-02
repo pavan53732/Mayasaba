@@ -45,6 +45,7 @@
     "ABSTAIN": "council-round.schema.json",
     "DECISION": "council-round.schema.json",
     "LOCK": "council-round.schema.json",
+    "SYNTHESIS": "council-round.schema.json",
     "TASK": "task.schema.json",
     "TASK_ACCEPT": "task-lease.schema.json",
     "TASK_REJECT": "task-lease.schema.json",

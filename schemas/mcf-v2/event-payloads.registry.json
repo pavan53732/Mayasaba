@@ -115,6 +115,7 @@
     "ARTIFACT_PUBLISHED": "common-event.schema.json",
     "EVIDENCE_PUBLISHED": "common-event.schema.json",
     "REVIEW_RECORDED": "common-event.schema.json",
-    "CERTIFICATION_GRANTED": "common-event.schema.json"
+    "CERTIFICATION_GRANTED": "common-event.schema.json",
+    "ADMISSION_RECORDED": "common-event.schema.json"
   }
 }

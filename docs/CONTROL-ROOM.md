@@ -103,7 +103,9 @@ Round-by-round view of:
 - questions
 - decisions
 - locks
+- syntheses
 - participation status
+- round termination outcome and reason
 
 ## Evidence view
 

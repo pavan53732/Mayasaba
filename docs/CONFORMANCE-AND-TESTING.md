@@ -82,6 +82,11 @@ Must prove:
 - outside-scope escalation
 - process cleanup
 - preview and recovery behavior for bulk/destructive data edits
+- an `ADMITTED` admission record cannot carry a `FAIL` check, and a `REFUSED` record carries at least one reason
+- a lease is never issued against a non-`ADMITTED` `WORKSPACE_ADMISSION`
+- an integration whose base checkpoint no longer matches the workspace is `REFUSED` rather than integrated
+- a re-evaluation supersedes the prior admission instead of rewriting it
+- a changeset with no `ADMITTED` `INTEGRATION_ADMISSION` blocks certification
 
 ## Software-engineering loop tests
 
@@ -107,6 +112,17 @@ Use three deterministic simulated participants — one per supported agent under
 8. agent-sent DECISION/LOCK messages cannot create an authoritative decision or HARD_LOCK without the controller/user decision path.
 
 The test must use only existing MCF-v2 message types and payload schemas. It demonstrates the collaboration and user-answer flow without modifying the MCF-v2 envelope or payload contract.
+
+## Council termination and escalation tests
+
+Must prove:
+
+1. a round advances only while `round_index < max_rounds`; a round at the cap cannot advance and must close or escalate;
+2. a round whose position set reaches a fixpoint terminates as `CONVERGED` before the cap, and the fixpoint test is not satisfied by agents agreeing by count;
+3. reaching the cap without convergence is recorded as `CAP_REACHED`, and is not conflated with `ESCALATED`;
+4. an escalation packet validates against `schemas/council-v1/escalation.schema.json`, its conflict matrix cites only requirement IDs actually in dispute, and its recommendation is never persisted as a decision;
+5. a `SYNTHESIS` position is accepted only from the round's temporary chair, cites every contributing position, and is rejected when it merges only the chair's own position;
+6. an escalated question that times out remains open, and the timeout is never recorded or rendered as an answer or as assent.
 
 ## Anti-hallucination tests
 

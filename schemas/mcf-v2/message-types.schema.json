@@ -38,6 +38,7 @@
     "ABSTAIN",
     "DECISION",
     "LOCK",
+    "SYNTHESIS",
     "TASK",
     "TASK_ACCEPT",
     "TASK_REJECT",

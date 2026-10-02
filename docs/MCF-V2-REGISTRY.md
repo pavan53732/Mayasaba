@@ -23,7 +23,7 @@ This document is the human-readable index of the machine-readable MCF-v2 registr
 `SYNC_REQUEST`, `SYNC_RESPONSE`, `STATE_DIGEST`, `CONTEXT_UPDATE`, `STALE_CONTEXT`, `EPOCH_CHANGED`
 
 ### Council
-`IDEA`, `PROPOSAL`, `QUESTION`, `CRITIQUE`, `COUNTERARGUMENT`, `REBUTTAL`, `REVISION`, `AGREE`, `DISAGREE`, `BLOCK`, `ACCEPT`, `REJECT`, `ABSTAIN`, `DECISION`, `LOCK`
+`IDEA`, `PROPOSAL`, `QUESTION`, `CRITIQUE`, `COUNTERARGUMENT`, `REBUTTAL`, `REVISION`, `AGREE`, `DISAGREE`, `BLOCK`, `ACCEPT`, `REJECT`, `ABSTAIN`, `DECISION`, `LOCK`, `SYNTHESIS`
 
 ### Task/handoff
 `TASK`, `TASK_ACCEPT`, `TASK_REJECT`, `TASK_LEASE`, `TASK_LEASE_RENEW`, `TASK_RELEASE`, `TASK_PROGRESS`, `HANDOFF_REQUEST`, `HANDOFF_ACCEPT`, `HANDOFF_REJECT`
@@ -41,6 +41,8 @@ The material-action chain is no longer prose-only. Each stage maps to a canonica
 `INTENT_RECORDED → ROUTE_RESOLVED → MESSAGE_PERSISTED → MESSAGE_QUEUED → MESSAGE_DISPATCHED → MESSAGE_RECEIVED → MESSAGE_ACKED → CONTEXT_VALIDATED → AUTHORIZATION_VALIDATED → LEASE_VALIDATED → ACTION_STARTED → ACTION_PROGRESS → ACTION_COMPLETED/ACTION_FAILED → RESULT_PERSISTED → EVIDENCE_CAPTURED → VALIDATION_REQUESTED → VALIDATION_COMPLETED → STATE_COMMITTED/REPAIR_STARTED → PARTICIPANTS_SYNCED → TASK_CYCLE_CLOSED`.
 
 The complete event enum is in `schemas/mcf-v2/registry.json`.
+
+Workspace and integration admission emit `ADMISSION_RECORDED` (owner `crates/workspace`), which carries the admission verdict for either gate. It is not a stage in the material-action chain; it is the durable record that a gate decided.
 
 ## Registry ownership
 

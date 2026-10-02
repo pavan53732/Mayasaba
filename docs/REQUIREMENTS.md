@@ -18,7 +18,7 @@ Mayasaba detects the three supported CLIs, versions, executable paths, authentic
 Each available agent can independently analyze the user request and scoped workspace facts before seeing other agents' proposals.
 
 ### FR-004 Council deliberation
-Agents can propose, question, critique, rebut, revise, agree, disagree, block, accept, reject and abstain through MCF-v2.
+Agents can propose, question, critique, rebut, revise, agree, disagree, block, accept, reject, abstain and synthesize through MCF-v2. Deliberation terminates on convergence of the position set, with a bounded round cap as a backstop; the round records exactly one termination outcome.
 
 ### FR-005 Targeted interview
 Mayasaba clusters and deduplicates agent questions, removes questions answerable from evidence, and asks the user only material unresolved questions.

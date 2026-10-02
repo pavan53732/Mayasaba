@@ -26,6 +26,8 @@ Before an agent receives a lease:
 - protected paths determined
 - workspace lease bound to task and epoch
 
+These checks are not a convention: they are recorded as an admission decision. WorkspaceService evaluates each check and persists exactly one `admissions` record of kind `WORKSPACE_ADMISSION` with a per-check status and a single `ADMITTED` / `REFUSED` / `BLOCKED` verdict, validated by `schemas/workspace-v1/admission.schema.json` and announced by `ADMISSION_RECORDED`. A lease is issued only against an `ADMITTED` record. A refusal is a durable artifact carrying its reasons, not a silent no-op.
+
 ## Change collection
 A changeset records changed paths, diff/checkpoint/commit references, task/lease/session identity, epoch/context and validation evidence.
 
@@ -38,6 +40,10 @@ Checks include:
 - required tests/evidence present
 - no protected-path violation
 - no unresolved dependency conflict
+
+Eligibility is decided, not merely evaluated: the same record shape is persisted with kind `INTEGRATION_ADMISSION` before a changeset is integrated, naming the base checkpoint, the changed paths, the epoch and the context digest the decision was made under. Integration proceeds only from an `ADMITTED` record. Because the record pins the epoch and context digest, an admission taken under a context that has since gone stale is detectably stale rather than silently reused.
+
+The schema is self-enforcing, so the two failure modes that matter most cannot be represented: an `ADMITTED` verdict cannot coexist with a `FAIL` check, and a `REFUSED` verdict must carry at least one refusal reason.
 
 ## Merge
 Controller performs or authorizes merge. Conflicts create explicit integration failure state.
@@ -57,4 +63,4 @@ Unexpected changes are a blocker. Mayasaba must not silently overwrite or discar
 After crash/restart, re-read actual filesystem/Git state, reconcile checkpoint and lease identity, then either resume, isolate, rollback or block.
 
 ## Integration invariant
-Only controller-integrated and validated state contributes to certification.
+Only controller-integrated and validated state contributes to certification. Integration is reachable only through a persisted `INTEGRATION_ADMISSION` record whose verdict is `ADMITTED`, so "integrated" implies "admitted" and the certification boundary is auditable rather than assumed.

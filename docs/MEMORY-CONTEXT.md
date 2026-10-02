@@ -173,3 +173,20 @@ Rules:
 8. A receiver compares the envelope digest against the digest recomputed from current authoritative state for the same project/epoch/scope. A mismatch is a stale-context condition.
 
 Digest fixtures must cover identical-input equality, key-order independence, set-order normalization, changed requirement, changed lease/workspace and changed epoch.
+
+## Canonical event hash chain
+
+The state digest protects context synchronization. A separate chain protects the durable event history itself.
+
+Every persisted event carries `prev_hash` and `event_hash`, forming a per-project SHA-256 hash chain. It uses the same canonicalization rule as the state digest: SHA-256 over the RFC 8785 JCS serialization of the event's authoritative fields.
+
+1. Object keys are canonicalized with RFC 8785 JCS.
+2. The input is exactly `{prev_hash, event_id, project_id, session_id, event_type, sequence, correlation_id, causation_id, epoch, payload_json, created_at}`.
+3. The first event of a project chain uses a genesis `prev_hash` of 64 zero characters.
+4. Each subsequent `prev_hash` equals the preceding event's `event_hash`, ordered by `sequence`.
+5. SHA-256 is computed over the UTF-8 bytes of the canonical JSON.
+6. Verification recomputes the chain from persisted rows and fails at the first mismatch, naming the divergent `event_id` and `sequence`.
+
+The chain and the state digest are complementary and must not be conflated. The state digest answers "is this agent's context stale?" and covers a scoped projection of current authoritative state. The event chain answers "has durable history been altered?" and covers every persisted event in order. An epoch change alters many digests while leaving the chain intact, because the chain records that events were appended, not what they mean.
+
+Chain fixtures must cover: a valid chain verifies; a mutated field breaks verification at that event and every later event; a deleted event breaks the chain at its successor; a reordered pair breaks the chain; two projects chain independently; and events with a null project_id chain by session.

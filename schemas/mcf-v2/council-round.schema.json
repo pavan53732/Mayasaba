@@ -56,11 +56,61 @@
         "format": "uuid"
       }
     },
+    "round_index": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_rounds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "converged": {
+      "type": "boolean"
+    },
     "outcome": {
       "type": [
         "object",
         "null"
-      ]
+      ],
+      "additionalProperties": false,
+      "required": [
+        "outcome_type"
+      ],
+      "properties": {
+        "outcome_type": {
+          "enum": [
+            "CONVERGED", "CAP_REACHED", "ESCALATED", "SEALED_WITH_OPEN_QUESTION", "SYNTHESIZED"
+          ]
+        },
+        "synthesis_position_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "decided_position_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "open_question_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "escalation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      }
     },
     "sealed_at": {
       "type": [

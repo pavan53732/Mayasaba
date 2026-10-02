@@ -10,6 +10,7 @@ SQLite is the durable source of truth. This document defines relational implemen
 - timestamps stored as UTC
 - UUIDv7 preferred for sortable identifiers
 - SHA-256 for content hashes
+- event rows carry a SHA-256 hash chain (see "Event hash chain")
 - secrets excluded from ordinary tables
 
 ## Core table groups
@@ -38,7 +39,7 @@ requirements, requirement_acceptance, decisions, decision_versions, architecture
 tasks, task_dependencies, task_leases, handoffs, barriers
 
 ### Workspace
-workspaces, workspace_checkpoints, workspace_changes
+workspaces, workspace_checkpoints, workspace_changes, admissions
 
 ### Execution
 command_executions, process_records, builds, test_runs
@@ -67,6 +68,30 @@ user_questions, user_answers
 - coverage is derived from authoritative links plus validation/certification facts;
 - required links cannot be silently orphaned.
 
+## Admission persistence invariants
+
+- an admission record references its project, task and workspace;
+- an `ADMITTED` verdict cannot coexist with a `FAIL` check;
+- a `REFUSED` verdict carries at least one refusal reason;
+- a re-evaluation supersedes via `supersedes_admission_id` rather than updating the prior row;
+- the latest admission for a (task, kind) pair is the one that governs.
+
+## Event hash chain
+
+Every row in `events` carries `prev_hash` and `event_hash`, forming a per-project SHA-256 hash chain. The chain makes the existing immutability rule verifiable rather than merely asserted: a rewritten, deleted or reordered event is detectable, and verification reports the first divergent event.
+
+The chain reuses the existing canonicalization rule from DEC-025 — SHA-256 over the RFC 8785 JCS serialization of the event's authoritative fields — so no second hashing convention is introduced.
+
+Chain rules:
+
+- the first event of a project chain uses a genesis `prev_hash` of 64 zero characters;
+- `event_hash` is the SHA-256 of the JCS-canonicalized input `{prev_hash, event_id, project_id, session_id, event_type, sequence, correlation_id, causation_id, epoch, payload_json, created_at}`;
+- `prev_hash` equals the `event_hash` of the immediately preceding event in the same project chain, ordered by `sequence`;
+- events whose `project_id` is null form their own chain, keyed by `session_id`;
+- verification recomputes the chain from persisted rows and fails at the first mismatch, naming the divergent `event_id` and `sequence`.
+
+Limitation: a plain hash chain detects accidental corruption, partial edits, deletion and reordering. It does not detect a deliberate rewrite that recomputes every subsequent hash, because no key is involved. Adding keyed authentication would require a managed secret, which the security rules place outside ordinary configuration; that trade was declined for a single-user local application and is recorded in DEC-034.
+
 ## Required invariants
 - every project-scoped row references a project
 - message_id unique
@@ -75,6 +100,8 @@ user_questions, user_answers
 - sequence uniqueness per session/channel
 - artifact content hash uniqueness where content-addressed
 - immutable event rows are never updated for semantic correction
+- event_hash equals the recomputed chain hash and prev_hash equals the preceding event's event_hash
+- every integrated changeset has an ADMITTED integration admission
 - current-state rows are changed only through authorized domain transactions
 
 ## Transaction boundaries

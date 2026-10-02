@@ -33,6 +33,7 @@ TaskLease
 Handoff
 Workspace
 WorkspaceCheckpoint
+Admission
 CommandExecution
 Build
 TestRun
@@ -68,9 +69,15 @@ ProjectStatus
 
 Traceability is directional: ProjectBrief → Requirement → requirement acceptance → Architecture. A requirement or decision derived from a brief retains the reference to the brief version it derives from.
 
+## Workspace admission persistence
+
+`Admission` is a durable decision record owned by WorkspaceService and persisted in `admissions`. One record is written per gate evaluation: kind `WORKSPACE_ADMISSION` before a lease is issued, kind `INTEGRATION_ADMISSION` before a changeset is integrated. Each record carries its subject identity, the epoch and context digest it was decided under, a per-check status drawn from the closed check vocabulary, and exactly one verdict — `ADMITTED`, `REFUSED` or `BLOCKED`. Records are append-oriented: a re-evaluation supersedes rather than rewrites, via `supersedes_admission_id`, so a refusal that was later overturned remains visible. Admission records are validated by `schemas/workspace-v1/admission.schema.json` and announced by `ADMISSION_RECORDED`.
+
 ## Council persistence
 
 CouncilSession and CouncilRound are persisted in SQLite with participants, positions, questions, outcomes and barriers. CouncilService owns these records.
+
+A round's termination result is persisted in `council_outcomes` with exactly one `outcome_type` — `CONVERGED`, `SYNTHESIZED`, `CAP_REACHED`, `ESCALATED` or `SEALED_WITH_OPEN_QUESTION`. A `SYNTHESIS` position is persisted in `council_positions` like any other position and is referenced by the outcome's `synthesis_position_id`. An escalation packet is persisted as the round outcome's structured body and referenced by the question's `escalation_ref`; escalation packets are validated by `schemas/council-v1/escalation.schema.json`.
 
 ## Traceability persistence
 
@@ -101,7 +108,7 @@ Receiver-side deduplication is persisted before a side-effecting message is exec
 
 ## Event history
 
-Events are append-oriented and immutable. Current state is materialized/derived from authoritative transitions and persisted current-state records.
+Events are append-oriented and immutable. Current state is materialized/derived from authoritative transitions and persisted current-state records. Immutability is enforced verifiably: each event carries `prev_hash` and `event_hash` forming a per-project SHA-256 hash chain, so a rewritten, deleted or reordered event is detectable rather than merely prohibited by convention. The chain algorithm is owned by `SQLITE-DATA-ARCHITECTURE.md`; this document records only that the property is verifiable.
 
 ## Project epoch
 

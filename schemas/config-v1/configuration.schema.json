@@ -8,6 +8,7 @@
     "schema_version":{"const":"1.0.0"},
     "ui":{"type":"object"},"agents":{"type":"object"},"runtime":{"type":"object"},
     "communication":{"type":"object","properties":{"ack_timeout_seconds":{"type":"integer","minimum":1},"retry_limit":{"type":"integer","minimum":0},"backoff_base_ms":{"type":"integer","minimum":1}}},
+    "council":{"type":"object","properties":{"max_rounds":{"type":"integer","minimum":1,"default":5},"converge_on_fixpoint":{"type":"boolean","default":true}}},
     "workspace":{"type":"object","properties":{"project_root_only":{"type":"boolean"},"require_git_isolation":{"type":"boolean"}}},
     "execution":{"type":"object","properties":{"default_timeout_seconds":{"type":"integer","minimum":1},"cancel_grace_seconds":{"type":"integer","minimum":0}}},
     "policy":{"type":"object"},"validation":{"type":"object"},"evidence":{"type":"object"},"logging":{"type":"object"}

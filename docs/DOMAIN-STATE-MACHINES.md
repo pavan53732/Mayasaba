@@ -67,7 +67,9 @@ OPEN → RESPONSES_COLLECTING → CRITIQUE → REBUTTAL → REVISION → DISAGRE
 
 USER_INPUT_REQUIRED and NON_PARTICIPATION/TIMEOUT are explicit conditions/outcomes.
 
-Silence never means agreement.
+Termination is convergence-first with the round cap as a backstop. A round advances only while `round_index < max_rounds`; a round at the cap must close or escalate. The recorded `outcome_type` is exactly one of `CONVERGED`, `SYNTHESIZED`, `CAP_REACHED`, `ESCALATED` or `SEALED_WITH_OPEN_QUESTION`.
+
+Convergence is a fixpoint test over the position set, never a count of agreeing agents. Silence never means agreement.
 
 ## 6. Handoff
 
@@ -188,6 +190,8 @@ Recovery reconstructs machine state from durable authoritative state and actual 
 | Barrier | CouncilService | crates/council |
 
 The Orchestrator coordinates these owners but is never a second owner. Cross-machine changes invoke the authoritative owner service.
+
+Admission deliberately has no state machine. It is a per-evaluation decision record, not a lifecycle: each gate run produces one immutable `admissions` row with one verdict, and a re-evaluation appends a superseding row rather than transitioning the previous one. Modelling it as a machine would imply mutable gate state and a "current" admission that could be edited, which is exactly the property the record exists to prevent.
 ## Machine-readable transition authority
 
 The complete transition registry is `schemas/mcf-v2/transition-types.json`. It contains explicit transition records with owner, source/target state, event/command, guards, authorization, required/forbidden fields, state mutation, emitted events, epoch effect, outbox effect, idempotency behavior, transaction boundary and failure transition.

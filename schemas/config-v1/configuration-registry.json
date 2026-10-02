@@ -4,5 +4,5 @@
   "schema":"schemas/config-v1/configuration.schema.json",
   "layers":["application_defaults","user","project","session_runtime"],
   "precedence":"project > user > defaults",
-  "groups":["ui","agents","runtime","communication","workspace","execution","policy","validation","evidence","logging","simulation"]
+  "groups":["ui","agents","runtime","communication","council","workspace","execution","policy","validation","evidence","logging","simulation"]
 }

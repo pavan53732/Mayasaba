@@ -269,6 +269,29 @@ CREATE TABLE IF NOT EXISTS workspace_checkpoints (
   FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id)
 );
 
+CREATE TABLE IF NOT EXISTS admissions (
+  admission_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lease_id TEXT,
+  agent_id TEXT,
+  session_id TEXT,
+  kind TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  context_digest TEXT,
+  base_checkpoint_ref TEXT,
+  changed_paths_json TEXT NOT NULL,
+  checks_json TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  refusal_reasons_json TEXT,
+  supersedes_admission_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+);
+
 CREATE TABLE IF NOT EXISTS workspace_changes (
   change_id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -351,7 +374,9 @@ CREATE TABLE IF NOT EXISTS events (
   causation_id TEXT,
   epoch INTEGER,
   payload_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  prev_hash TEXT NOT NULL,
+  event_hash TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS event_cursors (
@@ -550,6 +575,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_project_state ON messages(project_id, de
 CREATE INDEX IF NOT EXISTS idx_messages_correlation ON messages(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_events_project_sequence ON events(project_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_events_project_hash ON events(project_id, event_hash);
+CREATE INDEX IF NOT EXISTS idx_admissions_task ON admissions(project_id, task_id, kind, verdict);
 CREATE INDEX IF NOT EXISTS idx_leases_expiry ON task_leases(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_failures_fingerprint ON failures(project_id, fingerprint);
