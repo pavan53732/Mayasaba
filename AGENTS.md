@@ -15,7 +15,7 @@ It tells an AI agent:
 
 These instructions apply to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI, Cline, and any future coding agent explicitly admitted to the project.
 
-This file is canonical for all rules shared between agents. Claude Code additionally has a Claude-specific overlay in `CLAUDE.md`; that overlay must not contradict this file, and any rule added here applies to every agent including Claude Code.
+This file is canonical for all rules shared between AI coding agents working on this repository. Claude Code additionally has a Claude-specific overlay in `CLAUDE.md`; that overlay must not contradict this file, and any shared repository rule added here applies to every supported coding agent, including Claude Code.
 
 ## 2. Repository identity
 
