@@ -88,13 +88,15 @@ Only relevant project context should be provided.
 
 ### Architecture-task ContextPacks
 
-For any task that proposes or changes Mayasaba architecture, contracts, schemas or canonical architecture documentation, the ContextPack MUST carry:
+For a runtime task that proposes or changes Mayasaba architecture, contracts, schemas or canonical architecture documentation, the ContextPack MUST carry:
 
-- the applicable architecture co-design instruction from root `AGENTS.md` §14 in `policy_constraints` (include the operative instruction, not just a path the agent may be unable to discover);
-- relevant accepted decisions and HARD_LOCKs, plus any unresolved questions or proposals clearly labeled as such, in `decisions`;
+- applicable product-owned runtime policy and the operative, task-scoped architecture co-design instruction in `policy_constraints` (include the instruction, not just a path the agent may be unable to discover);
+- relevant accepted decisions and HARD_LOCKs, plus unresolved questions or proposals clearly labeled as such, in `decisions`;
 - canonical owner-document and schema references in `architecture_refs`, and relevant interface/data-contract references in `contracts`.
 
-The instruction requires agents to establish the current contract, identify the concrete gap, recommend a normative resolution and its impacts, distinguish accepted decisions from proposals, and honor the discussion-versus-implementation boundary. Keep the ContextPack scoped to the task and preserve source references so agents can trace each rule and decision to its owner.
+The co-design instruction is part of this runtime ContextPack contract; it is not sourced from repository contributor files. It directs the agent to establish the current contract, identify the concrete gap, recommend a normative resolution and its impacts, distinguish accepted decisions from proposals, and honor the discussion-versus-implementation boundary. Keep the pack task-scoped and preserve source references so agents can trace each rule and decision to its owner.
+
+The Mayasaba repository's root `AGENTS.md` is guidance for coding agents working in that repository, and `CLAUDE.md` is a Claude Code-specific overlay. They are not universal runtime-policy sources. If the selected task workspace is the Mayasaba repository, the applicable repository instructions may be included as task-scoped workspace guidance, clearly distinguished from controller-owned policy; `CLAUDE.md` applies only to Claude Code.
 
 Use only existing ContextPack fields. This requirement does not change the MCF-v2 envelope or payload schema; in particular, it adds no ContextPack fields.
 

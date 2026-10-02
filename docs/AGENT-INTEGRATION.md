@@ -44,14 +44,19 @@ An adapter:
 
 An adapter does not own project state, task truth or certification.
 
-## Policy and project-context bootstrap
+## Runtime policy and workspace-instruction boundary
 
-The controller MUST deliver the same applicable Mayasaba policy and task context to every supported agent—Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline—before issuing a task lease. This is a controller/adapter contract, not a feature that may depend on a CLI's native instruction-file discovery.
+Mayasaba distinguishes two instruction planes:
 
-- Assemble the bootstrap from the canonical Mayasaba instructions and the task's current ContextPack; use each CLI's supported structured input or instruction mechanism, but do not assume it discovers `AGENTS.md`, `CLAUDE.md` or any other repository file.
-- Apply the same policy meaning and applicable source references across all four adapters. Native agent-specific instructions may supplement this bootstrap but MUST NOT replace or weaken it.
-- A session MUST NOT reach `READY` or receive a task lease until delivery of the required bootstrap is confirmed. Preserve its source/version references with the session/task context so resume and ContextPack regeneration do not silently omit it.
-- For Mayasaba architecture/co-design tasks, include the co-design rule in root `AGENTS.md` §14 and the relevant accepted decisions, open proposals and canonical owner-document/schema references in the ContextPack, following `MEMORY-CONTEXT.md`. This requirement applies equally to all adapters.
+1. **Runtime policy and task context** are controller-owned. They come from authoritative project/task state, the active lease and policy decisions, and the applicable product-owned contracts. They apply to every supported adapter and are delivered before a task lease.
+2. **Workspace instructions** are guidance found in the selected target workspace (for example, that workspace's `AGENTS.md` or `CLAUDE.md`). They are scoped to that workspace and task; they may refine how work is performed but cannot override Mayasaba policy, grant capabilities or expand the lease scope.
+
+The controller MUST deliver the same applicable runtime policy meaning and task context to Claude Code CLI, Hermes Agent CLI, Kilo Code CLI and Cline. Use each CLI's supported structured input or instruction mechanism; never depend on native file discovery to enforce Mayasaba policy.
+
+- The Mayasaba repository's root `AGENTS.md` is contributor guidance for AI coding agents working in that repository. Its `CLAUDE.md` is a Claude Code-specific overlay. Neither file is universal runtime policy or configuration for the adapters embedded in Mayasaba.
+- If a task's selected workspace is the Mayasaba repository, its repository instruction files may be supplied as task-scoped workspace guidance. Preserve their source and scope; `CLAUDE.md` applies only to Claude Code. Runtime policy remains authoritative if instructions conflict.
+- A session MUST NOT reach `READY` or receive a task lease until delivery of the required runtime policy is confirmed. Preserve policy source/version references with the session/task context so resume and ContextPack regeneration do not silently omit them.
+- For Mayasaba architecture tasks, supply the task-scoped co-design instruction and relevant accepted decisions, HARD_LOCKs, open proposals, and canonical owner-document/schema references in the ContextPack as defined by `MEMORY-CONTEXT.md`; do not treat root `AGENTS.md` §14 as a universal runtime-policy source.
 
 `MEMORY-CONTEXT.md` defines the ContextPack contents and existing-field mapping. These requirements do not authorize changes to the MCF-v2 envelope or payload schema.
 
