@@ -3,7 +3,13 @@
 ## Functional requirements
 
 ### FR-001 Project/workspace creation
-The user can create a workspace, select a local Windows path, describe a software or local-artifact task, and start the applicable Mayasaba workflow.
+The user can create a workspace, select a local Windows path, describe a software or local-artifact task, and start the applicable Mayasaba workflow. The described intent is persisted as the first version of a `ProjectBrief` and is project truth, not a chat message.
+
+### FR-001a Project intent and brief versioning
+The user's stated project intent is versioned and immutable per version. The brief version current when DISCOVERY closes is the analysis anchor for that lineage; later versions do not rewrite the historical meaning of snapshots or council rounds that consumed an earlier version.
+
+### FR-001b Post-intake user contribution
+The user can submit free-text input after project creation. Each submission is recorded as a `UserContribution` with an advisory classification. Only the owning authoritative service determines whether it materially changes project truth; a material change increments the project epoch, a non-material context change produces a new snapshot/digest at the current epoch, and commentary changes nothing. Free-text input never bypasses the existing mediated commands.
 
 ### FR-002 Agent preflight
 Mayasaba detects the three supported CLIs, versions, executable paths, authentication/readiness, working-directory support, transports and capabilities at runtime.

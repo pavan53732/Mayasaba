@@ -62,6 +62,16 @@ Must simulate:
 - epoch change
 - partial council participation
 
+## Project intent and user-contribution tests
+
+Must prove:
+
+1. the `ProjectBrief` version current at DISCOVERY close is the anchor recorded in the resulting snapshots and council rounds, and a later brief version does not alter those records;
+2. each of the three materiality outcomes produces the correct epoch effect — a material truth change increments the epoch and invalidates affected contexts, a non-material clarification creates a new snapshot/digest at the current epoch, and commentary changes nothing;
+3. an advisory classification cannot itself cause or avoid an epoch transition: a contribution classified as a clarification that reveals a material constraint increments the epoch only when the owning service accepts the change, and one classified as a requirement that is already satisfied does not;
+4. a free-text contribution cannot reach CouncilService, DecisionService or LifecycleService except through the existing mediated commands;
+5. DISCOVERY and USER_INTERVIEW are not both entered for the same clarification, and USER_INTERVIEW is reached only from a deliberation-produced question.
+
 ## Workspace tests
 
 - concurrent Git worktree isolation for software repositories

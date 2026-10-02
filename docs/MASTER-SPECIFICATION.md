@@ -46,6 +46,8 @@ PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS → CROSS_C
 
 Global states include PAUSED, STOPPED, BLOCKED and RECOVERING. This full lifecycle applies to software-engineering projects. Other local artifact tasks use the same scope, ownership, policy, validation and evidence principles, but execute only the stages applicable to their acceptance criteria; they do not require irrelevant build, E2E or packaging gates.
 
+The user's stated intent enters at PROJECT_CREATED as a versioned `ProjectBrief` and is project truth, not a chat message. DISCOVERY completes when the brief baseline and objective workspace facts are established; the brief version current at that point is the immutable analysis anchor for the lineage. USER_INTERVIEW is a distinct, later gate reached only for material questions produced by deliberation. Free-text input after creation is recorded as a `UserContribution` and changes project truth only when the owning authoritative service accepts a material change, which increments the epoch. See `DECISION-REGISTER.md` DEC-030 and DEC-031, `DATA-MODEL.md` and `MEMORY-CONTEXT.md`.
+
 ## 6. Core work loops
 
 Mayasaba must perform the requested work, not merely generate advice. Every task uses an explicit objective, authorized workspace/paths, acceptance criteria, validation plan and evidence.

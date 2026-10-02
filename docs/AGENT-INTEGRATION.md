@@ -43,6 +43,10 @@ An adapter:
 
 An adapter does not own project state, task truth or certification.
 
+## Project intent in the ContextPack
+
+The ContextPack delivered before a task lease carries the `ProjectBrief` version that is the analysis anchor for the lineage (see `MEMORY-CONTEXT.md` and `DATA-MODEL.md`). The brief is controller-owned project truth, delivered through the adapter's structured input or instruction mechanism like any other runtime policy — never left to native file discovery. Adapters must preserve the brief's version reference so resume and ContextPack regeneration do not silently substitute a different version.
+
 ## Runtime policy and workspace-instruction boundary
 
 Mayasaba distinguishes two instruction planes:

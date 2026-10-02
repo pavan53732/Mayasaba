@@ -86,6 +86,16 @@ A material unresolved issue can:
 - require a user decision
 - block architecture lock
 
+## Discovery and user-interview gates
+
+Mayasaba has two distinct user-facing gates. They do not overlap.
+
+DISCOVERY is pre-analysis and brief-oriented. It establishes the ProjectBrief baseline, performs objective local discovery (workspace path, repository characteristics, project type, existing files, available toolchain, detected constraints) and determines whether the brief is complete enough to begin independent analysis. It may surface gaps in the user's own brief, but it is not a council interview and does not run agent-generated questioning.
+
+USER_INTERVIEW is post-deliberation and question-oriented. It resolves material questions produced by the council, and it is driven entirely by the question engine below. Only questions that survive normalization, deduplication, evidence-checking and impact ranking reach the user.
+
+A user-facing clarification therefore reaches the council at exactly one of two points: before independent analysis (DISCOVERY, about the brief) or after deliberation (USER_INTERVIEW, about a council question). Free-text user input submitted outside these gates is recorded as a `UserContribution` and never bypasses this flow; see `MEMORY-CONTEXT.md`.
+
 ## Question engine
 
 An agent QUESTION is a candidate, not an automatic user interruption. CouncilService:

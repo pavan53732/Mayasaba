@@ -25,6 +25,9 @@ Rules:
 - BUILD, TEST, E2E and PACKAGE apply when required by the software task's acceptance criteria; they are not imposed on document, research or data tasks when irrelevant.
 - task validation predicates are declared per task and are enforced by ValidationService.
 - material reopening moves to the applicable prior phase and increments epoch when project truth changes.
+- DISCOVERY completes when the ProjectBrief baseline is established, objective local/workspace discovery has been performed, and the brief is judged complete enough to begin independent analysis. The brief version current at that point is the immutable analysis anchor for the lineage.
+- USER_INTERVIEW is entered only when deliberation has produced a material unresolved question that survives the council question engine's normalization, deduplication, evidence-check and impact ranking. It is never entered as a general clarification gate; brief-level clarification belongs to DISCOVERY.
+- These two gates are distinct in trigger, not merely in timing: DISCOVERY is driven by the user's own brief and objective discovery; USER_INTERVIEW is driven by agent-generated questions.
 
 ## 2. Agent session
 

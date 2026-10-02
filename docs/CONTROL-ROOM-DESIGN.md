@@ -49,6 +49,14 @@ When CouncilService requires user input, show a consolidated question queue rath
 
 Submitting an answer calls the existing `answer_user_question` command. Show the answer's persisted status, its redistribution scope, and the resulting context snapshot/epoch. Track delivery/synchronization for affected agents separately from transport ACK; do not report the answer as applied until the agents resume from current context. A council answer is not a blanket permission or action approval—PolicyService approval remains a separate control.
 
+## Intake and free-text contribution
+
+The intake surface is where the user states the project idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version and displayed back as project truth, not as a chat message. Show the brief version and mark the version that became the analysis anchor when DISCOVERY closes.
+
+After creation, free-text input is recorded as a `UserContribution` and displayed with its advisory classification and its outcome. Display the outcome the owning service actually produced, not the advisory label: a contribution the service found non-material must not appear to have changed project truth. When a contribution does change truth, show the resulting epoch, the affected scope and the context regeneration; when it does not, show it as timeline/commentary.
+
+The chat surface is the user's interface. Typed state transitions determine what becomes project truth. UI enablement remains advisory; the owning service is authoritative.
+
 ## Evidence UX
 Claims link to evidence. Failed validations expose failure packet, affected scope and repair state.
 

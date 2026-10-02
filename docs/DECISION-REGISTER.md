@@ -33,6 +33,8 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-027 | Material-action idempotency is keyed by project_id + operation_id; message_id identifies individual delivery records | HARD_LOCK |
 | DEC-028 | Mayasaba supports user-authorized local-file work across artifact types within a selected workspace; requested public-web research is read-only; external side effects and general control of unrelated applications are out of scope | HARD_LOCK |
 | DEC-029 | The supported agent set is exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI | HARD_LOCK |
+| DEC-030 | A versioned ProjectBrief is the canonical representation of user project intent; the brief version current at DISCOVERY close is the immutable analysis anchor; only the owning authoritative service determines materiality, and only material project-truth change increments the epoch | HARD_LOCK |
+| DEC-031 | DISCOVERY establishes the brief baseline and objective workspace facts; USER_INTERVIEW is reserved for deliberation-produced material questions; free-text post-intake input is advisory and never bypasses existing mediated commands | SOFT_DECISION |
 
 ## DEC-029 supersession record
 
@@ -73,6 +75,21 @@ Findings that changed the contract, each recorded in `schemas/agent-adapter-v1/n
 | Session upload has three independent triggers in OpenCode and Kilo (config `share: "auto"`, the `*_AUTO_SHARE` env var, and the `--share` flag), not one. | Blocking the flag alone was insufficient. Both agents now require `share: "disabled"` in config — a string enum, not a boolean — plus the env var, and Kilo additionally requires its own hard kill switch `KILO_DISABLE_SHARE=1`. |
 
 Known limitation: Claude Code CLI's `claude -p --output-format stream-json` is the most mature headless interface of the four considered, so the three retained adapters carry more pioneering work than one built on it would. The adapter architecture is not a one-way door — locking three agents now does not forbid a Claude Code adapter later, which would be a new governed change to DEC-029.
+
+## DEC-030 / DEC-031 intake and project-intent record
+
+Classification: ADDITIVE. Date: 2026-10-03. Adds two decisions; supersedes none. DEC-030 is HARD_LOCK; DEC-031 is a normal decision.
+
+| Field | Value |
+|---|---|
+| Previous behavior | No canonical project-intent entity existed. The `projects` table carried only `project_id`, `name`, `local_path`, `phase`, `status`, `current_epoch` and timestamps, so the user's verbatim idea had no durable home. Post-intake user input had no defined free-text path: the only user-input commands were the mediated `answer_user_question`, `reopen_decision` and `approve_action`. DISCOVERY and USER_INTERVIEW were both named phases with no documented distinction of trigger. |
+| New behavior | (1) A versioned `ProjectBrief` entity is the canonical representation of user project intent, following the existing `requirements` versioning pattern (`supersedes_brief_id`). (2) The brief version current when DISCOVERY closes is the immutable analysis anchor for that lineage; later brief versions never rewrite the historical meaning of a snapshot or council round that consumed an earlier one. (3) Free-text post-intake input is recorded as a `UserContribution` carrying an **advisory** classification; only the owning authoritative service determines whether it materially changes project truth. (4) Material change increments `project_epoch`; non-material context change creates a new snapshot/digest at the current epoch; commentary changes nothing. (5) DISCOVERY answers "is the brief complete enough to begin independent analysis?" and performs objective local discovery; USER_INTERVIEW answers "what material question remains unresolved after deliberation?" and is driven by the existing Council question engine. |
+| Reason | The user's original intent must survive verbatim as project truth, traceable from brief → requirements → acceptance criteria → architecture. A writable post-intake channel must not become an uncontrolled truth path that lets truth change around the epoch/context/lease gates while agents hold a frozen snapshot. Two user-facing gates needed distinct triggers to avoid a second, redundant interview path. |
+| Compatibility impact | Additive at the protocol layer. MCF-v2 is unchanged: no new message type, envelope field or payload field. `CONTEXT_UPDATE` and `DECISION` remain the carriers. New durable entities (`project_briefs`, `user_contributions`) are required in SQLite. A new Tauri command is required for classified free-text input; `create_project` gains brief text. |
+| Migration/reconciliation | No data migration is required: no Mayasaba database has been created yet and there are no persisted projects, briefs or contributions to reconcile. |
+| Tests affected | Contract verification (`tools/contracts/verify.mjs`) must pass. New entity schemas need conformance fixtures. Epoch-effect tests must cover the three materiality outcomes (material change, non-material context change, commentary) and must prove a mislabeled classification cannot itself cause or avoid an epoch transition. |
+
+`UserContribution` is a durable record of what the user contributed and its advisory classification/outcome. It is **not** an authority for project truth: the owning domain service remains authoritative for the resulting requirement, decision, epoch or context mutation.
 
 ## Change procedure
 

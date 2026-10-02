@@ -12,6 +12,7 @@ Precedence is fixed: current SQLite state > validated `.mayasaba` import candida
 
 Project
 ProjectPath
+ProjectBrief
 ProjectEpoch
 Agent
 AgentSession
@@ -45,16 +46,27 @@ Artifact
 Checkpoint
 UserQuestion
 UserAnswer
+UserContribution
 Barrier
 ProjectStatus
 
 ## Important relationships
 
 - project → many epochs, sessions, tasks, rounds and events
+- project → many ProjectBrief versions, linked by supersession
+- project → many UserContributions
 - session → many messages and delivery attempts/receipts
 - task → many leases, handoffs, executions, validations and failures
 - council round → barriers and messages
 - evidence/artifacts → referenced by messages, tasks, commands, reviews and validations
+
+## Project intent and user contribution persistence
+
+`ProjectBrief` is the canonical, versioned representation of the user's stated project intent. It follows the existing `requirements` versioning pattern: each version is immutable and carries a `supersedes_brief_id` link to the version it replaces. The brief version current when DISCOVERY closes is the analysis anchor for that lineage; it is referenced by the resulting context snapshots and council rounds and is never rewritten by a later version.
+
+`UserContribution` durably records a free-text user message submitted after project creation, together with its advisory classification and its outcome. It is a record of what the user contributed, not an authority for project truth: the owning domain service remains authoritative for any resulting requirement, decision, epoch or context mutation. A contribution may reference its originating UI message/event identifiers.
+
+Traceability is directional: ProjectBrief → Requirement → requirement acceptance → Architecture. A requirement or decision derived from a brief retains the reference to the brief version it derives from.
 
 ## Council persistence
 
@@ -94,6 +106,8 @@ Events are append-oriented and immutable. Current state is materialized/derived 
 ## Project epoch
 
 Material changes to requirements, HARD_LOCK decisions, architecture, contracts, task graph semantics or policy increment the project epoch and invalidate affected contexts.
+
+The same rule governs accepted user contributions. Only the owning authoritative service determines materiality — a contribution's advisory classification does not itself change the epoch, and a mislabeled contribution cannot cause or avoid an epoch transition. A material truth change increments the epoch; a change to an agent's applicable context that does not change project truth creates a new snapshot and digest at the current epoch; a contribution that changes nothing is retained in the timeline only.
 
 ## Portable project metadata
 

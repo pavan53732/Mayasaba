@@ -60,6 +60,14 @@ This is the full canonical software-engineering sequence. Other local artifact t
 
 Repair/recovery may re-enter the applicable phase. BLOCKED, PAUSED, FAILED and RECOVERING are orthogonal controller conditions.
 
+## Intake
+
+PROJECT_CREATED is entered from the Control Room intake surface, where the user states the idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version; it is project truth, not a chat message.
+
+DISCOVERY then runs before any agent analyzes the brief. It establishes the brief baseline, performs objective local/workspace discovery, and judges whether the brief is complete enough to begin. The brief version current when DISCOVERY closes is the immutable analysis anchor delivered to every agent in the ContextPack for the resulting lineage.
+
+A free-text user message submitted after creation does not enter the phase sequence directly. It is recorded as a `UserContribution`, routed by advisory classification to the owning service, and only a material truth change accepted by that service advances the epoch and invalidates affected contexts. No user message mutates authoritative state on its own.
+
 ## Ready-condition evaluation
 A task/action is eligible only when:
 1. project is active

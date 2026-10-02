@@ -31,6 +31,14 @@ The same workspace, task, evidence and review surfaces cover non-software artifa
 
 Show the user-selected local workspace and task-scoped allowed paths. Do not treat the whole PC as a default scan scope. For user-requested research, display public-source retrieval as read-only and present locally saved citations/report artifacts. External side effects and general control of unrelated applications are not available actions.
 
+## Project intent and intake
+
+The user states the project idea and selects the local workspace at intake. The stated intent is persisted as the first `ProjectBrief` version and shown as project truth, not as a chat message. Display the brief and mark the version that became the immutable analysis anchor when DISCOVERY closes.
+
+Free-text input after creation is recorded as a `UserContribution`. Show its advisory classification alongside the outcome the owning service actually produced, so a non-material contribution is never displayed as having changed project truth. When a contribution changes truth, show the resulting epoch and affected scope.
+
+The chat surface is the user's interface; typed state transitions determine what becomes project truth.
+
 ## Header
 
 Persistent project header shows:
@@ -130,6 +138,5 @@ The Control Room does not expose private model chain-of-thought. It exposes mode
 ## Preview
 
 Where the target project has a runnable UI/application, the local running target is a first-class preview surface. Preview status is evidence-backed rather than inferred from a successful start command alone.
-
 
 The implementation-level UI composition and event-cursor contract is defined in `CONTROL-ROOM-DESIGN.md`.

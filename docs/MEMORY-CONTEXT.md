@@ -49,8 +49,27 @@ Examples:
 - architecture/contract change
 - task graph semantic change
 - security/policy change
+- material project-intent (ProjectBrief) change
 
 Affected contexts become stale.
+
+## User contributions and the epoch
+
+A free-text user message submitted after project creation is recorded as a `UserContribution` with an **advisory** classification. The classification is an input to routing, not an authority: only the owning service that would mutate the affected record determines whether material project truth actually changed.
+
+| Outcome | Epoch | Context |
+|---|---|---|
+| Material truth change (for example a new requirement, a goal change or a constraint change) | increments | affected contexts stale |
+| Non-material change to an agent's applicable knowledge (for example a clarification) | unchanged | new snapshot and digest at the current epoch |
+| No change (commentary) | unchanged | timeline only |
+
+A mislabeled contribution cannot cause or avoid an epoch transition. A message classified as a clarification that in fact reveals a material constraint increments the epoch when the owning service accepts the resulting truth change; a message classified as a requirement that the owning service finds already satisfied does not.
+
+Free-text contributions never bypass the existing mediated commands. `answer_user_question`, `reopen_decision`, `approve_action` and the lifecycle controls remain separate, gated paths; a contribution is not an alternative route into CouncilService, DecisionService or LifecycleService.
+
+## Project brief as analysis anchor
+
+`ProjectBrief` versions are immutable. The brief version current when DISCOVERY closes is the analysis anchor referenced by the resulting context snapshots and council rounds for that lineage. A later brief version does not rewrite the historical meaning of a snapshot or council round that consumed an earlier one; it takes effect through the ordinary change-impact path (epoch and snapshot rules above).
 
 ## Context freshness
 
