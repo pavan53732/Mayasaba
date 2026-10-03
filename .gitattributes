@@ -1,0 +1,7 @@
+# The pre-commit contract gate is a POSIX sh script. core.autocrlf=true would check it out with
+# CRLF endings, and a CRLF shebang fails on any POSIX shell as `bad interpreter: /bin/sh^M`, which
+# would make the hook silently absent on every clone rather than visibly broken.
+.githooks/pre-commit text eol=lf
+
+# LF for shell scripts generally, so the same failure cannot reappear elsewhere.
+*.sh text eol=lf

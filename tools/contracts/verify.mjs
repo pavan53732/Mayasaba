@@ -636,6 +636,15 @@ for(const [name,def] of Object.entries(contract.agents)){
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+// Hook status is reported, never enforced. A pre-commit gate that checks whether the pre-commit gate
+// is installed would need its own hook, so the recursion is stopped one level down: the mechanism
+// cannot verify itself, but its absence is a reported fact in the gate's own output rather than a
+// silent unknown. Informational on purpose - a contributor who deliberately opts out is not blocked.
+let hooksPath=null;
+try { hooksPath=execFileSync("git",["config","core.hooksPath"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim(); } catch { /* unset, or not a git checkout */ }
+console.log(hooksPath===".githooks"
+  ? "Pre-commit gate: enabled (core.hooksPath=.githooks)"
+  : "Pre-commit gate: NOT enabled"+(hooksPath?" (core.hooksPath="+hooksPath+", expected .githooks)":" (core.hooksPath unset)")+" - run: git config core.hooksPath .githooks");
 
 const wm=read("workspace.manifest.json");
 if(!exists("Cargo.toml") || !exists("package.json")) fail("Missing root workspace manifest");

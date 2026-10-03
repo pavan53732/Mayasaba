@@ -201,6 +201,14 @@ npm run verify:contracts
 
 This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
 
+The gate is wired to a version-controlled pre-commit hook, so it is not merely available but run:
+
+~~~text
+git config core.hooksPath .githooks
+~~~
+
+`.githooks/pre-commit` lives in the repository, so there is one copy and nothing to install or keep in sync — `core.hooksPath` is a pointer, not a copy, and `git config core.hooksPath` reports the whole state of the mechanism. The gate prints whether the hook is enabled in its summary line. That report is informational and never a failure, so a contributor who deliberately opts out is not blocked.
+
 ## Current status
 
 The repository is in a **documentation-first architecture baseline**. The next implementation gate is the actual MCF-v2 machine-readable schema package and Rust/SQLite conformance implementation, followed by the three adapters, council, tasks, execution, validation/repair and Control Room.

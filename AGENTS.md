@@ -291,6 +291,8 @@ For orchestration changes also test:
 - cancellation
 - failure paths
 
+The local contract gate (`npm run verify:contracts`) is wired to a version-controlled pre-commit hook. The hook has one copy, in `.githooks/`, activated by `git config core.hooksPath .githooks`; it is a pointer rather than a copy, so there is no installer to run stale. Verify it with `git config core.hooksPath`. The gate reports whether the hook is enabled in its summary line, as information rather than a failure.
+
 ## 17. Git behavior
 
 Before modifying:
