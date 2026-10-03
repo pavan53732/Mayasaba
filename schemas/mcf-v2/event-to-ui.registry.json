@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "registry_version": "2.1.0",
   "authority": "schemas/mcf-v2/event-to-ui.registry.json",
   "rule": "Every MCF event type has exactly one deterministic Tauri UI event projection.",
   "mapping": {

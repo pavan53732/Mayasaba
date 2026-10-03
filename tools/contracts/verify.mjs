@@ -87,6 +87,42 @@ for(const [src,map] of [["registry.json",uiProjectionA],["event-to-ui.registry.j
   }
 }
 
+// --- Registry identity/version agreement. MCF-V2-MACHINE-READABLE-CONTRACT.md:148 states that
+// message-types.schema.json, event-types.schema.json and transition-types.json "must reference the
+// same registry identity/version". That sentence was unbacked in three ways: the two .schema.json
+// files named by it carried no version field at all; the two files that did carry `registry_version`
+// disagreed (registry.json 2.0.0 vs transition-types.json 2.1.0, and they had never matched since
+// transition-types.json first carried one); and no "registry identity" concept existed anywhere.
+// No tool read any version field, so nothing could notice. manifest.json:version is now the single
+// package version, every registry file must carry `registry_version` equal to it, and the protocol
+// namespace must agree across the files that declare one. Runtime validators are required to report
+// the registry version in errors and evidence (MCF-V2-IMPLEMENTATION-DESIGN.md:95), so this is the
+// value they will read; if the files can disagree, that report is meaningless.
+const packageVersion=mcf.version;
+if(!packageVersion) fail("schemas/mcf-v2/manifest.json has no version; it is the canonical package version");
+const versionedRegistryFiles=[
+  "schemas/mcf-v2/registry.json",
+  "schemas/mcf-v2/transition-types.json",
+  "schemas/mcf-v2/event-types.schema.json",
+  "schemas/mcf-v2/message-types.schema.json",
+  "schemas/mcf-v2/event-to-ui.registry.json",
+  "schemas/mcf-v2/event-payloads.registry.json",
+  "schemas/mcf-v2/message-payloads.registry.json",
+];
+for(const file of versionedRegistryFiles){
+  const got=read(file).registry_version;
+  if(got===undefined) fail(`Registry file declares no registry_version: ${file} (must equal manifest.json version "${packageVersion}")`);
+  if(got!==packageVersion) fail(`registry_version disagreement: ${file}="${got}" vs manifest.json="${packageVersion}"`);
+}
+// The protocol namespace is the other half of "registry identity". It is not carried by every file
+// (only registry.json and manifest.json declare it), so this checks agreement where it is declared
+// rather than requiring the field everywhere.
+const protocolNamespaces=[["schemas/mcf-v2/registry.json",registry.protocol],["schemas/mcf-v2/manifest.json",mcf.protocol]];
+for(const [file,ns] of protocolNamespaces){
+  if(ns===undefined) fail(`Registry file declares no protocol namespace: ${file}`);
+  if(ns!==mcf.protocol) fail(`protocol namespace disagreement: ${file}="${ns}" vs manifest.json="${mcf.protocol}"`);
+}
+
 const transition=read("schemas/mcf-v2/transition-types.json");
 for(const [machine,def] of Object.entries(transition.machines)){
   const ids=new Set((transition.transitions?.[machine]??[]).map(t=>t.transition_id));

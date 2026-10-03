@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
+  "registry_version": "2.1.0",
   "authority": "schemas/mcf-v2/event-payloads.registry.json",
   "default_schema": "common-event.schema.json",
   "events": {

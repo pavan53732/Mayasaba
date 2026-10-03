@@ -147,4 +147,8 @@ The human-readable registry is `MCF-V2-REGISTRY.md`. No crate or adapter may mai
 
 `message-types.schema.json` validates message names against the registry; `event-types.schema.json` validates event names; `transition-types.json` validates legal state transitions. These files must reference the same registry identity/version.
 
+That requirement is now defined and enforced rather than asserted. `manifest.json`'s `version` is the single canonical **package version**. Every registry file in the package — `registry.json`, `transition-types.json`, `event-types.schema.json`, `message-types.schema.json`, `event-to-ui.registry.json`, `event-payloads.registry.json`, `message-payloads.registry.json` — carries a `registry_version` that must equal it, and the files that declare a `protocol` namespace (`registry.json`, `manifest.json`) must agree on `mayasaba.mcf.v2`. The local contract gate (`npm run verify:contracts`) fails on a missing `registry_version`, on any disagreement with the package version, and on a namespace disagreement. Runtime validators report this value in errors and evidence (see `MCF-V2-IMPLEMENTATION-DESIGN.md`).
+
+Prior to 2026-10-03 the sentence above was unbacked: the two `.schema.json` files it names carried no version field at all, the two files that did carry `registry_version` disagreed (`registry.json` 2.0.0 vs `transition-types.json` 2.1.0, and they had never matched since `transition-types.json` first carried one), no "registry identity" concept existed, and no tool read any version field.
+
 The 13+ stage material-action chain in `MCF-V2-PROTOCOL.md` is explicitly mapped to canonical event types in the registry.

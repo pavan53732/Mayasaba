@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mayasaba.local/schemas/mcf-v2/event-types.schema.json",
   "title": "MCF-v2 event type",
+  "registry_version": "2.1.0",
   "type": "string",
   "enum": [
     "INTENT_RECORDED",
