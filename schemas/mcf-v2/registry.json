@@ -301,6 +301,363 @@
     "schema": "schemas/mcf-v2/transition-types.json",
     "rule": "Every domain state transition has exactly one authoritative owner and exactly one canonical event type."
   },
+  "transition_commands": {
+    "authority": "schemas/mcf-v2/registry.json",
+    "owner": "crates/core",
+    "schema": "schemas/mcf-v2/transition-types.json",
+    "rule": "Every command named by a transition record is registered here with its owning service and crate. No transition record may use an unregistered command, and no command may be registered without a transition record using it.",
+    "advance_convention": "Each machine has exactly one ADVANCE_<MACHINE> command, named after the machine, driving that machine's adjacent spine. It is registered once here, not once per transition record that uses it.",
+    "commands": {
+      "ADVANCE_PROJECT": {
+        "machine": "project",
+        "kind": "advance",
+        "service": "LifecycleService",
+        "crate": "crates/core"
+      },
+      "ADVANCE_AGENT_SESSION": {
+        "machine": "agent_session",
+        "kind": "advance",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "MARK_AGENT_LOST": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "RECONNECT_AGENT": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "RESTORE_AGENT_ACTIVE": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "RESTORE_AGENT_READY": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "SYNC_AGENT": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
+      "ADVANCE_TASK": {
+        "machine": "task",
+        "kind": "advance",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "BLOCK_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "FAIL_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "QUEUE_TASK_RETRY": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "REASSIGN_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "RECOVER_EXPIRED_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "UNBLOCK_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "ADVANCE_LEASE": {
+        "machine": "lease",
+        "kind": "advance",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "EXPIRE_LEASE": {
+        "machine": "lease",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "RELEASE_LEASE": {
+        "machine": "lease",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "RENEW_LEASE": {
+        "machine": "lease",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "REVOKE_LEASE": {
+        "machine": "lease",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "ADVANCE_COUNCIL_ROUND": {
+        "machine": "council_round",
+        "kind": "advance",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "CLOSE_OR_ESCALATE_COUNCIL": {
+        "machine": "council_round",
+        "kind": "specific",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "ADVANCE_HANDOFF": {
+        "machine": "handoff",
+        "kind": "advance",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "ACCEPT_HANDOFF": {
+        "machine": "handoff",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "REJECT_HANDOFF": {
+        "machine": "handoff",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "RETRY_HANDOFF": {
+        "machine": "handoff",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "ADVANCE_EXECUTION": {
+        "machine": "execution",
+        "kind": "advance",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "CANCEL_EXECUTION": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "CAPTURE_EXECUTION_EVIDENCE": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "RECORD_CRASH": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "RECORD_EXECUTION": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "RECORD_EXIT": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "TIMEOUT_EXECUTION": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "ADVANCE_VALIDATION": {
+        "machine": "validation",
+        "kind": "advance",
+        "service": "ValidationService",
+        "crate": "crates/validation"
+      },
+      "FAIL_VALIDATION": {
+        "machine": "validation",
+        "kind": "specific",
+        "service": "ValidationService",
+        "crate": "crates/validation"
+      },
+      "PASS_VALIDATION": {
+        "machine": "validation",
+        "kind": "specific",
+        "service": "ValidationService",
+        "crate": "crates/validation"
+      },
+      "RECORD_VALIDATION_RESULTS": {
+        "machine": "validation",
+        "kind": "specific",
+        "service": "ValidationService",
+        "crate": "crates/validation"
+      },
+      "ADVANCE_REPAIR": {
+        "machine": "repair",
+        "kind": "advance",
+        "service": "RepairService",
+        "crate": "crates/core"
+      },
+      "BLOCK_REPAIR": {
+        "machine": "repair",
+        "kind": "specific",
+        "service": "RepairService",
+        "crate": "crates/core"
+      },
+      "RESOLVE_REPAIR": {
+        "machine": "repair",
+        "kind": "specific",
+        "service": "RepairService",
+        "crate": "crates/core"
+      },
+      "RETRY_REPAIR": {
+        "machine": "repair",
+        "kind": "specific",
+        "service": "RepairService",
+        "crate": "crates/core"
+      },
+      "RUN_REPAIR_REGRESSION": {
+        "machine": "repair",
+        "kind": "specific",
+        "service": "RepairService",
+        "crate": "crates/core"
+      },
+      "ADVANCE_CONTEXT": {
+        "machine": "context",
+        "kind": "advance",
+        "service": "ContextService",
+        "crate": "crates/core"
+      },
+      "INVALIDATE_CONTEXT": {
+        "machine": "context",
+        "kind": "specific",
+        "service": "ContextService",
+        "crate": "crates/core"
+      },
+      "SUPERSEDE_CONTEXT": {
+        "machine": "context",
+        "kind": "specific",
+        "service": "ContextService",
+        "crate": "crates/core"
+      },
+      "ADVANCE_MESSAGE_DELIVERY": {
+        "machine": "message_delivery",
+        "kind": "advance",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "ACK_RECEIPT": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "COMPLETE_PROCESSING": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "DEAD_LETTER_MESSAGE": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "EXPIRE_MESSAGE": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "REJECT_MESSAGE": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "REQUEUE_MESSAGE": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "RETRY_PROCESSING": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "START_PROCESSING": {
+        "machine": "message_delivery",
+        "kind": "specific",
+        "service": null,
+        "crate": "crates/bus"
+      },
+      "ADVANCE_BARRIER": {
+        "machine": "barrier",
+        "kind": "advance",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "BLOCK_BARRIER": {
+        "machine": "barrier",
+        "kind": "specific",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "SATISFY_BARRIER": {
+        "machine": "barrier",
+        "kind": "specific",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "TIMEOUT_BARRIER": {
+        "machine": "barrier",
+        "kind": "specific",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      },
+      "WAIT_BARRIER": {
+        "machine": "barrier",
+        "kind": "specific",
+        "service": "CouncilService",
+        "crate": "crates/council"
+      }
+    }
+  },
   "message_to_payload": {
     "HANDSHAKE": "handshake",
     "HANDSHAKE_ACK": "handshake",

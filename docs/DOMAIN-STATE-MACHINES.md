@@ -201,4 +201,6 @@ The complete transition registry is `schemas/mcf-v2/transition-types.json`. It c
 
 Each record's `event_type` is a canonical MCF event, and every record for one transition names the same event. A transition's event is the canonical event for *entering* its target state, so the `ADVANCE_<machine>` spine records that satisfy the adjacency requirement above carry the same event as the edge's specific-command record rather than a generic `<MACHINE>_CHANGED` placeholder.
 
+Each record's `command` is registered in `registry.json:transition_commands` with its machine, kind and owning service; the owning service is the one named in the ownership matrix above, and the crate it resolves to in `workspace.manifest.json` must equal the machine's owner here. Message delivery is the one machine with no application service — `crates/bus` owns it directly.
+
 `crates/core` coordinates cross-machine transitions but cannot mutate a state machine owned by another crate.

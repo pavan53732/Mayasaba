@@ -58,3 +58,11 @@ Every legal state transition is represented by `schemas/mcf-v2/transition-types.
 No implementation may introduce a stringly-typed message/event/transition name outside this registry.
 
 A transition record's `event_type` must be a canonical MCF event from `event-types.schema.json`, and every record sharing a `transition_id` must name the same one — `registry.json`'s `transition_event_rules` requires exactly one canonical event type per transition. `emitted_events` is exactly `[event_type]`. The local contract gate (`npm run verify:contracts`) enforces all three; before 2026-10-03 it read no transition record's `event_type` at all, and 48 records violated the rule undetected — 32 named a Tauri UI event rather than an MCF event, and 16 named a real MCF event belonging to a different edge of the same machine.
+
+## Transition command registry
+
+The commands a transition record carries in its `command` field are registered in `registry.json` under `transition_commands`. Each entry declares its machine, its kind (`advance` or `specific`), and its owning service and crate.
+
+Commands are internal state-machine drivers, not Tauri-facing service operations: the 58 commands and the 77 `service-contracts-v1` operations are disjoint sets, and a command is never invoked across the bridge directly. Each machine has exactly one `ADVANCE_<MACHINE>` command, named after the machine, which drives that machine's adjacent spine; registering that convention once is what keeps the spine from needing a registration per record. The remaining 46 commands are specific edges.
+
+The gate requires the registered set to equal the set of commands the transition records actually use, in both directions, and checks each entry's machine and crate against the record that uses it and against `transition-types.json`'s machine owner. Before 2026-10-03 the 58 commands were named nowhere outside the transition records themselves, so a command had no declared owner and could not be found except by reading every record.

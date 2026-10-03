@@ -156,6 +156,43 @@ for(const [machine,list] of Object.entries(transition.transitions??{})){
   }
 }
 
+// --- Transition command registry. 58 distinct commands drove the 157 transition records and were
+// named nowhere outside them, so a command had no declared owner and no way to be found except by
+// reading every record. registry.json:transition_commands now registers each one with its machine,
+// kind, owning service and crate. The set must match the records exactly in both directions: an
+// unregistered command is an undeclared state-machine driver, and a registered command nothing uses
+// is a phantom driver that a reader would take for a real one. The machine and crate are derived
+// facts and are checked against the record that uses the command and against transition.machines,
+// so the registration cannot quietly disagree with the transition registry it describes.
+const commandRegistry=registry.transition_commands?.commands;
+if(!commandRegistry||typeof commandRegistry!=="object") fail("registry.json has no transition_commands.commands block");
+const declaredCommands=new Map();
+for(const [machine,list] of Object.entries(transition.transitions??{})){
+  for(const t of list){
+    const prev=declaredCommands.get(t.command);
+    if(prev&&prev.machine!==machine) fail(`Command ${t.command} is used by two machines: ${prev.machine} and ${machine}`);
+    declaredCommands.set(t.command,{machine,transitionId:t.transition_id});
+  }
+}
+for(const [c,rec] of Object.entries(commandRegistry)){
+  if(!declaredCommands.has(c)) fail(`Registered transition command ${c} is used by no transition record`);
+  const {machine,transitionId}=declaredCommands.get(c);
+  if(rec.machine!==machine) fail(`Transition command ${c} is registered under machine "${rec.machine}" but used by ${machine} (${transitionId})`);
+  const owner=transition.machines?.[machine]?.owner;
+  if(rec.crate!==owner) fail(`Transition command ${c} is registered with crate "${rec.crate}" but machine ${machine} is owned by "${owner}"`);
+}
+for(const [c,{transitionId}] of declaredCommands){
+  if(!(c in commandRegistry)) fail(`Transition ${transitionId} uses command ${c}, which is not registered in registry.json:transition_commands`);
+}
+// The ADVANCE_<MACHINE> convention is what keeps the adjacency spine from needing 110 more
+// registrations; it is a rule, so it is checked rather than assumed.
+for(const [machine,def] of Object.entries(transition.machines??{})){
+  const want="ADVANCE_"+machine.toUpperCase();
+  if(!(want in commandRegistry)) fail(`Machine ${machine} has no ${want} command registered`);
+  if(commandRegistry[want].kind!=="advance") fail(`Command ${want} must be registered with kind "advance"`);
+  if(commandRegistry[want].machine!==machine) fail(`Command ${want} is registered under machine "${commandRegistry[want].machine}", expected "${machine}"`);
+}
+
 const bridge=read("schemas/tauri-bridge-v1/bridge.schema.json");
 const workspace=read("workspace.manifest.json");
 for(const c of bridge.properties.command.enum) if(!workspace.tauri_bridge.commands?.[c]) fail("No command owner: "+c);

@@ -142,6 +142,7 @@ It is the single machine-readable enum source for:
 - event types
 - priority lanes
 - material-action-chain mappings
+- transition commands
 
 The human-readable registry is `MCF-V2-REGISTRY.md`. No crate or adapter may maintain a second authoritative message/event enum.
 
