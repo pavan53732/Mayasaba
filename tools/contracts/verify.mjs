@@ -224,6 +224,51 @@ for(const c of bridge.properties.command.enum) if(!payloadRegistry.commands?.[c]
 for(const q of bridge.properties.query.enum) if(!payloadRegistry.queries?.[q]) fail("No query payload metadata: "+q);
 for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e]) fail("No event payload metadata: "+e);
 
+// --- Event emitters (DEC-040). registry.json:event_ownership is keyed by event *category*, not by
+// event type, so it has no per-event key and cannot answer "what emits this event?". event_emitters
+// declares one emitter per canonical event: {kind:"transition", machines:[...]} or
+// {kind:"service", service, crate} - service null where the crate owns the concern directly.
+// Three checks: coverage (every event declares an emitter, no emitter names a non-event); a
+// transition emitter must actually be emitted by one of its declared machines; a service emitter
+// must name a real application service and the crate that owns it, or a null service with a real
+// crate.
+// Violations are collected and reported together rather than failing on the first. This check is
+// expected to be red on a known set while the per-machine event repairs land, and a fail-fast report
+// would hide all but one of them - the count is the useful signal.
+// Known limit, stated so it is not overclaimed: the transition check verifies emission BY MACHINE,
+// not by target state. An event attached to the wrong edge of the right machine still passes; that
+// is recorded as a DEC-040 limitation rather than implied away.
+const emitters=registry.event_emitters;
+if(!emitters||typeof emitters!=="object") fail("registry.json has no event_emitters block");
+const emittedByMachine={};
+for(const [machine,list] of Object.entries(transition.transitions??{})){
+  for(const t of list) (emittedByMachine[t.event_type]??=new Set()).add(machine);
+}
+const serviceCrate=workspace.application_services??{};
+const crateNames=Object.keys(workspace.crates??{}).map(c=>"crates/"+c);
+const emitterProblems=[];
+for(const e of events){
+  const d=emitters[e];
+  if(!d){ emitterProblems.push("Event "+e+" declares no emitter"); continue; }
+  if(d.kind==="transition"){
+    if(!Array.isArray(d.machines)||d.machines.length===0){ emitterProblems.push("Event "+e+" is kind transition but declares no machines"); continue; }
+    const unknown=d.machines.filter(m=>!transition.machines?.[m]);
+    if(unknown.length){ emitterProblems.push("Event "+e+" declares unknown machine(s): "+unknown.join(", ")); continue; }
+    if(!d.machines.some(m=>emittedByMachine[e]?.has(m))) emitterProblems.push("Event "+e+" is declared a transition emitter for ["+d.machines.join(", ")+"] but no transition in that machine set emits it");
+  } else if(d.kind==="service"){
+    if(d.service!==null){
+      if(!(d.service in serviceCrate)){ emitterProblems.push("Event "+e+" declares unknown service "+JSON.stringify(d.service)); continue; }
+      const want="crates/"+serviceCrate[d.service];
+      if(d.crate!==want){ emitterProblems.push("Event "+e+" declares crate "+JSON.stringify(d.crate)+" but service "+JSON.stringify(d.service)+" is owned by "+JSON.stringify(want)); continue; }
+    }
+    if(!crateNames.includes(d.crate)) emitterProblems.push("Event "+e+" declares unknown crate "+JSON.stringify(d.crate));
+  } else {
+    emitterProblems.push("Event "+e+" declares unknown emitter kind "+JSON.stringify(d.kind));
+  }
+}
+for(const e of Object.keys(emitters)) if(!events.includes(e)) emitterProblems.push("event_emitters names "+JSON.stringify(e)+", which is not a canonical event");
+if(emitterProblems.length) fail(emitterProblems.length+" event-emitter problem(s):\n  - "+emitterProblems.join("\n  - "));
+
 const requiredRefs=workspace.schema_sources ?? [];
 for(const p of requiredRefs) if(!exists(p)) fail("Missing workspace schema source: "+p);
 

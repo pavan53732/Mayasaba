@@ -730,11 +730,688 @@
     "handoff": "crates/tasks",
     "execution": "crates/execution",
     "validation": "crates/validation",
+    "policy": "crates/policy",
     "repair": "crates/core",
     "context": "crates/core",
     "barrier": "crates/council",
     "evidence": "crates/evidence",
     "workspace": "crates/workspace"
+  },
+  "event_emitters": {
+    "INTENT_RECORDED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "ROUTE_RESOLVED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "MESSAGE_PERSISTED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_QUEUED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_DISPATCHED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_RECEIVED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_ACKED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_DEAD_LETTERED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "MESSAGE_EXPIRED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "CONTEXT_VALIDATED": {
+      "kind": "service",
+      "service": "ContextService",
+      "crate": "crates/core"
+    },
+    "AUTHORIZATION_VALIDATED": {
+      "kind": "service",
+      "service": "PolicyService",
+      "crate": "crates/policy"
+    },
+    "LEASE_VALIDATED": {
+      "kind": "service",
+      "service": "TaskService",
+      "crate": "crates/tasks"
+    },
+    "ACTION_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "ACTION_PROGRESS": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "ACTION_COMPLETED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "ACTION_FAILED": {
+      "kind": "transition",
+      "machines": [
+        "message_delivery"
+      ]
+    },
+    "RESULT_PERSISTED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "EVIDENCE_CAPTURED": {
+      "kind": "service",
+      "service": "EvidenceService",
+      "crate": "crates/evidence"
+    },
+    "VALIDATION_REQUESTED": {
+      "kind": "service",
+      "service": "ValidationService",
+      "crate": "crates/validation"
+    },
+    "VALIDATION_COMPLETED": {
+      "kind": "service",
+      "service": "ValidationService",
+      "crate": "crates/validation"
+    },
+    "STATE_COMMITTED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "REPAIR_STARTED": {
+      "kind": "service",
+      "service": "RepairService",
+      "crate": "crates/core"
+    },
+    "PARTICIPANTS_SYNCED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "TASK_CYCLE_CLOSED": {
+      "kind": "service",
+      "service": null,
+      "crate": "crates/bus"
+    },
+    "PROJECT_CREATED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_PHASE_CHANGED": {
+      "kind": "transition",
+      "machines": [
+        "project"
+      ]
+    },
+    "PROJECT_PAUSED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_RESUMED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_STOPPING": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_STOPPED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_BLOCKED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_RECOVERING": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "PROJECT_COMPLETED": {
+      "kind": "service",
+      "service": "LifecycleService",
+      "crate": "crates/core"
+    },
+    "AGENT_DISCOVERED": {
+      "kind": "service",
+      "service": "AgentService",
+      "crate": "crates/agents"
+    },
+    "AGENT_HANDSHAKING": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_CAPABILITY_VALIDATING": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_WORKSPACE_VALIDATING": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_READY": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_ACTIVATED": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_PAUSED": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_DRAINING": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_STOPPED": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_LOST": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_RECONNECTING": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_SYNCED": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "AGENT_FAILED": {
+      "kind": "transition",
+      "machines": [
+        "agent_session"
+      ]
+    },
+    "TASK_CREATED": {
+      "kind": "service",
+      "service": "TaskService",
+      "crate": "crates/tasks"
+    },
+    "TASK_READY": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_LEASED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_ACCEPTED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_REVIEW_PENDING": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_VALIDATION_PENDING": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_PASSED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_COMPLETED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_BLOCKED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_FAILED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_REASSIGNED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_INVALIDATED": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "TASK_REPAIR_PENDING": {
+      "kind": "transition",
+      "machines": [
+        "task"
+      ]
+    },
+    "LEASE_REQUESTED": {
+      "kind": "transition",
+      "machines": [
+        "lease",
+        "task"
+      ]
+    },
+    "LEASE_RENEWED": {
+      "kind": "transition",
+      "machines": [
+        "lease"
+      ]
+    },
+    "LEASE_EXPIRED": {
+      "kind": "transition",
+      "machines": [
+        "lease",
+        "task"
+      ]
+    },
+    "LEASE_RELEASED": {
+      "kind": "transition",
+      "machines": [
+        "lease"
+      ]
+    },
+    "LEASE_REVOKED": {
+      "kind": "transition",
+      "machines": [
+        "lease"
+      ]
+    },
+    "COUNCIL_OPENED": {
+      "kind": "service",
+      "service": "CouncilService",
+      "crate": "crates/council"
+    },
+    "COUNCIL_RESPONSE_COLLECTING": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_CRITIQUE_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_REBUTTAL_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_REVISION_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_DISAGREEMENT_REVIEW": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_USER_INPUT_REQUIRED": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "COUNCIL_CLOSED": {
+      "kind": "service",
+      "service": "CouncilService",
+      "crate": "crates/council"
+    },
+    "COUNCIL_SEALED": {
+      "kind": "transition",
+      "machines": [
+        "council_round"
+      ]
+    },
+    "HANDOFF_REQUESTED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_OFFERED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_ACCEPTED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_TRANSFERRED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_VERIFIED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_CLOSED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_REJECTED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "EXECUTION_REQUESTED": {
+      "kind": "service",
+      "service": "ExecutionService",
+      "crate": "crates/execution"
+    },
+    "EXECUTION_POLICY_CHECKED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_APPROVED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_RUNNING": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_EXITED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_EVIDENCE_CAPTURED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_RECORDED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_DENIED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_TIMEOUT": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_CANCELED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_CRASHED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "VALIDATION_STARTED": {
+      "kind": "transition",
+      "machines": [
+        "validation"
+      ]
+    },
+    "VALIDATION_RESULTS_RECORDED": {
+      "kind": "transition",
+      "machines": [
+        "validation"
+      ]
+    },
+    "VALIDATION_PASSED": {
+      "kind": "transition",
+      "machines": [
+        "validation"
+      ]
+    },
+    "VALIDATION_FAILED": {
+      "kind": "transition",
+      "machines": [
+        "validation"
+      ]
+    },
+    "REPAIR_REQUESTED": {
+      "kind": "service",
+      "service": "RepairService",
+      "crate": "crates/core"
+    },
+    "REPAIR_DIAGNOSING": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "REPAIR_ACTIVE": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "REPAIR_VERIFYING": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "REPAIR_REGRESSION": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "REPAIR_RESOLVED": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "REPAIR_ESCALATED": {
+      "kind": "transition",
+      "machines": [
+        "repair"
+      ]
+    },
+    "CONTEXT_CREATED": {
+      "kind": "service",
+      "service": "ContextService",
+      "crate": "crates/core"
+    },
+    "CONTEXT_SUPERSEDED": {
+      "kind": "transition",
+      "machines": [
+        "context"
+      ]
+    },
+    "CONTEXT_INVALIDATED": {
+      "kind": "transition",
+      "machines": [
+        "context"
+      ]
+    },
+    "EPOCH_CHANGED": {
+      "kind": "service",
+      "service": "ContextService",
+      "crate": "crates/core"
+    },
+    "BARRIER_OPENED": {
+      "kind": "service",
+      "service": "CouncilService",
+      "crate": "crates/council"
+    },
+    "BARRIER_WAITING": {
+      "kind": "transition",
+      "machines": [
+        "barrier"
+      ]
+    },
+    "BARRIER_SATISFIED": {
+      "kind": "transition",
+      "machines": [
+        "barrier"
+      ]
+    },
+    "BARRIER_BLOCKED": {
+      "kind": "transition",
+      "machines": [
+        "barrier"
+      ]
+    },
+    "BARRIER_TIMED_OUT": {
+      "kind": "transition",
+      "machines": [
+        "barrier"
+      ]
+    },
+    "ARTIFACT_PUBLISHED": {
+      "kind": "service",
+      "service": "EvidenceService",
+      "crate": "crates/evidence"
+    },
+    "EVIDENCE_PUBLISHED": {
+      "kind": "service",
+      "service": "EvidenceService",
+      "crate": "crates/evidence"
+    },
+    "REVIEW_RECORDED": {
+      "kind": "service",
+      "service": "ValidationService",
+      "crate": "crates/validation"
+    },
+    "CERTIFICATION_GRANTED": {
+      "kind": "service",
+      "service": "ValidationService",
+      "crate": "crates/validation"
+    },
+    "ADMISSION_RECORDED": {
+      "kind": "service",
+      "service": "WorkspaceService",
+      "crate": "crates/workspace"
+    }
   },
   "event_to_ui": {
     "INTENT_RECORDED": "COMMUNICATION_CHANGED",
