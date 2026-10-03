@@ -19,6 +19,27 @@ if(events.length!==new Set(events).size) fail("Duplicate MCF event type");
 for(const name of messages) if(!registry.message_to_payload?.[name]) fail("No payload mapping for message: "+name);
 for(const name of messages) if(!registry.message_priority?.[name]) fail("No priority mapping for message: "+name);
 
+// --- Message-set cross-checks, the symmetric counterpart to the event checks below. DEC-033 claims
+// contract verification enforces all four message registry updates a new message type requires
+// (`message_types`, `message_to_payload`, `message_priority`, `message-payloads.registry.json`); as
+// written the gate read only two of the four, and read them one-directionally — it checked that every
+// enum member had a mapping, never that a list contained nothing the enum does not. Both directions
+// and all four lists are checked now, so the record's claim becomes true rather than needing to be
+// re-scoped.
+const messageLists=[
+  ["schemas/mcf-v2/registry.json","message_types",registry.message_types],
+  ["schemas/mcf-v2/registry.json","message_to_payload",Object.keys(registry.message_to_payload??{})],
+  ["schemas/mcf-v2/registry.json","message_priority",Object.keys(registry.message_priority??{})],
+  ["schemas/mcf-v2/message-payloads.registry.json","messages",Object.keys(read("schemas/mcf-v2/message-payloads.registry.json").messages??{})],
+];
+for(const [file,key,list] of messageLists){
+  if(!Array.isArray(list)) fail(`Message list ${file}:${key} is missing or not a list`);
+  const missing=messages.filter(m=>!list.includes(m));
+  const extra=list.filter(m=>!messages.includes(m));
+  if(missing.length) fail(`Message list ${file}:${key} omits ${missing.length} message(s) present in message-types.schema.json: ${missing.join(", ")}`);
+  if(extra.length) fail(`Message list ${file}:${key} names ${extra.length} message(s) absent from message-types.schema.json: ${extra.join(", ")}`);
+}
+
 // --- Event-set cross-checks. Four separate lists enumerate the event set, but until now only the
 // event-types.schema.json enum was read. registry.json's `event_types` and `event_to_ui`, and
 // event-to-ui.registry.json's `mapping`, each declare themselves authoritative (the last two

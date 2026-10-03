@@ -793,9 +793,10 @@ Implementation source-of-truth artifacts are:
 - Tauri operation metadata: `schemas/tauri-bridge-v1/payloads.json`
 - adapter types/probes: `schemas/agent-adapter-v1/`
 - context digest: `schemas/context-v1/context-digest.schema.json`
-- SQLite schema: `schemas/sqlite-v1/schema.sql`
+- SQLite schema: `schemas/sqlite-v1/schema.sql` (engine, id, timestamp and hash conventions are fixed by `schemas/sqlite-v1/manifest.json`, which declares `schemas/sqlite-v1/schema.sql` its authority)
 - doctor: `schemas/doctor-v1/doctor-report.schema.json`
 - recovery: `schemas/recovery-v1/recovery.schema.json`
+- error codes: `schemas/error-v1/registry.json` (the canonical MCF/Tauri error-code vocabulary every subsystem's explicit error codes are drawn from, validated against `schemas/error-v1/registry.schema.json`)
 - configuration: `schemas/config-v1/configuration.schema.json` (validated against the layer/group vocabulary in `schemas/config-v1/configuration-registry.json`)
 - simulation: `schemas/simulation-v1/simulation.schema.json` (scenario IDs and the required fault-class vocabulary are enumerated in `schemas/simulation-v1/scenario-registry.json`)
 
