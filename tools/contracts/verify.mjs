@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import {execFileSync} from "node:child_process";
 
 const root=process.cwd();
 const read=(p)=>JSON.parse(fs.readFileSync(path.join(root,p),"utf8"));
@@ -17,6 +18,35 @@ if(messages.length!==new Set(messages).size) fail("Duplicate MCF message type");
 if(events.length!==new Set(events).size) fail("Duplicate MCF event type");
 for(const name of messages) if(!registry.message_to_payload?.[name]) fail("No payload mapping for message: "+name);
 for(const name of messages) if(!registry.message_priority?.[name]) fail("No priority mapping for message: "+name);
+
+// --- Event-set cross-checks. Four separate lists enumerate the event set, but until now only the
+// event-types.schema.json enum was read. registry.json's `event_types` and `event_to_ui`, and
+// event-to-ui.registry.json's `mapping`, each declare themselves authoritative (the last two
+// explicitly, via their own `authority` field, under DEC-021) yet no tool read them, so they drifted:
+// ADMISSION_RECORDED (DEC-035) reached the enum, the payload registry and registry.event_to_ui, but
+// not registry.event_types or event-to-ui.registry.json. Each list must now equal the enum exactly,
+// so an event cannot be registered in one place only.
+const eventLists=[
+  ["schemas/mcf-v2/registry.json","event_types",registry.event_types],
+  ["schemas/mcf-v2/registry.json","event_to_ui",Object.keys(registry.event_to_ui??{})],
+  ["schemas/mcf-v2/event-to-ui.registry.json","mapping",Object.keys(read("schemas/mcf-v2/event-to-ui.registry.json").mapping??{})],
+  ["schemas/mcf-v2/event-payloads.registry.json","events",Object.keys(read("schemas/mcf-v2/event-payloads.registry.json").events??{})],
+];
+for(const [file,key,list] of eventLists){
+  if(!Array.isArray(list)) fail(`Event list ${file}:${key} is missing or not a list`);
+  const missing=events.filter(e=>!list.includes(e));
+  const extra=list.filter(e=>!events.includes(e));
+  if(missing.length) fail(`Event list ${file}:${key} omits ${missing.length} event(s) present in event-types.schema.json: ${missing.join(", ")}`);
+  if(extra.length) fail(`Event list ${file}:${key} names ${extra.length} event(s) absent from event-types.schema.json: ${extra.join(", ")}`);
+}
+// registry.event_to_ui and event-to-ui.registry.json both claim to be the event -> UI projection.
+// Equal key sets are not enough: the two must agree on every projection, or the UI event a runtime
+// derives depends on which of the two files it happened to read.
+const uiProjectionA=registry.event_to_ui??{};
+const uiProjectionB=read("schemas/mcf-v2/event-to-ui.registry.json").mapping??{};
+for(const k of Object.keys(uiProjectionA)){
+  if(k in uiProjectionB && uiProjectionA[k]!==uiProjectionB[k]) fail(`event_to_ui projection disagreement for ${k}: registry.json="${uiProjectionA[k]}" vs event-to-ui.registry.json="${uiProjectionB[k]}"`);
+}
 
 const transition=read("schemas/mcf-v2/transition-types.json");
 for(const [machine,def] of Object.entries(transition.machines)){
@@ -40,6 +70,59 @@ for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e
 
 const requiredRefs=workspace.schema_sources ?? [];
 for(const p of requiredRefs) if(!exists(p)) fail("Missing workspace schema source: "+p);
+
+// --- Consumer coverage. `schema_sources` declares 38 files authoritative, but until now nothing
+// checked that any of them was actually consumed; three of them (registry.json, event-to-ui.registry.json,
+// event-payloads.registry.json) declared themselves the authority for a mapping and were read by no
+// tool at all, which is how the ADMISSION_RECORDED drift survived. Existence is not integration.
+// A schema source must be named by at least one tracked file other than itself and other than
+// workspace.manifest.json — the manifest lists it, but a listing is not a consumer. "Named" means the
+// file's repo-relative path appears in that file's text, or its basename does *and* that basename is
+// unique in the repository. The uniqueness condition is load-bearing: six files are named
+// `registry.json`, so accepting a bare basename would let one unrelated mention of "registry.json"
+// satisfy every `*/registry.json` source and the check would report almost nothing. A basename that
+// identifies exactly one file is an unambiguous reference; an ambiguous one is not evidence.
+// A *documenting* reference counts as integration, deliberately: requiring a code reader would fail on
+// every schema whose owning crate is still an unimplemented stub, and the check would then report
+// "not built yet" rather than "drifted", which is a different and much noisier claim. Tracked files are
+// preferred so an untracked scratch file cannot satisfy the check; if git is unavailable the check
+// falls back to a working-tree walk and says so, rather than adding a hard git dependency to the gate.
+let trackedFiles=null;
+try {
+  trackedFiles=execFileSync("git",["ls-files"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim().split(/\r?\n/).filter(Boolean);
+} catch { /* not a git checkout — fall back below */ }
+if(trackedFiles===null){
+  const skipDir=new Set([".git","node_modules","target","dist",".kilo"]);
+  trackedFiles=[];
+  const walk=(dir)=>{
+    for(const e of fs.readdirSync(path.join(root,dir),{withFileTypes:true})){
+      if(e.isDirectory()){ if(!skipDir.has(e.name)) walk(path.join(dir,e.name)); }
+      else trackedFiles.push(path.join(dir,e.name).split(path.sep).join("/"));
+    }
+  };
+  walk(".");
+  console.log("Consumer-coverage check: git unavailable, using working-tree walk (untracked files included).");
+}
+const trackedText=new Map();
+for(const f of trackedFiles){
+  try { trackedText.set(f,fs.readFileSync(path.join(root,f),"utf8")); } catch { /* binary or unreadable */ }
+}
+// A basename shared by more than one tracked file identifies nothing on its own.
+const basenameCounts=new Map();
+for(const f of trackedFiles){
+  const b=path.basename(f);
+  basenameCounts.set(b,(basenameCounts.get(b)??0)+1);
+}
+for(const p of requiredRefs){
+  const base=path.basename(p);
+  const baseIsUnique=basenameCounts.get(base)===1;
+  let consumer=null;
+  for(const [f,text] of trackedText){
+    if(f===p||f==="workspace.manifest.json") continue;
+    if(text.includes(p)||(baseIsUnique&&text.includes(base))) { consumer=f; break; }
+  }
+  if(!consumer) fail(`Schema source has no consumer (no tracked file other than the manifest names its path${baseIsUnique?` or its unique basename`:`; basename "${base}" is ambiguous so only an exact path counts`}): ${p}`);
+}
 
 // --- Agent adapter set (DEC-029): the closed agent set must not drift between schemas. ---
 const canonicalAgents=["HERMES_AGENT","KILO_CODE","OPEN_CODE"];
