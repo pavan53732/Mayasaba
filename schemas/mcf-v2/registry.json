@@ -134,6 +134,7 @@
     "TASK_INVALIDATED",
     "TASK_REPAIR_PENDING",
     "LEASE_REQUESTED",
+    "LEASE_ACTIVE",
     "LEASE_RENEWED",
     "LEASE_EXPIRED",
     "LEASE_RELEASED",
@@ -148,6 +149,7 @@
     "COUNCIL_CLOSED",
     "COUNCIL_SEALED",
     "HANDOFF_REQUESTED",
+    "HANDOFF_PACKAGE_BUILT",
     "HANDOFF_OFFERED",
     "HANDOFF_ACCEPTED",
     "HANDOFF_TRANSFERRED",
@@ -166,6 +168,7 @@
     "EXECUTION_TIMEOUT",
     "EXECUTION_CANCELED",
     "EXECUTION_CRASHED",
+    "EXECUTION_CLEANUP_REQUIRED",
     "VALIDATION_STARTED",
     "VALIDATION_RESULTS_RECORDED",
     "VALIDATION_PASSED",
@@ -1081,6 +1084,12 @@
         "task"
       ]
     },
+    "LEASE_ACTIVE": {
+      "kind": "transition",
+      "machines": [
+        "lease"
+      ]
+    },
     "LEASE_RENEWED": {
       "kind": "transition",
       "machines": [
@@ -1159,6 +1168,12 @@
       ]
     },
     "HANDOFF_REQUESTED": {
+      "kind": "transition",
+      "machines": [
+        "handoff"
+      ]
+    },
+    "HANDOFF_PACKAGE_BUILT": {
       "kind": "transition",
       "machines": [
         "handoff"
@@ -1266,6 +1281,12 @@
       ]
     },
     "EXECUTION_CRASHED": {
+      "kind": "transition",
+      "machines": [
+        "execution"
+      ]
+    },
+    "EXECUTION_CLEANUP_REQUIRED": {
       "kind": "transition",
       "machines": [
         "execution"
@@ -1475,6 +1496,7 @@
     "TASK_INVALIDATED": "TASK_CHANGED",
     "TASK_REPAIR_PENDING": "TASK_CHANGED",
     "LEASE_REQUESTED": "LEASE_CHANGED",
+    "LEASE_ACTIVE": "LEASE_CHANGED",
     "LEASE_RENEWED": "LEASE_CHANGED",
     "LEASE_EXPIRED": "LEASE_CHANGED",
     "LEASE_RELEASED": "LEASE_CHANGED",
@@ -1489,6 +1511,7 @@
     "COUNCIL_CLOSED": "COUNCIL_ROUND_CHANGED",
     "COUNCIL_SEALED": "COUNCIL_ROUND_CHANGED",
     "HANDOFF_REQUESTED": "HANDOFF_CHANGED",
+    "HANDOFF_PACKAGE_BUILT": "HANDOFF_CHANGED",
     "HANDOFF_OFFERED": "HANDOFF_CHANGED",
     "HANDOFF_ACCEPTED": "HANDOFF_CHANGED",
     "HANDOFF_TRANSFERRED": "HANDOFF_CHANGED",
@@ -1507,6 +1530,7 @@
     "EXECUTION_TIMEOUT": "EXECUTION_CHANGED",
     "EXECUTION_CANCELED": "EXECUTION_CHANGED",
     "EXECUTION_CRASHED": "EXECUTION_CHANGED",
+    "EXECUTION_CLEANUP_REQUIRED": "EXECUTION_CHANGED",
     "VALIDATION_STARTED": "VALIDATION_CHANGED",
     "VALIDATION_RESULTS_RECORDED": "VALIDATION_CHANGED",
     "VALIDATION_PASSED": "VALIDATION_CHANGED",

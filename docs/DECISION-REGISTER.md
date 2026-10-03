@@ -44,6 +44,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-038 | Each state machine declares an ordered `spine` distinct from its `states` set, and the local gate enforces adjacency over the spine rather than over the whole state set | HARD_LOCK |
 | DEC-039 | The MCF-v2 message → payload-schema mapping has exactly one owner, `message-payloads.registry.json`; `registry.json:message_to_payload` and its alias table are removed | HARD_LOCK |
 | DEC-040 | Every canonical MCF event declares its emitter in `registry.json:event_emitters` — a transition (machine list) or a service (service + crate) — and the local gate enforces coverage and emission | HARD_LOCK |
+| DEC-041 | Every state has its own canonical entry event: `LEASE_ACTIVE`, `EXECUTION_CLEANUP_REQUIRED` and `HANDOFF_PACKAGE_BUILT` are added so three states stop borrowing a neighbouring state's event | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -253,6 +254,21 @@ Classification: ADDITIVE. Date: 2026-10-03. Applies DEC-017, DEC-021 and DEC-038
 | Tests affected | `tools/contracts/verify.mjs` gains the three checks above. Mutation testing of them is not yet recorded and is required before this record is treated as enforced. |
 | Known limitations | (1) **Emission is checked by machine, not by target state.** An event attached to the wrong edge of the right machine still passes: `council_round` could emit `COUNCIL_SEALED` on entering `CLOSING` rather than `SEALED` and go green. This is the same per-state blind spot the one-event-per-entered-state rule covers for the *conflicting* case; the single-inbound-edge case remains uncovered. (2) **Correcting an event can orphan an event.** An event emitted only by the wrong records disappears when those records are corrected; every event correction therefore needs a re-derive-and-diff sweep of the emitted set, not just a conflict count. Observed once (`BARRIER_OPENED`) and now a required step in the per-machine repair loop. (3) The gate is red on 16 until those repairs land, so the tree is not committable in that state. |
 | Related decision | Applies DEC-017 (one canonical owner per concept) and DEC-021 (machine-readable canonical registries). Complements DEC-038 (spine and adjacency) and DEC-039 (single payload-mapping authority). Extends DEC-036's principle — a claim about the gate is only honest where the gate implements the check — to event emission. |
+
+## DEC-041 missing state-entry event record
+
+Classification: ADDITIVE. Date: 2026-10-03. Applies DEC-017 and DEC-021; complements DEC-040; supersedes none. HARD_LOCK.
+
+| Field | Value |
+|---|---|
+| Previous behavior | Three states had no canonical entry event of their own and borrowed a neighbouring state's, producing a false signal that no existing rule could see: `lease.ACTIVE` emitted `LEASE_REQUESTED` (a granted lease announced "requested"), `execution.CLEANUP_REQUIRED` emitted `EXECUTION_STARTED` (cleanup announced "started"), and `handoff.PACKAGE_BUILT` emitted `HANDOFF_REQUESTED`. Each is a single-inbound-edge state entry, so the one-event-per-entered-state rule had no divergence to detect; and because no canonical event existed for the target state, `event_emitters` had nothing to declare either. Both rules were blind for the same reason: the root cause was a **missing event**, not a wrong one. |
+| New behavior | `LEASE_ACTIVE`, `EXECUTION_CLEANUP_REQUIRED` and `HANDOFF_PACKAGE_BUILT` are added as canonical events, registered in all five event lists (`event-types.schema.json`, `registry.event_types`, `registry.event_to_ui`, `event-to-ui.registry.json`, `event-payloads.registry.json`) and in `registry.event_emitters` as `transition` emitters for `lease`, `execution` and `handoff` respectively. The three edges now emit them: `lease.REQUESTED->ACTIVE`, `execution.CRASHED->CLEANUP_REQUIRED`, `handoff.REQUESTED->PACKAGE_BUILT`. The event enum grows 118 -> 121. |
+| Reason | A state that has no entry event of its own must borrow one, and a borrowed event is a false signal: a consumer watching `LEASE_REQUESTED` cannot distinguish a lease request from a lease grant. Adding the event is the repair because the event vocabulary is the root cause; correcting an edge's event would not have been possible, since there was no correct event to point at. |
+| Compatibility impact | ADDITIVE. Three events across five lists plus `event_emitters`; no MCF envelope, message type, transition graph, Tauri contract or SQLite shape changes. Contract verification passes at 121 events, 59 messages, 12 machines. |
+| Migration/reconciliation | No data migration: no Mayasaba database exists yet and no event has been persisted. Once runtime persistence exists, a consumer that treated `LEASE_REQUESTED` as the lease-grant signal must read `LEASE_ACTIVE`. |
+| Tests affected | Contract verification passes. The orphan sweep was re-run per edge and found no orphans: `LEASE_REQUESTED` survives on `task.LEASE_REQUESTED`, `EXECUTION_STARTED` on `execution.APPROVED->STARTING`, `HANDOFF_REQUESTED` on `handoff.REJECTED->REQUESTED [RETRY_HANDOFF]`. |
+| Known limitations | There is still no rule that a state's entry event must be *its own*. DEC-040's limitation (1) applies unchanged: emission is checked by machine, not by target state, so a future single-inbound state could borrow a neighbouring event and pass. Detecting that needs either a naming-convention check or a declared state -> event map, neither of which exists. This record removes the three known instances, not the class. |
+| Related decision | Applies DEC-017 (one canonical owner per concept) and DEC-021 (machine-readable canonical registries). Complements DEC-040, which declared emitters for the events that existed; this record adds the events that did not. |
 
 ## Change procedure
 

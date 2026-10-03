@@ -2693,7 +2693,7 @@
         "transition_id": "lease.REQUESTED->ACTIVE",
         "owner": "crates/tasks",
         "source_state": "REQUESTED",
-        "event_type": "LEASE_REQUESTED",
+        "event_type": "LEASE_ACTIVE",
         "command": "ADVANCE_LEASE",
         "guards": [
           {
@@ -2720,7 +2720,7 @@
         "forbidden_fields": [],
         "state_mutation": "lease.state = ACTIVE",
         "emitted_events": [
-          "LEASE_REQUESTED"
+          "LEASE_ACTIVE"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3352,7 +3352,7 @@
         "transition_id": "handoff.REQUESTED->PACKAGE_BUILT",
         "owner": "crates/tasks",
         "source_state": "REQUESTED",
-        "event_type": "HANDOFF_REQUESTED",
+        "event_type": "HANDOFF_PACKAGE_BUILT",
         "command": "ADVANCE_HANDOFF",
         "guards": [
           {
@@ -3379,7 +3379,7 @@
         "forbidden_fields": [],
         "state_mutation": "handoff.state = PACKAGE_BUILT",
         "emitted_events": [
-          "HANDOFF_REQUESTED"
+          "HANDOFF_PACKAGE_BUILT"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4123,7 +4123,7 @@
         "transition_id": "execution.CRASHED->CLEANUP_REQUIRED",
         "owner": "crates/execution",
         "source_state": "CRASHED",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_CLEANUP_REQUIRED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -4149,7 +4149,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = CLEANUP_REQUIRED",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_CLEANUP_REQUIRED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
