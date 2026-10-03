@@ -38,6 +38,8 @@ for(const [file,key,list] of messageLists){
   const extra=list.filter(m=>!messages.includes(m));
   if(missing.length) fail(`Message list ${file}:${key} omits ${missing.length} message(s) present in message-types.schema.json: ${missing.join(", ")}`);
   if(extra.length) fail(`Message list ${file}:${key} names ${extra.length} message(s) absent from message-types.schema.json: ${extra.join(", ")}`);
+  const dupes=list.filter((m,i)=>list.indexOf(m)!==i);
+  if(dupes.length) fail(`Message list ${file}:${key} repeats ${dupes.length} entry/entries: ${[...new Set(dupes)].join(", ")}`);
 }
 
 // --- Event-set cross-checks. Four separate lists enumerate the event set, but until now only the
@@ -59,14 +61,30 @@ for(const [file,key,list] of eventLists){
   const extra=list.filter(e=>!events.includes(e));
   if(missing.length) fail(`Event list ${file}:${key} omits ${missing.length} event(s) present in event-types.schema.json: ${missing.join(", ")}`);
   if(extra.length) fail(`Event list ${file}:${key} names ${extra.length} event(s) absent from event-types.schema.json: ${extra.join(", ")}`);
+  // A set comparison via includes() cannot see a repeat: a list holding INTENT_RECORDED twice has the
+  // same membership as one holding it once, so a duplicated entry passed every check above.
+  // This catches repeated array entries only. A repeated *key* inside one of the JSON objects is
+  // invisible here, because JSON.parse has already discarded all but the last occurrence — detecting
+  // that needs a raw-text scan, which this gate does not do.
+  const dupes=list.filter((e,i)=>list.indexOf(e)!==i);
+  if(dupes.length) fail(`Event list ${file}:${key} repeats ${dupes.length} entry/entries: ${[...new Set(dupes)].join(", ")}`);
 }
 // registry.event_to_ui and event-to-ui.registry.json both claim to be the event -> UI projection.
 // Equal key sets are not enough: the two must agree on every projection, or the UI event a runtime
 // derives depends on which of the two files it happened to read.
+// Agreement between the two is also not enough on its own: they could agree on a name that is not a
+// Tauri UI event at all. Nothing validated the projection *target*, so setting both sides to a
+// nonexistent event passed. Every value must now be a member of the bridge's UI event enum.
+const uiEventEnum=new Set(read("schemas/tauri-bridge-v1/bridge.schema.json").properties.event_type.enum);
 const uiProjectionA=registry.event_to_ui??{};
 const uiProjectionB=read("schemas/mcf-v2/event-to-ui.registry.json").mapping??{};
 for(const k of Object.keys(uiProjectionA)){
   if(k in uiProjectionB && uiProjectionA[k]!==uiProjectionB[k]) fail(`event_to_ui projection disagreement for ${k}: registry.json="${uiProjectionA[k]}" vs event-to-ui.registry.json="${uiProjectionB[k]}"`);
+}
+for(const [src,map] of [["registry.json",uiProjectionA],["event-to-ui.registry.json",uiProjectionB]]){
+  for(const [k,v] of Object.entries(map)){
+    if(!uiEventEnum.has(v)) fail(`event_to_ui projection in ${src} maps ${k} to "${v}", which is not a Tauri UI event in bridge.schema.json`);
+  }
 }
 
 const transition=read("schemas/mcf-v2/transition-types.json");
@@ -103,11 +121,38 @@ for(const p of requiredRefs) if(!exists(p)) fail("Missing workspace schema sourc
 // `registry.json`, so accepting a bare basename would let one unrelated mention of "registry.json"
 // satisfy every `*/registry.json` source and the check would report almost nothing. A basename that
 // identifies exactly one file is an unambiguous reference; an ambiguous one is not evidence.
+// The match must land on a token boundary, not anywhere inside a longer name. A bare `String.includes`
+// is not a reference test: the basename `payloads.schema.json` (unique, count 1) occurs *inside*
+// `event-payloads.schema.json` and `message-payloads.schema.json`, so a plain substring test credited
+// the wrong file and passed while the source's only real reference was deleted. That was reproduced
+// end-to-end before this boundary condition was added. A name is only "named" when the character
+// before it is not a filename character — so a path separator (a genuine relative reference such as
+// `../validation-v1/failure.schema.json`) still counts, but a `-`, `.`, `_` or alphanumeric glue that
+// makes it part of a longer filename does not. The same boundary is applied after the match, so
+// `payloads.schema.json.bak` is not a reference either.
 // A *documenting* reference counts as integration, deliberately: requiring a code reader would fail on
 // every schema whose owning crate is still an unimplemented stub, and the check would then report
 // "not built yet" rather than "drifted", which is a different and much noisier claim. Tracked files are
 // preferred so an untracked scratch file cannot satisfy the check; if git is unavailable the check
 // falls back to a working-tree walk and says so, rather than adding a hard git dependency to the gate.
+// Known limit, stated so it is not overclaimed: this proves a source is *named* somewhere, not that the
+// naming is load-bearing. A bullet in a documentation inventory satisfies it, so it detects "nothing
+// anywhere references this file" — the failure that let the ADMISSION_RECORDED drift survive — and not
+// "the reference is actually read". A stronger check needs a declared consumer per source, which the
+// manifest does not carry today.
+// True only when `name` occurs in `text` as a whole filename token. The character before and after
+// the match must not be a filename character (`[A-Za-z0-9._-]`), so `payloads.schema.json` does not
+// match inside `event-payloads.schema.json`, while a path-qualified reference such as
+// `../validation-v1/failure.schema.json` still matches on its `/` boundary.
+const nameChar=/[A-Za-z0-9._-]/;
+const namesFile=(text,name)=>{
+  for(let i=text.indexOf(name);i!==-1;i=text.indexOf(name,i+1)){
+    const before=i===0?null:text[i-1];
+    const after=text[i+name.length]??null;
+    if((before===null||!nameChar.test(before))&&(after===null||!nameChar.test(after))) return true;
+  }
+  return false;
+};
 let trackedFiles=null;
 try {
   trackedFiles=execFileSync("git",["ls-files"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim().split(/\r?\n/).filter(Boolean);
@@ -134,15 +179,25 @@ for(const f of trackedFiles){
   const b=path.basename(f);
   basenameCounts.set(b,(basenameCounts.get(b)??0)+1);
 }
+// The gate's own source is a real consumer where it *reads* a file (it reads adapter-types.schema.json
+// and native-to-mcf.registry.json, for instance), but its prose must not certify anything. This file is
+// tracked and necessarily names the sources it audits — this very comment names one — so a source whose
+// only real consumer had been deleted would otherwise still pass on the strength of the checker's own
+// wording. Observed, not theorized: when the boundary fix above was first tested, this file's comment
+// was the text credited with consuming `schemas/tauri-bridge-v1/payloads.schema.json`. Comments are
+// therefore stripped from this file's text before it is used as evidence; its code still counts.
+const SELF="tools/contracts/verify.mjs";
+const stripComments=(s)=>s.replace(/\/\*[\s\S]*?\*\//g,"").split(/\r?\n/).map(l=>l.replace(/\/\/.*$/,"")).join("\n");
+if(trackedText.has(SELF)) trackedText.set(SELF,stripComments(trackedText.get(SELF)));
 for(const p of requiredRefs){
   const base=path.basename(p);
   const baseIsUnique=basenameCounts.get(base)===1;
   let consumer=null;
   for(const [f,text] of trackedText){
     if(f===p||f==="workspace.manifest.json") continue;
-    if(text.includes(p)||(baseIsUnique&&text.includes(base))) { consumer=f; break; }
+    if(namesFile(text,p)||(baseIsUnique&&namesFile(text,base))) { consumer=f; break; }
   }
-  if(!consumer) fail(`Schema source has no consumer (no tracked file other than the manifest names its path${baseIsUnique?` or its unique basename`:`; basename "${base}" is ambiguous so only an exact path counts`}): ${p}`);
+  if(!consumer) fail(`Schema source has no consumer (no tracked file other than itself or the manifest names its path${baseIsUnique?` or its unique basename`:`; basename "${base}" is ambiguous so only an exact path counts`}): ${p}`);
 }
 
 // --- Agent adapter set (DEC-029): the closed agent set must not drift between schemas. ---
