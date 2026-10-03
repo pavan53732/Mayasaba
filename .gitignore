@@ -1,2 +1,5 @@
 # Kilo Code CLI local state and worktrees
 .kilo/
+
+# WorkBuddy AI local state
+.workbuddy-ai/
