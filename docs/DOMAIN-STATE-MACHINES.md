@@ -199,4 +199,6 @@ Admission deliberately has no state machine. It is a per-evaluation decision rec
 
 The complete transition registry is `schemas/mcf-v2/transition-types.json`. It contains explicit transition records with owner, source/target state, event/command, guards, authorization, required/forbidden fields, state mutation, emitted events, epoch effect, outbox effect, idempotency behavior, transaction boundary and failure transition.
 
+Each record's `event_type` is a canonical MCF event, and every record for one transition names the same event. A transition's event is the canonical event for *entering* its target state, so the `ADVANCE_<machine>` spine records that satisfy the adjacency requirement above carry the same event as the edge's specific-command record rather than a generic `<MACHINE>_CHANGED` placeholder.
+
 `crates/core` coordinates cross-machine transitions but cannot mutate a state machine owned by another crate.

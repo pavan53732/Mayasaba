@@ -56,3 +56,5 @@ Workspace and integration admission emit `ADMISSION_RECORDED` (owner `crates/wor
 Every legal state transition is represented by `schemas/mcf-v2/transition-types.json`. Its owner is the authoritative subsystem for the state machine; `crates/core` enforces cross-machine orchestration and transaction ordering.
 
 No implementation may introduce a stringly-typed message/event/transition name outside this registry.
+
+A transition record's `event_type` must be a canonical MCF event from `event-types.schema.json`, and every record sharing a `transition_id` must name the same one — `registry.json`'s `transition_event_rules` requires exactly one canonical event type per transition. `emitted_events` is exactly `[event_type]`. The local contract gate (`npm run verify:contracts`) enforces all three; before 2026-10-03 it read no transition record's `event_type` at all, and 48 records violated the rule undetected — 32 named a Tauri UI event rather than an MCF event, and 16 named a real MCF event belonging to a different edge of the same machine.

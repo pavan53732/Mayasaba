@@ -132,6 +132,30 @@ for(const [machine,def] of Object.entries(transition.machines)){
   }
 }
 
+// --- Transition event-type validity. registry.json:transition_event_rules states the contract
+// this section enforces: "Every domain state transition has exactly one authoritative owner and
+// exactly one canonical event type." Nothing read a transition record's `event_type` at all, so
+// both halves were violated and undetected. 32 records named an event that is not an MCF event
+// (AGENT_SESSION_CHANGED, TASK_CHANGED, CONTEXT_CHANGED, DEAD_LETTER — all four are Tauri UI event
+// names, which is the same two-vocabulary confusion that DEC-035's ADMISSION_RECORDED drift came
+// from), and a further 16 named a real MCF event belonging to a different edge of the same machine
+// (e.g. lease.ACTIVE->RENEWING carried LEASE_REQUESTED, the event for entering ACTIVE). A record's
+// event must be a member of the canonical enum, and every record for one transition_id must agree,
+// so an edge cannot carry one event on its specific-command record and another on its ADVANCE_ spine
+// record. `emitted_events` is checked with it: a transition that mutates state to X but emits Y
+// describes two different transitions, and 157/157 records emitted exactly [event_type] before this
+// was enforced, so the equality is the existing convention rather than a new one.
+const eventEnum=new Set(events);
+const transitionEventById=new Map();
+for(const [machine,list] of Object.entries(transition.transitions??{})){
+  for(const t of list){
+    if(!eventEnum.has(t.event_type)) fail(`Transition ${t.transition_id} declares event_type "${t.event_type}", which is not an MCF event in event-types.schema.json`);
+    if(JSON.stringify(t.emitted_events)!==JSON.stringify([t.event_type])) fail(`Transition ${t.transition_id} emits ${JSON.stringify(t.emitted_events)} but mutates on event_type "${t.event_type}"; emitted_events must be exactly [event_type]`);
+    if(transitionEventById.has(t.transition_id)&&transitionEventById.get(t.transition_id)!==t.event_type) fail(`Transition ${t.transition_id} has two canonical events: "${transitionEventById.get(t.transition_id)}" and "${t.event_type}"`);
+    transitionEventById.set(t.transition_id,t.event_type);
+  }
+}
+
 const bridge=read("schemas/tauri-bridge-v1/bridge.schema.json");
 const workspace=read("workspace.manifest.json");
 for(const c of bridge.properties.command.enum) if(!workspace.tauri_bridge.commands?.[c]) fail("No command owner: "+c);
