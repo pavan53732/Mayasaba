@@ -84,7 +84,7 @@ Preview is a first-class local runtime surface. Display process status and runti
 Keyboard navigation, visible focus, confirmation for destructive actions, clear blocked reasons, and no hidden privileged actions.
 
 ## Event cursor
-UI subscriptions use event cursors. Sequence gaps trigger recovery/resync rather than silent local reconstruction.
+UI subscriptions use event cursors (`schemas/ui-events-v1/cursor.schema.json`: `project_id`, `consumer_id`, `last_sequence`, optional `next_sequence`/`gap_detected`/`resync_from`). Sequence gaps trigger recovery/resync rather than silent local reconstruction.
 
 ## Machine-readable UI wiring
 

@@ -163,7 +163,7 @@ Recovery uses durable events, outbox/inbox reconciliation, process verification,
 
 ## 10. Completion
 
-An agent can never certify the work. The controller may enter COMPLETE only after the task's applicable acceptance and validation gates pass with evidence. Build, runtime, E2E and packaging gates apply to software work when required; they are not universal gates for document, research or data tasks.
+| agent can never certify the work. The controller may enter COMPLETE only after the task's applicable acceptance and validation gates pass with evidence. Build, runtime, E2E and packaging gates apply to software work when required; they are not universal gates for document, research or data tasks. Integration is reachable only through a persisted INTEGRATION_ADMISSION record with verdict ADMITTED.
 
 Mayasaba supports user-requested read-only retrieval from public web sources for local research reports. It does not provide email, posting, form-submission, purchase, account-change or general desktop-control actions.
 

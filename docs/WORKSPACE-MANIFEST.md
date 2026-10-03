@@ -134,4 +134,4 @@ The embedding owner is `crates/protocol`; compile-time embedding such as Rust `i
 
 ## Implementation-manifest gate
 
-Before M0.5 exits, the repository must contain the root `Cargo.toml`, desktop `package.json`, Tauri configuration and crate manifests matching `workspace.manifest.json`. The local contract gate (`npm run verify:contracts`) must reject dependency drift.
+Before M0.5 exits, the repository must contain the root `Cargo.toml`, desktop `package.json`, Tauri configuration and crate manifests matching `workspace.manifest.json`. The local contract gate (`npm run verify:contracts`) currently checks manifest existence and that every crate's `Cargo.toml` names its declared `mayasaba-*` dependencies; a full content comparison is planned but not yet implemented (see DEC-036).

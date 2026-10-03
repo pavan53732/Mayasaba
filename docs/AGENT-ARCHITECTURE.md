@@ -40,13 +40,6 @@ DISCOVERED -> HANDSHAKING -> CAPABILITY_VALIDATING -> WORKSPACE_VALIDATING -> RE
 Failure path:
 READY/ACTIVE -> LOST -> RECONNECTING -> SYNCING -> READY/ACTIVE.
 
-## Material action binding
-
-Every active task action is bound to:
-project + agent + session + workspace + task lease + context snapshot + project epoch + policy scope + required capabilities.
-
-Expired leases or stale contexts cannot authorize material writes.
-
 ## Communication
 
 Agents never communicate through an uncontrolled direct channel. All agent communication passes through the adapter and MCF-v2 bus.

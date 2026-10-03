@@ -48,7 +48,7 @@ Global states include PAUSED, STOPPED, BLOCKED and RECOVERING. This full lifecyc
 
 The user's stated intent enters at PROJECT_CREATED as a versioned `ProjectBrief` and is project truth, not a chat message. DISCOVERY completes when the brief baseline and objective workspace facts are established; the brief version current at that point is the immutable analysis anchor for the lineage. USER_INTERVIEW is a distinct, later gate reached only for material questions produced by deliberation. Free-text input after creation is recorded as a `UserContribution` and changes project truth only when the owning authoritative service accepts a material change, which increments the epoch. See `DECISION-REGISTER.md` DEC-030 and DEC-031, `DATA-MODEL.md` and `MEMORY-CONTEXT.md`.
 
-## 6. Core work loops
+## 5. Authoritative truth
 
 Mayasaba must perform the requested work, not merely generate advice. Every task uses an explicit objective, authorized workspace/paths, acceptance criteria, validation plan and evidence.
 
@@ -64,7 +64,7 @@ For research reports, public-source retrieval is read-only; citations and source
 
 No task type is excluded solely by its app or file category. Completion is limited by available local tools and evidence; unavailable validation is reported as blocked or unverified, never silently treated as passing. An agent's “done” message never closes a task.
 
-## 7. Authoritative truth
+## 6. Core work loops
 
 1. Current user-approved requirements
 2. HARD_LOCK decisions
@@ -114,7 +114,7 @@ Commands are observable and recorded with executable, arguments, working directo
 
 ## 10. Completion contract
 
-Completion requires the user's acceptance criteria and all validation gates applicable to the task, with evidence and controller-owned certification. Software-engineering tasks retain the applicable build, runtime, test, E2E/UI, review, regression and packaging gates. Document, research and data tasks use relevant checks such as source citations, format/schema validation, diff review, record counts, invariants and recoverability.
+Completion requires the user's acceptance criteria and all validation gates applicable to the task, with evidence and controller-owned certification. Software-engineering tasks retain the applicable build, runtime, test, E2E/UI, review, regression and packaging gates. Document, research and data tasks use relevant checks such as source citations, format/schema validation, diff review, record counts, invariants and recoverability. Integration is reachable only through a persisted INTEGRATION_ADMISSION record with verdict ADMITTED.
 
 A task is BLOCKED or UNVERIFIED when a required local toolchain or runtime is unavailable; Mayasaba must not claim success based only on an agent report. Irrelevant software-only gates are not imposed on non-software artifact tasks.
 

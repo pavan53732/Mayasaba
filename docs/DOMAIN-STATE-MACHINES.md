@@ -172,7 +172,7 @@ Unknown, missing, stale, contradictory or unverifiable state cannot satisfy a po
 Recovery reconstructs machine state from durable authoritative state and actual external state. It does not infer success from stale process/session messages.
 
 
-## 13. State-machine ownership matrix
+## 17. State-machine ownership matrix
 
 | State machine | Authoritative owner | Crate |
 |---|---|---|
@@ -191,7 +191,10 @@ Recovery reconstructs machine state from durable authoritative state and actual 
 
 The Orchestrator coordinates these owners but is never a second owner. Cross-machine changes invoke the authoritative owner service.
 
+### 17.1 State machines that deliberately do not exist
+
 Admission deliberately has no state machine. It is a per-evaluation decision record, not a lifecycle: each gate run produces one immutable `admissions` row with one verdict, and a re-evaluation appends a superseding row rather than transitioning the previous one. Modelling it as a machine would imply mutable gate state and a "current" admission that could be edited, which is exactly the property the record exists to prevent.
+
 ## Machine-readable transition authority
 
 The complete transition registry is `schemas/mcf-v2/transition-types.json`. It contains explicit transition records with owner, source/target state, event/command, guards, authorization, required/forbidden fields, state mutation, emitted events, epoch effect, outbox effect, idempotency behavior, transaction boundary and failure transition.

@@ -55,7 +55,7 @@ Affected contexts become stale.
 
 ## User contributions and the epoch
 
-A free-text user message submitted after project creation is recorded as a `UserContribution` with an **advisory** classification. The classification is an input to routing, not an authority: only the owning service that would mutate the affected record determines whether material project truth actually changed.
+A free-text user message submitted after project creation is recorded as a `UserContribution` with an **advisory** classification. The classification is an input to routing, not an authority: only the owning service that would mutate the affected record determines whether material project truth actually changed. The advisory classification is produced by the intake router (ConfigurationService policy), is stored on the `UserContribution` row, and is never read as authorization by the owning service.
 
 | Outcome | Epoch | Context |
 |---|---|---|

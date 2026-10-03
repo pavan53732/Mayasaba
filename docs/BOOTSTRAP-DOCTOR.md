@@ -71,7 +71,7 @@ Missing agents must never be represented as silently participating.
 
 Remote/cloud gateway execution is outside Mayasaba's product boundary. Local execution is required.
 
-Kilo is a fork of OpenCode and carries the same cloud/share surface, so the prohibition is broader than "remote mode": the doctor must confirm the adapter will not use Kilo's `cloud`, `remote`, `serve`, `attach`, `github`, `pr`, `daemon` or `import` subcommands, nor the `--share`, `--cloud-fork` or `--attach` flags, and that session sharing is off in config. The authoritative prohibition list is owned by `schemas/agent-adapter-v1/native-transport-contract.json`.
+Kilo is a fork of OpenCode and carries the same cloud/share surface, so the prohibition is broader than "remote mode": the doctor must confirm the adapter will not use Kilo's `cloud`, `remote`, `serve`, `attach`, `github`, `pr`, `daemon`, `import`, `plugin`, `plug`, `upgrade`, `uninstall`, `mcp`, `console`, `roll-call`, `profile` subcommands, nor the `--share`, `--cloud-fork`, `--attach`, `--mdns`, `--mdns-domain`, `--refresh` flags, and that session sharing is off in config. The authoritative prohibition list is owned by `schemas/agent-adapter-v1/native-transport-contract.json`.
 
 ## Workspace preflight
 

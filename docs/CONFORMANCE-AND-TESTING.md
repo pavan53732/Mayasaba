@@ -180,6 +180,8 @@ The local contract gate — `npm run verify:contracts`, which runs `tools/contra
 - `docs/WORKSPACE-MANIFEST.md` against Cargo/npm/Tauri manifests once implementation exists — **partially** performed: the gate currently checks that the declared manifests exist and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. It does not yet parse the root `Cargo.toml`, desktop `package.json` or `tauri.conf.json` contents for a full dependency-graph comparison;
 - adapter probe results against the adapter capability contract — **not** performed by the gate. This is a runtime comparison against a live probe result; the gate checks the adapter set, transports and declared controls statically.
 
-Any mismatch the gate detects is a verification failure, not a warning. The gate is a manual local command (no hook or wrapper runs it), so a mismatch is only caught when the gate is run; running it before handoff and commit is required, not optional.
+Any mismatch the gate detects is a verification failure, not a warning.
+
+> **Operational note:** the gate is a manual local command — no hook or wrapper runs it. A mismatch is only caught when the developer runs the gate; a forgotten run is undetected. Running it before handoff and commit is required, not optional.
 
 This gate runs locally; there is no hosted CI. See the DEC-036 record in `docs/DECISION-REGISTER.md`.

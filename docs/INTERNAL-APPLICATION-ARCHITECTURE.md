@@ -796,7 +796,7 @@ Implementation source-of-truth artifacts are:
 - SQLite schema: `schemas/sqlite-v1/schema.sql`
 - doctor: `schemas/doctor-v1/doctor-report.schema.json`
 - recovery: `schemas/recovery-v1/recovery.schema.json`
-- configuration: `schemas/config-v1/configuration.schema.json`
-- simulation: `schemas/simulation-v1/simulation.schema.json`
+- configuration: `schemas/config-v1/configuration.schema.json` (validated against the layer/group vocabulary in `schemas/config-v1/configuration-registry.json`)
+- simulation: `schemas/simulation-v1/simulation.schema.json` (scenario IDs and the required fault-class vocabulary are enumerated in `schemas/simulation-v1/scenario-registry.json`)
 
 No service or UI implementation may define a competing machine-readable contract outside these owners.
