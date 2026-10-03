@@ -2771,7 +2771,7 @@
         "transition_id": "lease.RENEWING->EXPIRED",
         "owner": "crates/tasks",
         "source_state": "RENEWING",
-        "event_type": "LEASE_REQUESTED",
+        "event_type": "LEASE_EXPIRED",
         "command": "ADVANCE_LEASE",
         "guards": [
           {
@@ -2798,7 +2798,7 @@
         "forbidden_fields": [],
         "state_mutation": "lease.state = EXPIRED",
         "emitted_events": [
-          "LEASE_REQUESTED"
+          "LEASE_EXPIRED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -2810,7 +2810,7 @@
         "transition_id": "lease.EXPIRED->RELEASED",
         "owner": "crates/tasks",
         "source_state": "EXPIRED",
-        "event_type": "LEASE_REQUESTED",
+        "event_type": "LEASE_RELEASED",
         "command": "ADVANCE_LEASE",
         "guards": [
           {
@@ -2837,7 +2837,7 @@
         "forbidden_fields": [],
         "state_mutation": "lease.state = RELEASED",
         "emitted_events": [
-          "LEASE_REQUESTED"
+          "LEASE_RELEASED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -2849,7 +2849,7 @@
         "transition_id": "lease.RELEASED->REVOKED",
         "owner": "crates/tasks",
         "source_state": "RELEASED",
-        "event_type": "LEASE_REQUESTED",
+        "event_type": "LEASE_REVOKED",
         "command": "ADVANCE_LEASE",
         "guards": [
           {
@@ -2876,7 +2876,7 @@
         "forbidden_fields": [],
         "state_mutation": "lease.state = REVOKED",
         "emitted_events": [
-          "LEASE_REQUESTED"
+          "LEASE_REVOKED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3084,7 +3084,7 @@
         "transition_id": "council_round.RESPONSES_COLLECTING->CRITIQUE",
         "owner": "crates/council",
         "source_state": "RESPONSES_COLLECTING",
-        "event_type": "COUNCIL_RESPONSE_COLLECTING",
+        "event_type": "COUNCIL_CRITIQUE_STARTED",
         "command": "ADVANCE_COUNCIL_ROUND",
         "guards": [
           {
@@ -3110,7 +3110,7 @@
         "forbidden_fields": [],
         "state_mutation": "council_round.state = CRITIQUE",
         "emitted_events": [
-          "COUNCIL_RESPONSE_COLLECTING"
+          "COUNCIL_CRITIQUE_STARTED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3122,7 +3122,7 @@
         "transition_id": "council_round.CRITIQUE->REBUTTAL",
         "owner": "crates/council",
         "source_state": "CRITIQUE",
-        "event_type": "COUNCIL_RESPONSE_COLLECTING",
+        "event_type": "COUNCIL_REBUTTAL_STARTED",
         "command": "ADVANCE_COUNCIL_ROUND",
         "guards": [
           {
@@ -3148,7 +3148,7 @@
         "forbidden_fields": [],
         "state_mutation": "council_round.state = REBUTTAL",
         "emitted_events": [
-          "COUNCIL_RESPONSE_COLLECTING"
+          "COUNCIL_REBUTTAL_STARTED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3160,7 +3160,7 @@
         "transition_id": "council_round.REBUTTAL->REVISION",
         "owner": "crates/council",
         "source_state": "REBUTTAL",
-        "event_type": "COUNCIL_RESPONSE_COLLECTING",
+        "event_type": "COUNCIL_REVISION_STARTED",
         "command": "ADVANCE_COUNCIL_ROUND",
         "guards": [
           {
@@ -3186,7 +3186,7 @@
         "forbidden_fields": [],
         "state_mutation": "council_round.state = REVISION",
         "emitted_events": [
-          "COUNCIL_RESPONSE_COLLECTING"
+          "COUNCIL_REVISION_STARTED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3198,7 +3198,7 @@
         "transition_id": "council_round.REVISION->DISAGREEMENT_REVIEW",
         "owner": "crates/council",
         "source_state": "REVISION",
-        "event_type": "COUNCIL_RESPONSE_COLLECTING",
+        "event_type": "COUNCIL_DISAGREEMENT_REVIEW",
         "command": "ADVANCE_COUNCIL_ROUND",
         "guards": [
           {
@@ -3224,7 +3224,7 @@
         "forbidden_fields": [],
         "state_mutation": "council_round.state = DISAGREEMENT_REVIEW",
         "emitted_events": [
-          "COUNCIL_RESPONSE_COLLECTING"
+          "COUNCIL_DISAGREEMENT_REVIEW"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3274,7 +3274,7 @@
         "transition_id": "council_round.CLOSING->SEALED",
         "owner": "crates/council",
         "source_state": "CLOSING",
-        "event_type": "COUNCIL_RESPONSE_COLLECTING",
+        "event_type": "COUNCIL_SEALED",
         "command": "ADVANCE_COUNCIL_ROUND",
         "guards": [
           {
@@ -3300,7 +3300,7 @@
         "forbidden_fields": [],
         "state_mutation": "council_round.state = SEALED",
         "emitted_events": [
-          "COUNCIL_RESPONSE_COLLECTING"
+          "COUNCIL_SEALED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3391,7 +3391,7 @@
         "transition_id": "handoff.PACKAGE_BUILT->OFFERED",
         "owner": "crates/tasks",
         "source_state": "PACKAGE_BUILT",
-        "event_type": "HANDOFF_REQUESTED",
+        "event_type": "HANDOFF_OFFERED",
         "command": "ADVANCE_HANDOFF",
         "guards": [
           {
@@ -3418,7 +3418,7 @@
         "forbidden_fields": [],
         "state_mutation": "handoff.state = OFFERED",
         "emitted_events": [
-          "HANDOFF_REQUESTED"
+          "HANDOFF_OFFERED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3469,7 +3469,7 @@
         "transition_id": "handoff.RECEIVER_ACCEPTED->OWNERSHIP_TRANSFERRED",
         "owner": "crates/tasks",
         "source_state": "RECEIVER_ACCEPTED",
-        "event_type": "HANDOFF_REQUESTED",
+        "event_type": "HANDOFF_TRANSFERRED",
         "command": "ADVANCE_HANDOFF",
         "guards": [
           {
@@ -3496,7 +3496,7 @@
         "forbidden_fields": [],
         "state_mutation": "handoff.state = OWNERSHIP_TRANSFERRED",
         "emitted_events": [
-          "HANDOFF_REQUESTED"
+          "HANDOFF_TRANSFERRED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3508,7 +3508,7 @@
         "transition_id": "handoff.OWNERSHIP_TRANSFERRED->VERIFIED",
         "owner": "crates/tasks",
         "source_state": "OWNERSHIP_TRANSFERRED",
-        "event_type": "HANDOFF_REQUESTED",
+        "event_type": "HANDOFF_VERIFIED",
         "command": "ADVANCE_HANDOFF",
         "guards": [
           {
@@ -3535,7 +3535,7 @@
         "forbidden_fields": [],
         "state_mutation": "handoff.state = VERIFIED",
         "emitted_events": [
-          "HANDOFF_REQUESTED"
+          "HANDOFF_VERIFIED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3547,7 +3547,7 @@
         "transition_id": "handoff.VERIFIED->CLOSED",
         "owner": "crates/tasks",
         "source_state": "VERIFIED",
-        "event_type": "HANDOFF_REQUESTED",
+        "event_type": "HANDOFF_CLOSED",
         "command": "ADVANCE_HANDOFF",
         "guards": [
           {
@@ -3574,46 +3574,7 @@
         "forbidden_fields": [],
         "state_mutation": "handoff.state = CLOSED",
         "emitted_events": [
-          "HANDOFF_REQUESTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "handoff.CLOSED->REJECTED",
-        "owner": "crates/tasks",
-        "source_state": "CLOSED",
-        "event_type": "HANDOFF_REQUESTED",
-        "command": "ADVANCE_HANDOFF",
-        "guards": [
-          {
-            "project": "current phase == CLOSED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id",
-          "task_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "handoff.state = REJECTED",
-        "emitted_events": [
-          "HANDOFF_REQUESTED"
+          "HANDOFF_CLOSED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3744,7 +3705,7 @@
         "transition_id": "execution.REQUESTED->POLICY_CHECK",
         "owner": "crates/execution",
         "source_state": "REQUESTED",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_POLICY_CHECKED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -3770,7 +3731,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = POLICY_CHECK",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_POLICY_CHECKED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3782,7 +3743,7 @@
         "transition_id": "execution.POLICY_CHECK->APPROVED",
         "owner": "crates/execution",
         "source_state": "POLICY_CHECK",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_APPROVED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -3808,7 +3769,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = APPROVED",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_APPROVED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3858,7 +3819,7 @@
         "transition_id": "execution.STARTING->RUNNING",
         "owner": "crates/execution",
         "source_state": "STARTING",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_RUNNING",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -3884,7 +3845,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = RUNNING",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_RUNNING"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4010,7 +3971,7 @@
         "transition_id": "execution.RECORDED->DENIED",
         "owner": "crates/execution",
         "source_state": "RECORDED",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_DENIED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -4036,7 +3997,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = DENIED",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_DENIED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4048,7 +4009,7 @@
         "transition_id": "execution.DENIED->TIMEOUT",
         "owner": "crates/execution",
         "source_state": "DENIED",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_TIMEOUT",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -4074,7 +4035,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = TIMEOUT",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_TIMEOUT"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4086,7 +4047,7 @@
         "transition_id": "execution.TIMEOUT->CANCELED",
         "owner": "crates/execution",
         "source_state": "TIMEOUT",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_CANCELED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -4112,7 +4073,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = CANCELED",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_CANCELED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4124,7 +4085,7 @@
         "transition_id": "execution.CANCELED->CRASHED",
         "owner": "crates/execution",
         "source_state": "CANCELED",
-        "event_type": "EXECUTION_STARTED",
+        "event_type": "EXECUTION_CRASHED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
@@ -4150,7 +4111,7 @@
         "forbidden_fields": [],
         "state_mutation": "execution.state = CRASHED",
         "emitted_events": [
-          "EXECUTION_STARTED"
+          "EXECUTION_CRASHED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4579,44 +4540,6 @@
         "failure_transition": null
       },
       {
-        "transition_id": "validation.PASS->FAIL",
-        "owner": "crates/validation",
-        "source_state": "PASS",
-        "event_type": "VALIDATION_STARTED",
-        "command": "ADVANCE_VALIDATION",
-        "guards": [
-          {
-            "project": "current phase == PASS; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "validation.state = FAIL",
-        "emitted_events": [
-          "VALIDATION_STARTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "validation.RUNNING_CHECKS->RESULTS_RECORDED",
         "owner": "crates/validation",
         "source_state": "RUNNING_CHECKS",
@@ -4736,7 +4659,7 @@
         "transition_id": "repair.REQUESTED->DIAGNOSING",
         "owner": "crates/core",
         "source_state": "REQUESTED",
-        "event_type": "REPAIR_REQUESTED",
+        "event_type": "REPAIR_DIAGNOSING",
         "command": "ADVANCE_REPAIR",
         "guards": [
           {
@@ -4762,7 +4685,7 @@
         "forbidden_fields": [],
         "state_mutation": "repair.state = DIAGNOSING",
         "emitted_events": [
-          "REPAIR_REQUESTED"
+          "REPAIR_DIAGNOSING"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4774,7 +4697,7 @@
         "transition_id": "repair.DIAGNOSING->ACTIVE",
         "owner": "crates/core",
         "source_state": "DIAGNOSING",
-        "event_type": "REPAIR_REQUESTED",
+        "event_type": "REPAIR_ACTIVE",
         "command": "ADVANCE_REPAIR",
         "guards": [
           {
@@ -4800,7 +4723,7 @@
         "forbidden_fields": [],
         "state_mutation": "repair.state = ACTIVE",
         "emitted_events": [
-          "REPAIR_REQUESTED"
+          "REPAIR_ACTIVE"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4812,7 +4735,7 @@
         "transition_id": "repair.ACTIVE->VERIFYING",
         "owner": "crates/core",
         "source_state": "ACTIVE",
-        "event_type": "REPAIR_REQUESTED",
+        "event_type": "REPAIR_VERIFYING",
         "command": "ADVANCE_REPAIR",
         "guards": [
           {
@@ -4838,7 +4761,7 @@
         "forbidden_fields": [],
         "state_mutation": "repair.state = VERIFYING",
         "emitted_events": [
-          "REPAIR_REQUESTED"
+          "REPAIR_VERIFYING"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -4923,48 +4846,10 @@
         "failure_transition": null
       },
       {
-        "transition_id": "repair.RESOLVED->RETRY_PENDING",
-        "owner": "crates/core",
-        "source_state": "RESOLVED",
-        "event_type": "REPAIR_REQUESTED",
-        "command": "ADVANCE_REPAIR",
-        "guards": [
-          {
-            "project": "current phase == RESOLVED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "repair.state = RETRY_PENDING",
-        "emitted_events": [
-          "REPAIR_REQUESTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "repair.RETRY_PENDING->BLOCKED",
         "owner": "crates/core",
         "source_state": "RETRY_PENDING",
-        "event_type": "REPAIR_REQUESTED",
+        "event_type": "REPAIR_ESCALATED",
         "command": "ADVANCE_REPAIR",
         "guards": [
           {
@@ -4990,7 +4875,7 @@
         "forbidden_fields": [],
         "state_mutation": "repair.state = BLOCKED",
         "emitted_events": [
-          "REPAIR_REQUESTED"
+          "REPAIR_ESCALATED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5996,7 +5881,7 @@
         "transition_id": "barrier.SATISFIED->BLOCKED",
         "owner": "crates/council",
         "source_state": "SATISFIED",
-        "event_type": "BARRIER_OPENED",
+        "event_type": "BARRIER_BLOCKED",
         "command": "ADVANCE_BARRIER",
         "guards": [
           {
@@ -6022,7 +5907,7 @@
         "forbidden_fields": [],
         "state_mutation": "barrier.state = BLOCKED",
         "emitted_events": [
-          "BARRIER_OPENED"
+          "BARRIER_BLOCKED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -6034,7 +5919,7 @@
         "transition_id": "barrier.BLOCKED->TIMED_OUT",
         "owner": "crates/council",
         "source_state": "BLOCKED",
-        "event_type": "BARRIER_OPENED",
+        "event_type": "BARRIER_TIMED_OUT",
         "command": "ADVANCE_BARRIER",
         "guards": [
           {
@@ -6060,7 +5945,7 @@
         "forbidden_fields": [],
         "state_mutation": "barrier.state = TIMED_OUT",
         "emitted_events": [
-          "BARRIER_OPENED"
+          "BARRIER_TIMED_OUT"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
