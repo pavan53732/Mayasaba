@@ -47,6 +47,17 @@
         "RECONNECTING",
         "SYNCING",
         "FAILED"
+      ],
+      "spine": [
+        "DISCOVERED",
+        "HANDSHAKING",
+        "CAPABILITY_VALIDATING",
+        "WORKSPACE_VALIDATING",
+        "READY",
+        "ACTIVE",
+        "PAUSED",
+        "DRAINING",
+        "STOPPED"
       ]
     },
     "task": {
@@ -70,6 +81,18 @@
         "RECOVERY_PENDING",
         "REASSIGNED",
         "INVALIDATED"
+      ],
+      "spine": [
+        "PLANNED",
+        "READY",
+        "LEASE_REQUESTED",
+        "LEASED",
+        "ACCEPTED",
+        "IN_PROGRESS",
+        "REVIEW_PENDING",
+        "VALIDATION_PENDING",
+        "PASSED",
+        "COMPLETED"
       ]
     },
     "lease": {
@@ -81,6 +104,11 @@
         "EXPIRED",
         "RELEASED",
         "REVOKED"
+      ],
+      "spine": [
+        "REQUESTED",
+        "ACTIVE",
+        "RENEWING"
       ]
     },
     "council_round": {
@@ -107,6 +135,15 @@
         "VERIFIED",
         "CLOSED",
         "REJECTED"
+      ],
+      "spine": [
+        "REQUESTED",
+        "PACKAGE_BUILT",
+        "OFFERED",
+        "RECEIVER_ACCEPTED",
+        "OWNERSHIP_TRANSFERRED",
+        "VERIFIED",
+        "CLOSED"
       ]
     },
     "execution": {
@@ -125,6 +162,16 @@
         "CANCELED",
         "CRASHED",
         "CLEANUP_REQUIRED"
+      ],
+      "spine": [
+        "REQUESTED",
+        "POLICY_CHECK",
+        "APPROVED",
+        "STARTING",
+        "RUNNING",
+        "EXITED",
+        "EVIDENCE_CAPTURED",
+        "RECORDED"
       ]
     },
     "validation": {
@@ -136,6 +183,12 @@
         "RESULTS_RECORDED",
         "PASS",
         "FAIL"
+      ],
+      "spine": [
+        "REQUESTED",
+        "COLLECTING_EVIDENCE",
+        "RUNNING_CHECKS",
+        "RESULTS_RECORDED"
       ]
     },
     "repair": {
@@ -149,11 +202,23 @@
         "RESOLVED",
         "RETRY_PENDING",
         "BLOCKED"
+      ],
+      "spine": [
+        "REQUESTED",
+        "DIAGNOSING",
+        "ACTIVE",
+        "VERIFYING",
+        "REGRESSION"
       ]
     },
     "context": {
       "owner": "crates/core",
       "states": [
+        "CURRENT",
+        "SUPERSEDED",
+        "INVALIDATED"
+      ],
+      "spine": [
         "CURRENT",
         "SUPERSEDED",
         "INVALIDATED"
@@ -174,6 +239,16 @@
         "EXPIRED",
         "REJECTED",
         "DEAD_LETTER"
+      ],
+      "spine": [
+        "CREATED",
+        "PERSISTED",
+        "QUEUED",
+        "DISPATCHED",
+        "RECEIVED",
+        "ACKED",
+        "PROCESSING",
+        "PROCESSED"
       ]
     },
     "barrier": {
@@ -184,6 +259,10 @@
         "SATISFIED",
         "BLOCKED",
         "TIMED_OUT"
+      ],
+      "spine": [
+        "OPEN",
+        "WAITING"
       ]
     }
   },
@@ -5269,7 +5348,7 @@
         "transition_id": "message_delivery.PERSISTED->QUEUED",
         "owner": "crates/bus",
         "source_state": "PERSISTED",
-        "event_type": "MESSAGE_PERSISTED",
+        "event_type": "MESSAGE_QUEUED",
         "command": "ADVANCE_MESSAGE_DELIVERY",
         "guards": [
           {
@@ -5295,7 +5374,7 @@
         "forbidden_fields": [],
         "state_mutation": "message_delivery.state = QUEUED",
         "emitted_events": [
-          "MESSAGE_PERSISTED"
+          "MESSAGE_QUEUED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5307,7 +5386,7 @@
         "transition_id": "message_delivery.QUEUED->DISPATCHED",
         "owner": "crates/bus",
         "source_state": "QUEUED",
-        "event_type": "MESSAGE_PERSISTED",
+        "event_type": "MESSAGE_DISPATCHED",
         "command": "ADVANCE_MESSAGE_DELIVERY",
         "guards": [
           {
@@ -5333,7 +5412,7 @@
         "forbidden_fields": [],
         "state_mutation": "message_delivery.state = DISPATCHED",
         "emitted_events": [
-          "MESSAGE_PERSISTED"
+          "MESSAGE_DISPATCHED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5345,7 +5424,7 @@
         "transition_id": "message_delivery.DISPATCHED->RECEIVED",
         "owner": "crates/bus",
         "source_state": "DISPATCHED",
-        "event_type": "MESSAGE_PERSISTED",
+        "event_type": "MESSAGE_RECEIVED",
         "command": "ADVANCE_MESSAGE_DELIVERY",
         "guards": [
           {
@@ -5371,7 +5450,7 @@
         "forbidden_fields": [],
         "state_mutation": "message_delivery.state = RECEIVED",
         "emitted_events": [
-          "MESSAGE_PERSISTED"
+          "MESSAGE_RECEIVED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5494,49 +5573,11 @@
         "failure_transition": null
       },
       {
-        "transition_id": "message_delivery.PROCESSED->RETRYING",
-        "owner": "crates/bus",
-        "source_state": "PROCESSED",
-        "event_type": "MESSAGE_PERSISTED",
-        "command": "ADVANCE_MESSAGE_DELIVERY",
-        "guards": [
-          {
-            "project": "current phase == PROCESSED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "message_delivery.state = RETRYING",
-        "emitted_events": [
-          "MESSAGE_PERSISTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "message_delivery.RETRYING->EXPIRED",
         "owner": "crates/bus",
         "source_state": "RETRYING",
-        "event_type": "MESSAGE_PERSISTED",
-        "command": "ADVANCE_MESSAGE_DELIVERY",
+        "event_type": "MESSAGE_EXPIRED",
+        "command": "EXPIRE_MESSAGE",
         "guards": [
           {
             "project": "current phase == RETRYING; next phase admission gates satisfied",
@@ -5561,83 +5602,7 @@
         "forbidden_fields": [],
         "state_mutation": "message_delivery.state = EXPIRED",
         "emitted_events": [
-          "MESSAGE_PERSISTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "message_delivery.EXPIRED->REJECTED",
-        "owner": "crates/bus",
-        "source_state": "EXPIRED",
-        "event_type": "MESSAGE_PERSISTED",
-        "command": "ADVANCE_MESSAGE_DELIVERY",
-        "guards": [
-          {
-            "project": "current phase == EXPIRED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "message_delivery.state = REJECTED",
-        "emitted_events": [
-          "MESSAGE_PERSISTED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "message_delivery.REJECTED->DEAD_LETTER",
-        "owner": "crates/bus",
-        "source_state": "REJECTED",
-        "event_type": "MESSAGE_DEAD_LETTERED",
-        "command": "ADVANCE_MESSAGE_DELIVERY",
-        "guards": [
-          {
-            "project": "current phase == REJECTED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "message_delivery.state = DEAD_LETTER",
-        "emitted_events": [
-          "MESSAGE_DEAD_LETTERED"
+          "MESSAGE_EXPIRED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5839,7 +5804,7 @@
         "transition_id": "message_delivery.QUEUED->EXPIRED",
         "owner": "crates/bus",
         "source_state": "QUEUED",
-        "event_type": "MESSAGE_RECEIVED",
+        "event_type": "MESSAGE_EXPIRED",
         "command": "EXPIRE_MESSAGE",
         "guards": [
           {
@@ -5865,7 +5830,7 @@
         "forbidden_fields": [],
         "state_mutation": "message_delivery.state = EXPIRED",
         "emitted_events": [
-          "MESSAGE_RECEIVED"
+          "MESSAGE_EXPIRED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,

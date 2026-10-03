@@ -14,24 +14,35 @@ for(const file of mcf.required_files ?? []) if(!exists("schemas/mcf-v2/"+file)) 
 const messages=read("schemas/mcf-v2/message-types.schema.json").enum;
 const events=read("schemas/mcf-v2/event-types.schema.json").enum;
 const registry=read("schemas/mcf-v2/registry.json");
+const messagePayloads=read("schemas/mcf-v2/message-payloads.registry.json");
 if(messages.length!==new Set(messages).size) fail("Duplicate MCF message type");
 if(events.length!==new Set(events).size) fail("Duplicate MCF event type");
-for(const name of messages) if(!registry.message_to_payload?.[name]) fail("No payload mapping for message: "+name);
+for(const name of messages) if(!messagePayloads.messages?.[name]) fail("No payload mapping for message: "+name);
 for(const name of messages) if(!registry.message_priority?.[name]) fail("No priority mapping for message: "+name);
 
 // --- Message-set cross-checks, the symmetric counterpart to the event checks below. DEC-033 claims
-// contract verification enforces all four message registry updates a new message type requires
-// (`message_types`, `message_to_payload`, `message_priority`, `message-payloads.registry.json`); as
-// written the gate read only two of the four, and read them one-directionally — it checked that every
-// enum member had a mapping, never that a list contained nothing the enum does not. Both directions
-// and all four lists are checked now, so the record's claim becomes true rather than needing to be
-// re-scoped.
+// contract verification enforces every message registry update a new message type requires; as written
+// the gate read only two of them, and read them one-directionally — it checked that every enum member
+// had a mapping, never that a list contained nothing the enum does not. Both directions are checked now.
+// Three lists remain, not four: `registry.json:message_to_payload` was removed because it carried bare
+// aliases with no declared meaning, and once normalized through the payload registry's own alias table
+// it disagreed with `message-payloads.registry.json.messages` on 15 of 59 entries. Two registries for
+// one mapping is the shadow-source pattern DEC-017 prohibits, so the payload registry is now the single
+// authority and `refs` — which existed only to resolve those aliases — went with it.
 const messageLists=[
   ["schemas/mcf-v2/registry.json","message_types",registry.message_types],
-  ["schemas/mcf-v2/registry.json","message_to_payload",Object.keys(registry.message_to_payload??{})],
   ["schemas/mcf-v2/registry.json","message_priority",Object.keys(registry.message_priority??{})],
-  ["schemas/mcf-v2/message-payloads.registry.json","messages",Object.keys(read("schemas/mcf-v2/message-payloads.registry.json").messages??{})],
+  ["schemas/mcf-v2/message-payloads.registry.json","messages",Object.keys(messagePayloads.messages??{})],
 ];
+// --- Payload-value resolution. The list checks above compare key *sets*; they say nothing about the
+// values, which is how `message_to_payload` could disagree with the payload registry on 15 entries and
+// no check noticed. With one authority left, its values *are* the mapping, so each must resolve to a
+// schema file that exists. Values are relative to the payload registry's own directory, so a
+// `../<package>/<file>.schema.json` reference legitimately resolves outside schemas/mcf-v2/.
+for(const [name,ref] of Object.entries(messagePayloads.messages??{})){
+  if(typeof ref!=="string"||ref.length===0) fail(`Payload mapping for ${name} is not a non-empty string`);
+  if(!exists(path.join("schemas/mcf-v2",ref))) fail(`Payload mapping for ${name} points at a missing schema: ${ref}`);
+}
 for(const [file,key,list] of messageLists){
   if(!Array.isArray(list)) fail(`Message list ${file}:${key} is missing or not a list`);
   const missing=messages.filter(m=>!list.includes(m));
@@ -124,11 +135,20 @@ for(const [file,ns] of protocolNamespaces){
 }
 
 const transition=read("schemas/mcf-v2/transition-types.json");
+// --- Adjacency is checked over each machine's declared `spine`, not over its whole `states` set.
+// `states` is the set of legal states and legitimately includes terminal/branch states that are not
+// on the ordered path; `spine` is that ordered path. Requiring states[i]->states[i+1] across the whole
+// set manufactures transitions out of terminal states - message_delivery.PROCESSED->RETRYING and
+// task.COMPLETED->BLOCKED were mandatory edges, not accidental ones. A machine that declares no
+// `spine` has states that are already a single ordered path, so the spine defaults to `states`.
 for(const [machine,def] of Object.entries(transition.machines)){
   const ids=new Set((transition.transitions?.[machine]??[]).map(t=>t.transition_id));
-  for(let i=0;i<def.states.length-1;i++) {
-    const id=`${machine}.${def.states[i]}->${def.states[i+1]}`;
-    if(!ids.has(id)) fail(`Missing adjacent transition: ${id}`);
+  const spine=def.spine ?? def.states;
+  const stray=spine.filter(s=>!def.states.includes(s));
+  if(stray.length) fail(`Machine ${machine} spine names state(s) absent from states: ${stray.join(", ")}`);
+  for(let i=0;i<spine.length-1;i++) {
+    const id=`${machine}.${spine[i]}->${spine[i+1]}`;
+    if(!ids.has(id)) fail(`Missing adjacent transition on ${machine} spine: ${id}`);
   }
 }
 

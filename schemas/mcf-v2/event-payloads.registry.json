@@ -12,6 +12,7 @@
     "MESSAGE_RECEIVED": "common-event.schema.json",
     "MESSAGE_ACKED": "common-event.schema.json",
     "MESSAGE_DEAD_LETTERED": "common-event.schema.json",
+    "MESSAGE_EXPIRED": "common-event.schema.json",
     "CONTEXT_VALIDATED": "common-event.schema.json",
     "AUTHORIZATION_VALIDATED": "common-event.schema.json",
     "LEASE_VALIDATED": "common-event.schema.json",

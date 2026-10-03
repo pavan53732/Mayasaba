@@ -3,21 +3,6 @@
   "registry_version": "2.1.0",
   "authority": "schemas/mcf-v2/message-payloads.registry.json",
   "rule": "Every registered MCF message type maps to exactly one payload schema reference.",
-  "refs": {
-    "handshake": "handshake.schema.json",
-    "ack": "ack.schema.json",
-    "error": "error.schema.json",
-    "sync": "sync.schema.json",
-    "council": "council-round.schema.json",
-    "task": "task.schema.json",
-    "lease": "task-lease.schema.json",
-    "handoff": "handoff.schema.json",
-    "execution": "execution.schema.json",
-    "validation": "validation.schema.json",
-    "artifact": "artifact.schema.json",
-    "evidence": "evidence.schema.json",
-    "control": "control.schema.json"
-  },
   "messages": {
     "HANDSHAKE": "handshake.schema.json",
     "HANDSHAKE_ACK": "handshake.schema.json",

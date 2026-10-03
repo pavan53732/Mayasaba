@@ -110,7 +110,7 @@ Repeated identical failure fingerprints and bounded repair budgets force escalat
 
 Owner: ContextService.
 
-CURRENT → SUPERSEDED / INVALIDATED.
+CURRENT → SUPERSEDED → INVALIDATED, with CURRENT → INVALIDATED as a direct branch.
 
 A context becomes invalid when its project epoch or required state digest no longer matches authoritative state.
 
@@ -200,6 +200,8 @@ Admission deliberately has no state machine. It is a per-evaluation decision rec
 The complete transition registry is `schemas/mcf-v2/transition-types.json`. It contains explicit transition records with owner, source/target state, event/command, guards, authorization, required/forbidden fields, state mutation, emitted events, epoch effect, outbox effect, idempotency behavior, transaction boundary and failure transition.
 
 Each record's `event_type` is a canonical MCF event, and every record for one transition names the same event. A transition's event is the canonical event for *entering* its target state, so the `ADVANCE_<machine>` spine records that satisfy the adjacency requirement above carry the same event as the edge's specific-command record rather than a generic `<MACHINE>_CHANGED` placeholder.
+
+A machine declares its ordered path as `spine`, separately from its `states` set. `states` is the set of legal states and may include terminal or branch states that are not on the ordered path; `spine` is that path. The local gate enforces adjacency over `def.spine ?? def.states`, so a machine whose state set is not a single ordered path must declare a `spine`, or the check will require transitions out of its terminal states. Machines that omit `spine` (`project`, `council_round`) have state sets that are already one ordered path. The check requires a spine's edges to exist; it does not yet forbid a transition that is off-spine but not a declared branch, so an illegal edge that is merely present still passes. Only `message_delivery` has had its illegal off-spine edges removed; the other affected machines still carry theirs pending a declared `branches` set (DEC-038).
 
 Each record's `command` is registered in `registry.json:transition_commands` with its machine, kind and owning service; the owning service is the one named in the ownership matrix above, and the crate it resolves to in `workspace.manifest.json` must equal the machine's owner here. Message delivery is the one machine with no application service — `crates/bus` owns it directly.
 
