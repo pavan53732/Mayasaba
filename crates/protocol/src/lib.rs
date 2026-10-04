@@ -13,12 +13,14 @@
 //! `transitions[]` at runtime, which is a real limitation of the current declaration model and the reason
 //! `state_events` remains worth doing (DEC-042 limitation 3).
 
+pub mod envelope;
 pub mod generated {
     //! Generated from the machine-readable contract. Do not edit by hand.
+    pub mod envelope;
     pub mod machines;
 }
 
 pub use generated::machines::{
-    owner_crate, spine, state_count, states, unreviewed_branches, branches, Machine, AGENT_TYPES,
+    branches, owner_crate, spine, state_count, states, unreviewed_branches, Machine, AGENT_TYPES,
     EVENT_TYPES, SERVICE_EMITTED_EVENTS, TRANSITION_COMMANDS, TRANSITION_EMITTED_EVENTS,
 };

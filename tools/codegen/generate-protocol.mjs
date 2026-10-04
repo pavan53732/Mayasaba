@@ -185,34 +185,95 @@ ${machineNames.map((n) => `        Machine::${pascal(n)} => ${machines[n].owner 
 }
 `;
 
-const dest = path.join(root, "crates/protocol/src/generated");
-const target = path.join(dest, "machines.rs");
+const envelopeSchema = readJson("schemas/mcf-v2/envelope.schema.json");
+const identitySchema = readJson("schemas/mcf-v2/identity.schema.json");
+const enumsSchema = readJson("schemas/mcf-v2/enums.schema.json");
+const messageTypes = readJson("schemas/mcf-v2/message-types.schema.json").enum;
+const strArray = (values) => `&[${values.map((v) => JSON.stringify(v)).join(", ")}]`;
 
-// --check verifies the committed file matches what the contract currently implies, without writing. This is
+// The envelope's allowed vocabulary is derived, never hand-copied. If the contract adds a channel, a phase or a
+// message type, this file changes on the next generation run and the Rust validator starts accepting it. A
+// hand-written list would drift silently, which is the failure this repository keeps removing elsewhere.
+const materialConditional = envelopeSchema.allOf?.[0] ?? {};
+const materialActionTypes = materialConditional.if?.properties?.message_type?.enum ?? [];
+const materialRequired = [...new Set(materialConditional.then?.required ?? [])];
+const envelopeOptional = Object.keys(envelopeSchema.properties).filter((k) => !envelopeSchema.required.includes(k));
+
+const envelopeRs = `// GENERATED FILE - DO NOT EDIT.
+// Source: schemas/mcf-v2/envelope.schema.json, identity.schema.json, enums.schema.json
+// Regenerate: npm run codegen:protocol
+//
+// The envelope's vocabulary is generated from the contract so the Rust validator and the schema cannot
+// disagree about what a legal envelope is. The validation logic itself is hand-written in envelope.rs,
+// because a generic JSON Schema evaluator would be a dependency this repository deliberately does not have.
+
+/// The only protocol version this build speaks.
+pub const PROTOCOL_VERSION: &str = ${JSON.stringify(envelopeSchema.properties.protocol_version.const)};
+
+/// Every legal channel.
+pub const CHANNELS: &[&str] = ${strArray(envelopeSchema.properties.channel.enum)};
+
+/// Every legal lifecycle phase, including UNSCOPED for messages outside a project phase.
+pub const PHASES: &[&str] = ${strArray(envelopeSchema.properties.phase.enum)};
+
+/// Every legal message type.
+pub const MESSAGE_TYPES: &[&str] = ${strArray(messageTypes)};
+
+/// Message types that authorize a material action and therefore require the full authorization context.
+pub const MATERIAL_ACTION_MESSAGE_TYPES: &[&str] = ${strArray(materialActionTypes)};
+
+/// Fields every envelope must carry.
+pub const REQUIRED_FIELDS: &[&str] = ${strArray(envelopeSchema.required)};
+
+/// Fields an envelope may carry. The schema sets additionalProperties:false, so anything else is rejected.
+pub const OPTIONAL_FIELDS: &[&str] = ${strArray(envelopeOptional)};
+
+/// Extra fields a material-action envelope must carry beyond the base set.
+pub const MATERIAL_REQUIRED_FIELDS: &[&str] = ${strArray(materialRequired)};
+
+/// Every legal delivery priority.
+pub const PRIORITIES: &[&str] = ${strArray(enumsSchema.$defs.priority.enum)};
+
+/// Every legal security classification.
+pub const CLASSIFICATIONS: &[&str] = ${strArray(envelopeSchema.properties.security.properties.classification.enum)};
+
+/// Every legal actor kind.
+pub const ACTOR_TYPES: &[&str] = ${strArray(identitySchema.properties.actor_type.enum)};
+
+/// Every legal agent type, from the three supported adapters (DEC-029).
+pub const AGENT_TYPES: &[&str] = ${strArray(identitySchema.properties.agent_type.enum.filter((x) => x !== null))};
+`;
+
+const dest = path.join(root, "crates/protocol/src/generated");
+const outputs = [
+  { path: path.join(dest, "machines.rs"), content: out, label: "machines.rs" },
+  { path: path.join(dest, "envelope.rs"), content: envelopeRs, label: "envelope.rs" },
+];
+
+// --check verifies the committed files match what the contract currently implies, without writing. This is
 // what lets contract verification assert the generated crate is in sync, which matters because no Rust
-// toolchain is configured in this environment: the bytes can be proven current even though they cannot be
-// proven to compile here.
+// toolchain was configured when this was written: the bytes can be proven current even though they cannot be
+// proven to compile at that point.
 if (process.argv.includes("--check")) {
-  if (!fs.existsSync(target)) {
-    console.error("Generated file is missing: crates/protocol/src/generated/machines.rs");
-    process.exit(1);
+  const stale = [];
+  for (const { path: file, content, label } of outputs) {
+    if (!fs.existsSync(file)) stale.push(`${label} is missing`);
+    else if (fs.readFileSync(file, "utf8") !== content) stale.push(`${label} is stale`);
   }
-  const current = fs.readFileSync(target, "utf8");
-  if (current !== out) {
+  if (stale.length) {
     console.error(
-      "crates/protocol/src/generated/machines.rs is stale relative to the contract.\n" +
-      "Run: npm run codegen:protocol"
+      "crates/protocol/src/generated is out of date:\n  - " + stale.join("\n  - ") +
+      "\nRun: npm run codegen:protocol"
     );
     process.exit(1);
   }
-  console.log("crates/protocol/src/generated/machines.rs is up to date");
+  console.log("crates/protocol/src/generated is up to date");
   process.exit(0);
 }
 
 fs.mkdirSync(dest, { recursive: true });
-fs.writeFileSync(target, out);
+for (const { path: file, content } of outputs) fs.writeFileSync(file, content);
 console.log(
-  `Generated crates/protocol/src/generated/machines.rs ` +
-  `(${machineNames.length} machines, ${eventTypes.length} events, ${commandNames.length} commands, ` +
-  `${transitionEvents.length} transition-emitted and ${serviceEvents.length} service-emitted events)`
+  `Generated machines.rs (${machineNames.length} machines, ${eventTypes.length} events, ${commandNames.length} commands) ` +
+  `and envelope.rs (${messageTypes.length} message types, ${materialActionTypes.length} material-action types)`
 );

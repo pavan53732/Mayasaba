@@ -314,15 +314,14 @@
         }
       },
       "then": {
-        "required": [
-          "task_id",
-          "context_snapshot_id",
-          "state_digest",
-          "idempotency_key",
-          "authorization_context",
-          "authorization_context",
-          "operation_id"
-        ],
+"required": [
+            "task_id",
+            "context_snapshot_id",
+            "state_digest",
+            "idempotency_key",
+            "authorization_context",
+            "operation_id"
+          ],
         "properties": {
           "authorization_context": {
             "type": "object"

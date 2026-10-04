@@ -4,3 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+# Envelope validation operates on parsed JSON rather than a hand-written struct, so the validator decides
+# legality without the crate taking ownership of a typed model of the whole protocol. serde_json is already a
+# workspace dependency, so this adds no new external dependency.
+serde_json.workspace = true
