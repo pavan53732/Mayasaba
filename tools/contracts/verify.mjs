@@ -1546,6 +1546,32 @@ const declaredPath=busPolicies.terminal?.on_attempt_budget_exhausted;
 if(declaredPath!=="QUEUED_TO_EXPIRED") busPolicyProblems.push(`bus-policies.json terminal.on_attempt_budget_exhausted is ${JSON.stringify(declaredPath)}; the accepted reading of the machine is that an exhausted sender terminates through QUEUED -> EXPIRED, so any other value needs a decision record rather than a policy edit`);
 if(!deliveryEdges.has("QUEUED->EXPIRED")) busPolicyProblems.push("bus-policies.json terminates through QUEUED -> EXPIRED, which the message_delivery machine does not declare");
 if(busPolicies.terminal?.dead_letter!==true) busPolicyProblems.push("bus-policies.json must require a dead letter when the attempt budget is exhausted, because the alternative loses the reason the message died");
+
+// Every delivery edge the code advances through must be an edge the machine declares.
+//
+// The check reads the Rust rather than a list kept beside it. A list beside the code is a second source of truth
+// for the same fact, free to disagree with the code it describes - which is the failure mode this whole gate
+// exists to prevent, so a check built that way would be the disease dressed as the cure. Reading `advance_in` call
+// sites means a state name the code invents cannot pass by being absent from a hand-maintained list: it is absent
+// from the machine, which is what is asked.
+//
+// The four state columns carry no `CHECK` constraint at the SQL level, so nothing below the gate stops an
+// undeclared state being written. This is that stop.
+const advanceCall = /advance_in\(\s*tx,\s*[^,]+,\s*"([A-Z_]+)",\s*"([A-Z_]+)"/g;
+let advanceCalls = 0;
+for (const file of ["crates/storage/src/lib.rs", "crates/bus/src/lib.rs"]) {
+  // Read without recording coverage: `contentRead` is the evidence that a canonical JSON contract was checked,
+  // and a `.rs` file is not one. Claiming coverage of a source file would inflate the coverage figure with reads
+  // that enforce nothing about the contracts it counts.
+  for (const match of fs.readFileSync(path.join(root, file), "utf8").matchAll(advanceCall)) {
+    advanceCalls++;
+    const edge = `${match[1]}->${match[2]}`;
+    if (!deliveryEdges.has(edge)) busPolicyProblems.push(`${file} advances ${edge}, which the message_delivery machine does not declare`);
+  }
+}
+// A guard against the check quietly passing: if the call shape changes, the regex stops matching and every edge
+// would be "declared" because none was found. A check that cannot fail is not a check.
+if (advanceCalls === 0) busPolicyProblems.push("no advance_in call was found in crates/storage or crates/bus, so the delivery edges the code advances through were not checked at all");
 // The crate's shipped defaults, read back out of the Rust rather than assumed to match.
 // Read as text, not through `read`: that helper parses JSON, and this is Rust source.
 const busPolicySource=fs.readFileSync(path.join(root,"crates/bus/src/policy.rs"),"utf8");

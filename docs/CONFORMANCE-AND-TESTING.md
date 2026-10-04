@@ -292,6 +292,21 @@ Must prove:
 - a replay carries a fresh `created_at`, because it is a new event in the log and DEC-034's chain records when
   things happened, not when the thing they retry happened.
 
+## The gate reads the Rust for delivery edges (DEC-066)
+
+The four state columns carry no SQL `CHECK` constraint, so nothing below the contract gate stopped an undeclared
+delivery state being written; the vocabulary was enforced by the bus's tests alone, which is enforcement by the
+code that might be wrong. `npm run verify:contracts` now scans `advance_in` call sites in `crates/storage` and
+`crates/bus` and requires every edge to be one the `message_delivery` machine declares, and fails if the scan
+finds no call at all - a check that cannot fail is not a check.
+
+Its proof is the mutation `dec066-a`, which rewrites the requeue's `RETRYING -> QUEUED` to `RETRYING -> PROCESSED`
+and must make the gate report that the machine does not declare it.
+
+Known limits: it covers the nine edges routed through `advance_in` of the machine's thirteen - the other four are
+inline SQL where the from-state is implied by a `WHERE` clause rather than named as a pair - and it checks edges
+rather than the four state vocabularies.
+
 ## Project intent and user-contribution tests
 
 Must prove:

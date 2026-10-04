@@ -234,7 +234,21 @@ const MUTATIONS = [
     expect: ["which schemas/error-v1/registry.json does not register"],
   },
 
-  // --- DEC-058: the bus's retry/dispatch policy, against the machine it terminates through and against the
+  // --- DEC-066: the gate reads the Rust for the delivery edges it advances through, so an edge the machine does
+  // not declare cannot be reached by writing it in the code.
+  {
+    id: "dec066-a",
+    what: "crates/storage: a requeue advances RETRYING -> PROCESSED, which the message_delivery machine does not declare",
+    check: GATE,
+    edits: [
+      {
+        file: "crates/storage/src/lib.rs",
+        find: 'advance_in(tx, message_id, "RETRYING", "QUEUED", "a requeue")?;',
+        replace: 'advance_in(tx, message_id, "RETRYING", "PROCESSED", "a requeue")?;',
+      },
+    ],
+    expect: ["advances RETRYING->PROCESSED, which the message_delivery machine does not declare"],
+  },  // --- DEC-058: the bus's retry/dispatch policy, against the machine it terminates through and against the
   // crate's shipped defaults.
   {
     id: "dec060-a",
