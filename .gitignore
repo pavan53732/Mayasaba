@@ -14,3 +14,9 @@ dist/
 
 # VS Code editor settings, local per-developer and not part of the product.
 .vscode/
+
+# axme-code local state
+.axme-code/
+
+# clj-kondo local state
+.clj-kondo/
