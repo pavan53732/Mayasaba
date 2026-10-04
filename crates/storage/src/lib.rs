@@ -692,7 +692,7 @@ fn enqueue_message_in(
     // CREATED -> PERSISTED. The row is inserted already carrying the state this transition produced, so a row
     // can never be observed in CREATED: that state describes a message that exists only in memory.
     tx.execute(
-        "INSERT INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
+        "INSERT OR IGNORE INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
                                correlation_id, causation_id, idempotency_key, delivery_state, envelope_json,
                                created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'PERSISTED', ?11, ?12)",
@@ -1015,7 +1015,7 @@ fn record_dispatched_in(
     attempt: &DeliveryAttempt,
 ) -> Result<()> {
     insert_attempt(tx, &due.message_id, attempt)?;
-    let event_id = transition_event_id(&due.message_id, "MESSAGE_DISPATCHED");
+    let event_id = next_transition_event_id(tx, &due.message_id, "MESSAGE_DISPATCHED")?;
     tx.execute(
         "UPDATE messages SET delivery_state = 'DISPATCHED' WHERE message_id = ?1",
         rusqlite::params![due.message_id],
@@ -1064,7 +1064,7 @@ fn expire_message_in(
     due: &DueMessage,
     finished_at: &str,
 ) -> Result<()> {
-    let event_id = transition_event_id(&due.message_id, "MESSAGE_EXPIRED");
+    let event_id = next_transition_event_id(tx, &due.message_id, "MESSAGE_EXPIRED")?;
     tx.execute(
         "UPDATE messages SET delivery_state = 'EXPIRED' WHERE message_id = ?1",
         rusqlite::params![due.message_id],
@@ -1313,7 +1313,47 @@ fn advance_in(
 
 /// A lifecycle event for a declared transition, with the fields every one of them carries.
 #[allow(clippy::too_many_arguments)]
+/// The id for a transition event that the machine may perform more than once for one message.
+///
+/// `transition_event_id` derives `evt_{message_id}_{event_type}`, which is deterministic and collides the moment
+/// a message legitimately re-runs an edge - and a requeued message does exactly that, taking
+/// `QUEUED -> DISPATCHED -> RECEIVED -> ACKED -> PROCESSING` a second time. `MESSAGE_QUEUED` is emitted by both
+/// `enqueue` and `requeue`, and `MESSAGE_DISPATCHED` on every dispatch pass.
+///
+/// The id stays deterministic **from durable state**: the pass number is the count of events already recorded
+/// for this message and event type, read inside the transaction that is about to append the next one. A crash and
+/// retry therefore derives the same id rather than a new one, which is the property the plain derivation exists
+/// to provide and which a random or timestamped id would lose.
+///
+/// The first occurrence keeps the plain id, so the ids of everything already written are unchanged and no
+/// existing database's event log is renamed.
+fn next_transition_event_id(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    event_type: &str,
+) -> Result<String> {
+    let base = transition_event_id(message_id, event_type);
+    let prefix = format!("{base}_");
+    // `instr(x, y) = 1` is "y is a prefix of x". `LIKE` would have been wrong here: the base contains
+    // underscores, which `LIKE` treats as single-character wildcards, so the pattern would over-match.
+    let seen: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM events WHERE event_id = ?1 OR instr(event_id, ?2) = 1",
+            rusqlite::params![base, prefix],
+            |row| row.get(0),
+        )
+        .map_err(StorageError::Db)?;
+    Ok(if seen == 0 {
+        base
+    } else {
+        format!("{base}_{}", seen + 1)
+    })
+}
+
+/// A lifecycle event for a declared transition, with the fields every one of them carries.
+#[allow(clippy::too_many_arguments)]
 fn transition_event(
+    tx: &rusqlite::Transaction<'_>,
     message_id: &str,
     event_type: &str,
     project_id: &str,
@@ -1322,9 +1362,9 @@ fn transition_event(
     causation_id: Option<&str>,
     payload_json: String,
     created_at: &str,
-) -> NewEvent {
-    NewEvent {
-        event_id: transition_event_id(message_id, event_type),
+) -> Result<NewEvent> {
+    Ok(NewEvent {
+        event_id: next_transition_event_id(tx, message_id, event_type)?,
         project_id: Some(project_id.to_string()),
         session_id: Some(session_id.to_string()),
         event_type: event_type.to_string(),
@@ -1335,7 +1375,7 @@ fn transition_event(
         epoch: None,
         payload_json,
         created_at: created_at.to_string(),
-    }
+    })
 }
 
 /// Take delivery of a message: persist its identity, then acknowledge receipt of it.
@@ -1356,7 +1396,7 @@ fn receive_message_in(
     now: &str,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
+        "INSERT OR IGNORE INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
                                correlation_id, causation_id, idempotency_key, delivery_state, envelope_json,
                                created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'DISPATCHED', ?11, ?12)",
@@ -1377,7 +1417,7 @@ fn receive_message_in(
     )
     .map_err(StorageError::Db)?;
     tx.execute(
-        "INSERT INTO inbox (message_id, received_at, persisted_at, acked_at, processing_state, terminal_event_id)
+        "INSERT OR IGNORE INTO inbox (message_id, received_at, persisted_at, acked_at, processing_state, terminal_event_id)
          VALUES (?1, ?2, ?2, NULL, 'PERSISTED', NULL)",
         rusqlite::params![incoming.message_id, now],
     )
@@ -1393,6 +1433,7 @@ fn receive_message_in(
     append_event_in(
         tx,
         &transition_event(
+            tx,
             &incoming.message_id,
             "MESSAGE_RECEIVED",
             &incoming.project_id,
@@ -1405,7 +1446,7 @@ fn receive_message_in(
                 incoming.sequence,
             )?,
             now,
-        ),
+        )?,
     )?;
 
     advance_in(
@@ -1418,6 +1459,7 @@ fn receive_message_in(
     append_event_in(
         tx,
         &transition_event(
+            tx,
             &incoming.message_id,
             "MESSAGE_ACKED",
             &incoming.project_id,
@@ -1430,12 +1472,13 @@ fn receive_message_in(
                 incoming.sequence,
             )?,
             now,
-        ),
+        )?,
     )?;
     tx.execute(
         "INSERT INTO message_receipts (receipt_id, message_id, project_id, receipt_state, acknowledged_at,
                                        created_at)
-         VALUES (?1, ?2, ?3, 'ACKED', ?4, ?4)",
+         VALUES (?1, ?2, ?3, 'ACKED', ?4, ?4)
+         ON CONFLICT(receipt_id) DO UPDATE SET receipt_state = 'ACKED', acknowledged_at = ?4",
         rusqlite::params![
             receipt_id_for(&incoming.message_id),
             incoming.message_id,
@@ -1453,12 +1496,48 @@ fn receive_message_in(
 }
 
 /// `ACKED -> PROCESSING` (`ACTION_STARTED`), which is the boundary the side effect sits behind.
+fn requeue_message_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &str) -> Result<()> {
+    let message = load_message_in(tx, message_id)?;
+    advance_in(tx, message_id, "RETRYING", "QUEUED", "a requeue")?;
+    append_event_in(
+        tx,
+        &transition_event(
+            tx,
+            message_id,
+            "MESSAGE_QUEUED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            transition_payload_fields(message_id, &message.message_type, message.sequence)?,
+            now,
+        )?,
+    )?;
+    // The queue entry is upserted rather than updated, because a requeued message may not have one: a message
+    // this bus received was dispatched by its peer, so it has an inbox row and no outbox row. Requeueing means
+    // put it in the queue again, which requires a queue entry to exist.
+    //
+    // No backoff is applied, deliberately: the schema stores no processing-attempt count, so a delay would be
+    // invented from nothing. Requeueing is a decision the caller takes.
+    tx.execute(
+        "INSERT INTO outbox (outbox_id, message_id, project_id, queued_at, dispatch_state, next_attempt_at,
+                             attempts)
+         VALUES (?1, ?2, ?3, ?4, 'PENDING', ?4, 0)
+         ON CONFLICT(outbox_id) DO UPDATE SET dispatch_state = 'PENDING', next_attempt_at = ?4",
+        rusqlite::params![outbox_id_for(message_id), message_id, message.project_id, now],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// ACKED -> PROCESSING (ACTION_STARTED), which is the boundary the side effect sits behind.
 fn start_processing_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &str) -> Result<()> {
     let message = load_message_in(tx, message_id)?;
     advance_in(tx, message_id, "ACKED", "PROCESSING", "starting processing")?;
     append_event_in(
         tx,
         &transition_event(
+            tx,
             message_id,
             "ACTION_STARTED",
             &message.project_id,
@@ -1467,7 +1546,7 @@ fn start_processing_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &s
             message.causation_id.as_deref(),
             transition_payload_fields(message_id, &message.message_type, message.sequence)?,
             now,
-        ),
+        )?,
     )?;
     tx.execute(
         "UPDATE inbox SET processing_state = 'PROCESSING' WHERE message_id = ?1",
@@ -1484,7 +1563,7 @@ fn complete_processing_in(
     now: &str,
 ) -> Result<()> {
     let message = load_message_in(tx, message_id)?;
-    let event_id = transition_event_id(message_id, "ACTION_COMPLETED");
+    let event_id = next_transition_event_id(tx, message_id, "ACTION_COMPLETED")?;
     advance_in(
         tx,
         message_id,
@@ -1495,6 +1574,7 @@ fn complete_processing_in(
     append_event_in(
         tx,
         &transition_event(
+            tx,
             message_id,
             "ACTION_COMPLETED",
             &message.project_id,
@@ -1503,7 +1583,7 @@ fn complete_processing_in(
             message.causation_id.as_deref(),
             transition_payload_fields(message_id, &message.message_type, message.sequence)?,
             now,
-        ),
+        )?,
     )?;
     tx.execute(
         "UPDATE inbox SET processing_state = 'PROCESSED', terminal_event_id = ?2 WHERE message_id = ?1",
@@ -1560,6 +1640,7 @@ fn reject_processing_in(
     append_event_in(
         tx,
         &transition_event(
+            tx,
             message_id,
             "ACTION_FAILED",
             &message.project_id,
@@ -1568,7 +1649,7 @@ fn reject_processing_in(
             message.causation_id.as_deref(),
             failure_payload,
             now,
-        ),
+        )?,
     )?;
     tx.execute(
         "UPDATE message_receipts SET receipt_state = 'NACKED' WHERE message_id = ?1",
@@ -1586,10 +1667,11 @@ fn reject_processing_in(
     }
 
     advance_in(tx, message_id, "REJECTED", "DEAD_LETTER", "dead-lettering")?;
-    let terminal_event = transition_event_id(message_id, "MESSAGE_DEAD_LETTERED");
+    let terminal_event = next_transition_event_id(tx, message_id, "MESSAGE_DEAD_LETTERED")?;
     append_event_in(
         tx,
         &transition_event(
+            tx,
             message_id,
             "MESSAGE_DEAD_LETTERED",
             &message.project_id,
@@ -1606,7 +1688,7 @@ fn reject_processing_in(
                 ],
             )?,
             now,
-        ),
+        )?,
     )?;
     tx.execute(
         "INSERT INTO dead_letters (dead_letter_id, message_id, project_id, final_error_json, attempts,
@@ -1740,6 +1822,25 @@ impl Storage {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         reject_processing_in(&tx, message_id, reason, retryable, now)?;
         tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Put a retryably refused message back in the queue.
+    pub fn requeue_message(&mut self, message_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        requeue_message_in(&tx, message_id, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// A message's delivery state, which decides whether an arrival is a redelivery or a duplicate.
+    pub fn delivery_state(&self, message_id: &str) -> Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT delivery_state FROM messages WHERE message_id = ?1",
+                [message_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)
     }
 
     /// The durable inbox row for a message, which is how a redelivery is recognised.

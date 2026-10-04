@@ -209,6 +209,20 @@ rather than merely declared: four messages due at the same instant in four lanes
 assertion that the emergency-control and failure-recovery messages were handed over before the heartbeat and
 that the bulk message is still `QUEUED`.
 
+## Requeue and event-identity tests (DEC-061)
+
+`RETRYING` had no exit, so a retryably refused message waited forever - and implementing the exit exposed a defect
+in event identity rather than in requeue. `crates/bus/tests/inbox.rs` now proves:
+
+- a refused message can be requeued, becomes immediately due, and goes round again: dispatched, received,
+  acknowledged, processed - with all ten declared transitions in the log **in order**, and still exactly one
+  inbox row and one receipt, because the second pass is idempotent rather than a second record;
+- a repeated transition gets its own event id and the first keeps the plain one, so nothing already written is
+  renamed and the id stays deterministic from durable state rather than becoming random;
+- requeueing a message that is not `RETRYING` is refused and appends nothing;
+- an inbound message has no queue entry until it is requeued, which is why requeue upserts one rather than
+  updating it.
+
 ## Project intent and user-contribution tests
 
 Must prove:

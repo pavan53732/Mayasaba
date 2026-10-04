@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{envelope, envelope_at, storage_with_project};
+use common::{envelope, envelope_at, storage_with_project, ScriptedTransport};
 use mayasaba_bus::{Bus, BusError, FixedClock};
 
 fn bus_with_project(tag: &str) -> (Bus, std::path::PathBuf) {
@@ -592,4 +592,173 @@ fn a_refused_transition_names_the_state_it_found() {
         }
         other => panic!("expected a malformed-state refusal, got {other:?}"),
     }
+}
+
+// -----------------------------------------------------------------------------------------------------------
+// Requeue: the exit RETRYING was missing
+// -----------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_retryably_refused_message_can_be_requeued_and_processed_again() {
+    let (mut bus, _dir) = bus_with_project("requeue");
+    let envelope = envelope(
+        "msg_r_1",
+        "prj_requeue",
+        1,
+        Some("op_r_1"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+
+    bus.receive(&envelope, &clock).expect("receive");
+    bus.start_processing("msg_r_1", &clock).expect("start");
+    bus.reject_processing("msg_r_1", "the adapter was busy", true, &clock)
+        .expect("reject");
+    assert_eq!(state_of(&bus, "msg_r_1"), "RETRYING");
+
+    // RETRYING -> QUEUED, the edge that stops a refused message waiting forever.
+    bus.requeue("msg_r_1", &clock).expect("requeue");
+    assert_eq!(state_of(&bus, "msg_r_1"), "QUEUED");
+    let (dispatch_state, due): (String, String) = bus
+        .storage()
+        .conn()
+        .query_row(
+            "SELECT dispatch_state, next_attempt_at FROM outbox WHERE message_id = ?1",
+            ["msg_r_1"],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("outbox");
+    assert_eq!(dispatch_state, "PENDING");
+    // Immediately due: no processing-attempt count exists to derive a delay from, so requeueing is a decision
+    // the caller takes rather than a timer the bus invents.
+    assert_eq!(due, "2026-10-04T00:00:10Z");
+
+    // Round again: dispatched, received, acknowledged, processed.
+    let mut transport = ScriptedTransport::always_ok();
+    bus.dispatch_due(&clock, &mut transport).expect("dispatch");
+    assert_eq!(state_of(&bus, "msg_r_1"), "DISPATCHED");
+
+    let again = bus.receive(&envelope, &clock).expect("redelivery");
+    assert!(
+        !again.duplicate,
+        "a message that was requeued is being delivered again, not duplicated"
+    );
+    assert_eq!(again.processing_state, "ACKED");
+    bus.start_processing("msg_r_1", &clock)
+        .expect("start again");
+    bus.complete_processing("msg_r_1", &clock)
+        .expect("complete");
+    assert_eq!(state_of(&bus, "msg_r_1"), "PROCESSED");
+
+    // The second pass added events but no second identity: one inbox row, one receipt.
+    assert_eq!(
+        count(
+            &bus,
+            "SELECT COUNT(*) FROM inbox WHERE message_id = ?1",
+            "msg_r_1"
+        ),
+        1
+    );
+    assert_eq!(
+        count(
+            &bus,
+            "SELECT COUNT(*) FROM message_receipts WHERE message_id = ?1",
+            "msg_r_1"
+        ),
+        1
+    );
+    // Every declared transition the machine performed, in order, with the repeated ones recorded rather than
+    // dropped - which is what the pass-suffixed event id exists to allow.
+    assert_eq!(
+        events_of(&bus, "msg_r_1"),
+        vec![
+            "MESSAGE_RECEIVED",
+            "MESSAGE_ACKED",
+            "ACTION_STARTED",
+            "ACTION_FAILED",
+            "MESSAGE_QUEUED",
+            "MESSAGE_DISPATCHED",
+            "MESSAGE_RECEIVED",
+            "MESSAGE_ACKED",
+            "ACTION_STARTED",
+            "ACTION_COMPLETED"
+        ]
+    );
+}
+
+#[test]
+fn a_repeated_transition_gets_its_own_event_id_and_the_first_keeps_the_plain_one() {
+    let (mut bus, _dir) = bus_with_project("requeue_ids");
+    let envelope = envelope(
+        "msg_r_3",
+        "prj_requeue_ids",
+        1,
+        Some("op_r_3"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+
+    bus.receive(&envelope, &clock).expect("receive");
+    bus.start_processing("msg_r_3", &clock).expect("start");
+    bus.reject_processing("msg_r_3", "busy", true, &clock)
+        .expect("reject");
+    bus.requeue("msg_r_3", &clock).expect("requeue");
+    let mut transport = ScriptedTransport::always_ok();
+    bus.dispatch_due(&clock, &mut transport).expect("dispatch");
+    bus.receive(&envelope, &clock).expect("redelivery");
+
+    let ids: Vec<String> = {
+        let conn = bus.storage().conn();
+        let mut stmt = conn
+            .prepare("SELECT event_id FROM events WHERE payload_json LIKE ?1 ORDER BY rowid")
+            .expect("prepare");
+        let like = "%\"msg_r_3\"%";
+        let rows = stmt
+            .query_map([like], |r| r.get::<_, String>(0))
+            .expect("query");
+        rows.map(|r| r.expect("id")).collect()
+    };
+    // The first occurrence of each transition keeps the plain id, so nothing already written is renamed; the
+    // second is suffixed from the durable count, so it is deterministic rather than random.
+    assert!(
+        ids.contains(&"evt_msg_r_3_message_received".to_string()),
+        "{ids:?}"
+    );
+    assert!(
+        ids.contains(&"evt_msg_r_3_message_received_2".to_string()),
+        "{ids:?}"
+    );
+    assert!(
+        ids.contains(&"evt_msg_r_3_message_acked_2".to_string()),
+        "{ids:?}"
+    );
+    assert!(
+        ids.contains(&"evt_msg_r_3_message_dispatched".to_string()),
+        "{ids:?}"
+    );
+}
+
+#[test]
+fn requeueing_a_message_that_is_not_retrying_is_refused() {
+    let (mut bus, _dir) = bus_with_project("requeue_refused");
+    let envelope = envelope(
+        "msg_r_2",
+        "prj_requeue_refused",
+        1,
+        Some("op_r_2"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+    bus.receive(&envelope, &clock).expect("receive");
+
+    let err = bus
+        .requeue("msg_r_2", &clock)
+        .expect_err("only a retrying message can be requeued");
+    assert_eq!(err.code(), "SCHEMA_INVALID");
+    assert_eq!(state_of(&bus, "msg_r_2"), "ACKED");
+    assert_eq!(
+        events_of(&bus, "msg_r_2"),
+        vec!["MESSAGE_RECEIVED", "MESSAGE_ACKED"],
+        "a refused requeue must not have appended anything"
+    );
 }

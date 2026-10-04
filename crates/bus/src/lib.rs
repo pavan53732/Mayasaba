@@ -373,22 +373,43 @@ impl Bus {
                 project_id: project_id.to_string(),
             });
         }
+        let mut redelivery = false;
         if let Some(row) = self
             .storage
             .inbox_row(message_id)
             .map_err(error::classify)?
         {
-            return Ok(Received {
-                message_id: message_id.to_string(),
-                duplicate: true,
-                processing_state: row.processing_state,
-                terminal_event_id: row.terminal_event_id,
-            });
+            // A message that has finished processing is a duplicate: the prior outcome is the answer and nothing
+            // is repeated. A message still in flight is not a duplicate - but neither does a redelivery of it add
+            // anything, because it was already acknowledged and its record already exists. The delivery state
+            // decides, because that is what the machine declares.
+            //
+            // `DISPATCHED` is the one in-flight state that means "sent again after a requeue": the requeue took it
+            // back to `QUEUED`, the dispatcher advanced it to `DISPATCHED`, and the receiver's transitions run a
+            // second time. `INSERT OR IGNORE` on the message and inbox rows and an upsert on the receipt are what
+            // make that second pass idempotent rather than a second record.
+            let terminal = matches!(row.processing_state.as_str(), "PROCESSED" | "DEAD_LETTER");
+            let state = self
+                .storage
+                .delivery_state(message_id)
+                .map_err(error::classify)?;
+            if terminal || state.as_deref() != Some("DISPATCHED") {
+                return Ok(Received {
+                    message_id: message_id.to_string(),
+                    duplicate: true,
+                    processing_state: row.processing_state,
+                    terminal_event_id: row.terminal_event_id,
+                });
+            }
+            redelivery = true;
         }
-        if self
-            .storage
-            .message_exists(message_id)
-            .map_err(error::classify)?
+        // Both checks below ask whether an identity is already taken by something else, which is the wrong
+        // question for a message being delivered again: it is taken by this very message.
+        if !redelivery
+            && self
+                .storage
+                .message_exists(message_id)
+                .map_err(error::classify)?
         {
             return Err(BusError::DuplicateMessage {
                 message_id: message_id.to_string(),
@@ -397,11 +418,12 @@ impl Bus {
         let session_id = envelope.session_id();
         let channel = envelope.channel();
         let sequence = envelope.sequence();
-        if self
-            .storage
-            .message_at_position(session_id, channel, sequence)
-            .map_err(error::classify)?
-            .is_some()
+        if !redelivery
+            && self
+                .storage
+                .message_at_position(session_id, channel, sequence)
+                .map_err(error::classify)?
+                .is_some()
         {
             return Err(BusError::SequenceConflict {
                 session_id: session_id.to_string(),
@@ -460,6 +482,19 @@ impl Bus {
     ) -> Result<(), BusError> {
         self.storage
             .complete_processing(message_id, &clock.now_rfc3339())
+            .map_err(error::classify)
+    }
+
+    /// Put a retryably refused message back in the queue: the declared RETRYING -> QUEUED edge.
+    ///
+    /// This is the exit RETRYING was missing. Without it a retryably refused message waited forever - worse
+    /// than a delay, because nothing recorded that the message was stuck.
+    ///
+    /// Requeueing is a decision, not a timer: the message becomes immediately due, because the schema stores no
+    /// processing-attempt count and a delay derived from nothing would be an invented policy.
+    pub fn requeue(&mut self, message_id: &str, clock: &dyn Clock) -> Result<(), BusError> {
+        self.storage
+            .requeue_message(message_id, &clock.now_rfc3339())
             .map_err(error::classify)
     }
 
