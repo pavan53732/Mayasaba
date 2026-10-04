@@ -128,6 +128,32 @@ pub struct Storage {
     conn: Connection,
 }
 
+/// A durable inconsistency found during startup recovery.
+///
+/// Recovery never repairs silently. It reports, because repairing authoritative project state is an owning
+/// service's decision, not something storage may take on its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryIssue {
+    pub kind: &'static str,
+    pub detail: String,
+}
+
+/// Result of the startup recovery scan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryReport {
+    /// Verdict from SQLite's own integrity check.
+    pub integrity_ok: bool,
+    /// Every inconsistency found, in a stable order.
+    pub issues: Vec<RecoveryIssue>,
+}
+
+impl RecoveryReport {
+    /// True when the durable state needs no attention.
+    pub fn is_clean(&self) -> bool {
+        self.integrity_ok && self.issues.is_empty()
+    }
+}
+
 impl Storage {
     /// Open the database and apply the canonical schema.
     ///
@@ -325,6 +351,87 @@ impl Storage {
              BEGIN SELECT RAISE(ABORT, 'injected fault'); END;"
         );
         self.conn.execute_batch(&sql).map_err(StorageError::Db)
+    }
+
+    /// Startup recovery scan.
+    ///
+    /// Runs SQLite's own integrity check and then looks for state that atomic creation should make impossible
+    /// but that a crash, an older schema, or a connection with foreign keys disabled could still produce. It
+    /// reports; it never repairs.
+    pub fn recover(&self) -> Result<RecoveryReport> {
+        let integrity: String = self
+            .conn
+            .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+            .map_err(StorageError::Db)?;
+        let integrity_ok = integrity.eq_ignore_ascii_case("ok");
+
+        let mut issues = Vec::new();
+        if !integrity_ok {
+            issues.push(RecoveryIssue { kind: "SQLITE_INTEGRITY", detail: integrity.clone() });
+        }
+
+        // A project must always have a brief: the brief is the intent anchor, and creation commits the two
+        // together. A project without one means the invariant was broken outside the atomic path.
+        let missing_brief = self
+            .string_column(
+                "SELECT p.project_id FROM projects p
+                 WHERE NOT EXISTS (SELECT 1 FROM project_briefs b WHERE b.project_id = p.project_id)
+                 ORDER BY p.project_id",
+            )?;
+        for id in missing_brief {
+            issues.push(RecoveryIssue {
+                kind: "PROJECT_WITHOUT_BRIEF",
+                detail: format!("project {id} has no ProjectBrief; its intent anchor is missing"),
+            });
+        }
+
+        // The summary epoch must match the newest epoch row. A mismatch means the column and the history
+        // disagree, so a context digest computed from one would be wrong for the other.
+        let mut drift = self
+            .conn
+            .prepare(
+                "SELECT p.project_id, p.current_epoch,
+                        COALESCE((SELECT MAX(e.epoch) FROM project_epochs e WHERE e.project_id = p.project_id), -1)
+                 FROM projects p ORDER BY p.project_id",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = drift
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))
+            .map_err(StorageError::Db)?;
+        for row in rows {
+            let (id, current, newest) = row.map_err(StorageError::Db)?;
+            if newest != current {
+                issues.push(RecoveryIssue {
+                    kind: "EPOCH_SUMMARY_DRIFT",
+                    detail: format!("project {id} reports epoch {current} but its newest epoch row is {newest}"),
+                });
+            }
+        }
+
+        // Foreign keys are enforced per connection, so rows written while they were off can survive.
+        let orphans: i64 = self
+            .conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM project_briefs b WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE p.project_id = b.project_id))
+                      + (SELECT COUNT(*) FROM project_epochs e WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE p.project_id = e.project_id))",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(StorageError::Db)?;
+        if orphans > 0 {
+            issues.push(RecoveryIssue {
+                kind: "ORPHANED_PROJECT_ROWS",
+                detail: format!("{orphans} brief or epoch row(s) reference a project that does not exist"),
+            });
+        }
+
+        Ok(RecoveryReport { integrity_ok, issues })
+    }
+
+    fn string_column(&self, sql: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(sql).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(StorageError::Db)
     }
 
     pub fn conn(&self) -> &Connection {

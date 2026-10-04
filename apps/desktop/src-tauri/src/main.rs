@@ -118,6 +118,43 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
     }
 }
 
+/// The result of the startup recovery scan, surfaced so a damaged database is visible rather than silent.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryView {
+  clean: bool,
+  integrity_ok: bool,
+  issues: Vec<RecoveryIssueView>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryIssueView {
+  kind: String,
+  detail: String,
+}
+
+#[tauri::command]
+fn recovery_status(service: State<'_, Mutex<ProjectService>>) -> Result<RecoveryView, CommandError> {
+  let service = service.lock().map_err(|_| CommandError {
+    code: "SERVICE_POISONED",
+    message: "ProjectService lock was poisoned by a prior panic".to_string(),
+  })?;
+  let report = service.recover().map_err(|e| CommandError {
+    code: "STORAGE_FAILURE",
+    message: e.to_string(),
+  })?;
+  Ok(RecoveryView {
+    clean: report.is_clean(),
+    integrity_ok: report.integrity_ok,
+    issues: report
+      .issues
+      .iter()
+      .map(|i| RecoveryIssueView { kind: i.kind.to_string(), detail: i.detail.clone() })
+      .collect(),
+  })
+}
+
 #[tauri::command]
 fn list_projects(service: State<'_, Mutex<ProjectService>>) -> Result<Vec<ProjectView>, CommandError> {
     // The rehydration path. Everything the Control Room shows for an existing project comes from here, so it
@@ -178,10 +215,18 @@ fn main() {
     let service = ProjectService::open(&database_path())
         .expect("Mayasaba could not open its durable store; see AGENTS.md section 20");
 
+    // Recovery runs before the window can display anything, so a damaged database is reported rather than
+    // rendered as a plausible-looking empty Control Room. It never repairs.
+    match service.recover() {
+        Ok(report) if report.is_clean() => {}
+        Ok(report) => eprintln!("mayasaba: startup recovery found {} issue(s):", report.issues.len()),
+        Err(error) => eprintln!("mayasaba: startup recovery could not run: {error}"),
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
-        .invoke_handler(tauri::generate_handler![create_project, list_projects, validate_workspace])
+        .invoke_handler(tauri::generate_handler![create_project, list_projects, recovery_status, validate_workspace])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
 }

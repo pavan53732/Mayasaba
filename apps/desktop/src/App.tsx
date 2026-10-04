@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 
-import { createProject, listProjects, pickFolder, validateWorkspace } from "./intake/bridge";
+import { createProject, listProjects, pickFolder, recoveryStatus, validateWorkspace } from "./intake/bridge";
 import {
   EMPTY_DRAFT,
   initialState,
@@ -12,6 +12,7 @@ import {
   type CommandError,
   type Draft,
   type ProjectView,
+  type RecoveryReport,
   type WorkspaceState,
 } from "./intake/state";
 
@@ -31,6 +32,7 @@ export default function App() {
   const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, emptyWorkspace);
   const [projects, setProjects] = useState<ProjectView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recovery, setRecovery] = useState<RecoveryReport | null>(null);
 
   // Rehydrate on launch. Everything rendered for an existing project comes from Rust, so a restart shows the
   // same authoritative state rather than an empty form that implies nothing was ever stored.
@@ -41,8 +43,16 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  // Recovery first, then the list: a damaged database should be announced rather than rendered as an
+  // empty Control Room that looks like a fresh install.
   useEffect(() => {
-    void refresh();
+    void (async () => {
+      const report = await recoveryStatus();
+      // A transport failure is not a clean report. Treating "could not check" as "nothing wrong" is exactly
+      // the silent-success mistake the authority boundary exists to prevent.
+      setRecovery("clean" in report ? report : null);
+      await refresh();
+    })();
   }, [refresh]);
 
   const pending = isSubmitting(state);
@@ -126,6 +136,7 @@ export default function App() {
           error={error}
         />
       )}
+      {recovery && !recovery.clean ? <RecoveryBanner report={recovery} /> : null}
       {!created ? <ProjectList projects={projects} loading={loading} /> : null}
     </main>
   );
@@ -274,6 +285,34 @@ function ProjectPanel(props: { project: ProjectView; onStartAnother: () => void 
       <button onClick={onStartAnother} style={{ ...button, marginTop: 8, background: "#fff", color: "#111827" }}>
         New project
       </button>
+    </section>
+  );
+}
+
+/**
+ * Startup recovery findings.
+ *
+ * Deliberately prominent. If the durable store disagrees with itself, the Control Room must say so instead of
+ * rendering a plausible-looking empty list, because an empty list is indistinguishable from a fresh install.
+ */
+function RecoveryBanner({ report }: { report: RecoveryReport }) {
+  return (
+    <section
+      role="alert"
+      style={{ border: "1px solid #b91c1c", borderRadius: 6, padding: "12px 14px", marginBottom: 16 }}
+    >
+      <strong>Stored data needs attention</strong>
+      <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+        Mayasaba found {report.issues.length} problem(s) in its local database. Nothing has been changed
+        automatically — the stored project state is authoritative and only an owning service may repair it.
+      </p>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+        {report.issues.map((issue, i) => (
+          <li key={i}>
+            <code>{issue.kind}</code> — {issue.detail}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

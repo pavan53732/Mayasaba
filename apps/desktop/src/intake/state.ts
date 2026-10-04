@@ -148,6 +148,18 @@ export function isAuthorized(
   return state.kind === "authorized";
 }
 
+/** The startup recovery scan result. Recovery reports; it never repairs. */
+export interface RecoveryIssue {
+  kind: string;
+  detail: string;
+}
+
+export interface RecoveryReport {
+  clean: boolean;
+  integrityOk: boolean;
+  issues: RecoveryIssue[];
+}
+
 export type IntakeState =
   /** The composer holds unpersisted input. Nothing authoritative exists yet. */
   | { kind: "editing"; draft: Draft }

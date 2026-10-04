@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use mayasaba_storage::{CreatedProject, NewProject, ProjectRecord, Storage};
+use mayasaba_storage::{CreatedProject, NewProject, ProjectRecord, RecoveryReport, Storage};
 use mayasaba_workspace::{validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation};
 
 /// Validate a user-selected folder as a candidate workspace root, without persisting anything.
@@ -130,6 +130,14 @@ impl ProjectService {
         let CreatedProject { project_id, .. } = self.storage.create_project(&new)?;
         let record = self.storage.get_project(&project_id)?;
         Ok(CreateProjectOutcome::Created { project: record })
+    }
+
+    /// Run the startup recovery scan.
+    ///
+    /// Reports; never repairs. Repairing authoritative project state is an owning service's decision, and a
+    /// silent repair would let the Control Room display a database that says something it does not.
+    pub fn recover(&self) -> Result<RecoveryReport, CreateProjectError> {
+        Ok(self.storage.recover()?)
     }
 
     /// Authoritative readback for one project.

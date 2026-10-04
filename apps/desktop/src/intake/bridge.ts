@@ -48,6 +48,30 @@ export async function listProjects(): Promise<ProjectView[] | CommandError> {
   }
 }
 
+export interface RecoveryIssue {
+  kind: string;
+  detail: string;
+}
+
+export interface RecoveryReport {
+  clean: boolean;
+  integrityOk: boolean;
+  issues: RecoveryIssue[];
+}
+
+/** The startup recovery scan result. Recovery reports; it never repairs. */
+export async function recoveryStatus(): Promise<RecoveryReport | CommandError> {
+  try {
+    return (await transport("recovery_status", {})) as RecoveryReport;
+  } catch (thrown) {
+    const candidate = thrown as Partial<CommandError>;
+    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
+      return candidate as CommandError;
+    }
+    return { code: "TRANSPORT_FAILURE", message: thrown instanceof Error ? thrown.message : String(thrown) };
+  }
+}
+
 export interface CreateProjectRequest {
   local_path: string;
   initial_brief: string;
