@@ -43,6 +43,18 @@ for(const [name,ref] of Object.entries(messagePayloads.messages??{})){
   if(typeof ref!=="string"||ref.length===0) fail(`Payload mapping for ${name} is not a non-empty string`);
   if(!exists(path.join("schemas/mcf-v2",ref))) fail(`Payload mapping for ${name} points at a missing schema: ${ref}`);
 }
+// --- message_to_event. This map records which event a message causes, and was read by no tool:
+// `git grep` finds only its own definition in registry.json. It is currently correct - every key is a
+// message type and every value a canonical event - but nothing enforced that, so it would have drifted
+// the way message_to_payload did. It is incomplete by design (13 of 59 messages), so this checks
+// membership only, never coverage: a message that causes no event of its own is legitimately absent.
+const messageToEvent=registry.message_to_event;
+if(!messageToEvent||typeof messageToEvent!=="object") fail("registry.json has no message_to_event block");
+const messageSet=new Set(messages), eventSet=new Set(events);
+for(const [msg,ev] of Object.entries(messageToEvent)){
+  if(!messageSet.has(msg)) fail(`message_to_event names "${msg}", which is not a message type in message-types.schema.json`);
+  if(!eventSet.has(ev)) fail(`message_to_event maps ${msg} to "${ev}", which is not a canonical event in event-types.schema.json`);
+}
 for(const [file,key,list] of messageLists){
   if(!Array.isArray(list)) fail(`Message list ${file}:${key} is missing or not a list`);
   const missing=messages.filter(m=>!list.includes(m));
@@ -135,22 +147,45 @@ for(const [file,ns] of protocolNamespaces){
 }
 
 const transition=read("schemas/mcf-v2/transition-types.json");
-// --- Adjacency is checked over each machine's declared `spine`, not over its whole `states` set.
+// --- Adjacency, off-spine declaration, and the machine spine (DEC-038, DEC-042).
+// Adjacency is checked over each machine's declared `spine`, not over its whole `states` set.
 // `states` is the set of legal states and legitimately includes terminal/branch states that are not
-// on the ordered path; `spine` is that ordered path. Requiring states[i]->states[i+1] across the whole
-// set manufactures transitions out of terminal states - message_delivery.PROCESSED->RETRYING and
-// task.COMPLETED->BLOCKED were mandatory edges, not accidental ones. A machine that declares no
-// `spine` has states that are already a single ordered path, so the spine defaults to `states`.
+// on the ordered path; `spine` is that ordered path. Requiring states[i]->states[i+1] across the
+// whole set manufactures transitions out of terminal states - message_delivery.PROCESSED->RETRYING
+// and task.COMPLETED->BLOCKED were mandatory edges, not accidental ones.
+// `spine` is now REQUIRED on every machine. It previously fell back to `states`, which is the same
+// silent-default defect this series removes: a machine that forgot to declare a spine was silently
+// treated as having one. A one-element spine is the explicit way to say "this machine has no spine
+// edges" (context: the path is CURRENT alone, with SUPERSEDED and INVALIDATED as terminal branches).
+// Every off-spine edge must then be declared - in `branches` (blessed) or `unreviewed_branches`
+// (legal but not yet reviewed). A new off-spine edge in neither list fails, so the forbid rule is live
+// from now on even though nine pre-existing edges are still unreviewed rather than guessed at.
+// `unreviewed_branches` is deliberately the weaker claim: "we have not reviewed this" rather than
+// "this is undecided". It is given teeth by requiring every entry to be ADVANCE-driven - a branch
+// driven by a specific command is decidable, so it belongs in `branches`, not here.
+const offSpineProblems=[];
 for(const [machine,def] of Object.entries(transition.machines)){
   const ids=new Set((transition.transitions?.[machine]??[]).map(t=>t.transition_id));
-  const spine=def.spine ?? def.states;
-  const stray=spine.filter(s=>!def.states.includes(s));
-  if(stray.length) fail(`Machine ${machine} spine names state(s) absent from states: ${stray.join(", ")}`);
-  for(let i=0;i<spine.length-1;i++) {
-    const id=`${machine}.${spine[i]}->${spine[i+1]}`;
-    if(!ids.has(id)) fail(`Missing adjacent transition on ${machine} spine: ${id}`);
+  if(!Array.isArray(def.spine)) { offSpineProblems.push("Machine "+machine+" declares no spine; every machine must declare one explicitly (a one-element spine means no spine edges)"); continue; }
+  const stray=def.spine.filter(s=>!def.states.includes(s));
+  if(stray.length) { offSpineProblems.push("Machine "+machine+" spine names state(s) absent from states: "+stray.join(", ")); continue; }
+  for(let i=0;i<def.spine.length-1;i++) {
+    const id=`${machine}.${def.spine[i]}->${def.spine[i+1]}`;
+    if(!ids.has(id)) offSpineProblems.push("Missing adjacent transition on "+machine+" spine: "+id);
+  }
+  const onSpine=new Set();
+  for(let i=0;i<def.spine.length-1;i++) onSpine.add(def.spine[i]+"->"+def.spine[i+1]);
+  const edges=[...new Set((transition.transitions?.[machine]??[]).map(t=>t.transition_id.slice(machine.length+1)))];
+  const declared=new Set([...(def.branches??[]),...(def.unreviewed_branches??[])]);
+  const adv="ADVANCE_"+machine.toUpperCase();
+  for(const e of edges) if(!onSpine.has(e)&&!declared.has(e)) offSpineProblems.push("Undeclared off-spine edge "+machine+"."+e+" - add it to branches (blessed) or unreviewed_branches (legal but not yet reviewed)");
+  for(const e of declared) if(!edges.includes(e)) offSpineProblems.push("Declared branch "+machine+"."+e+" has no transition record");
+  for(const e of (def.unreviewed_branches??[])){
+    const recs=(transition.transitions?.[machine]??[]).filter(t=>t.transition_id.slice(machine.length+1)===e);
+    if(recs.length&&!recs.every(t=>t.command===adv)) offSpineProblems.push("Unreviewed branch "+machine+"."+e+" is driven by a specific command, so it is decidable and belongs in branches, not unreviewed_branches");
   }
 }
+if(offSpineProblems.length) fail(offSpineProblems.length+" spine/off-spine problem(s):\n  - "+offSpineProblems.join("\n  - "));
 
 // --- Transition event-type validity. registry.json:transition_event_rules states the contract
 // this section enforces: "Every domain state transition has exactly one authoritative owner and

@@ -29,7 +29,33 @@
         "FINAL_VALIDATION",
         "PACKAGE",
         "COMPLETE"
-      ]
+      ],
+      "spine": [
+        "PROJECT_CREATED",
+        "DISCOVERY",
+        "INDEPENDENT_ANALYSIS",
+        "PROPOSALS",
+        "CROSS_CRITIQUE",
+        "REBUTTAL_AND_REVISION",
+        "DISAGREEMENT_RESOLUTION",
+        "USER_INTERVIEW",
+        "PRODUCT_AND_UX_DESIGN",
+        "TECH_STACK_DEBATE",
+        "ARCHITECTURE_REVIEW",
+        "ARCHITECTURE_LOCKED",
+        "TASK_PLANNING",
+        "IMPLEMENTATION",
+        "INTEGRATION",
+        "BUILD",
+        "TEST",
+        "E2E",
+        "CROSS_AGENT_REVIEW",
+        "FINAL_VALIDATION",
+        "PACKAGE",
+        "COMPLETE"
+      ],
+      "branches": [],
+      "unreviewed_branches": []
     },
     "agent_session": {
       "owner": "crates/agents",
@@ -58,7 +84,17 @@
         "PAUSED",
         "DRAINING",
         "STOPPED"
-      ]
+      ],
+      "branches": [
+        "LOST->RECONNECTING",
+        "RECONNECTING->SYNCING",
+        "READY->LOST",
+        "ACTIVE->LOST",
+        "SYNCING->READY",
+        "SYNCING->ACTIVE",
+        "SYNCING->FAILED"
+      ],
+      "unreviewed_branches": []
     },
     "task": {
       "owner": "crates/tasks",
@@ -93,7 +129,20 @@
         "VALIDATION_PENDING",
         "PASSED",
         "COMPLETED"
-      ]
+      ],
+      "branches": [
+        "FAILED->RETRY_PENDING",
+        "LEASE_EXPIRED->RECOVERY_PENDING",
+        "RECOVERY_PENDING->REASSIGNED",
+        "IN_PROGRESS->FAILED",
+        "IN_PROGRESS->BLOCKED",
+        "BLOCKED->READY",
+        "BLOCKED->FAILED",
+        "RETRY_PENDING->REPAIR_PENDING",
+        "REPAIR_PENDING->LEASE_EXPIRED",
+        "REASSIGNED->INVALIDATED"
+      ],
+      "unreviewed_branches": []
     },
     "lease": {
       "owner": "crates/tasks",
@@ -109,7 +158,14 @@
         "REQUESTED",
         "ACTIVE",
         "RENEWING"
-      ]
+      ],
+      "branches": [
+        "ACTIVE->EXPIRED",
+        "ACTIVE->RELEASED",
+        "ACTIVE->REVOKED",
+        "RENEWING->EXPIRED"
+      ],
+      "unreviewed_branches": []
     },
     "council_round": {
       "owner": "crates/council",
@@ -122,7 +178,19 @@
         "DISAGREEMENT_REVIEW",
         "CLOSING",
         "SEALED"
-      ]
+      ],
+      "spine": [
+        "OPEN",
+        "RESPONSES_COLLECTING",
+        "CRITIQUE",
+        "REBUTTAL",
+        "REVISION",
+        "DISAGREEMENT_REVIEW",
+        "CLOSING",
+        "SEALED"
+      ],
+      "branches": [],
+      "unreviewed_branches": []
     },
     "handoff": {
       "owner": "crates/tasks",
@@ -144,7 +212,12 @@
         "OWNERSHIP_TRANSFERRED",
         "VERIFIED",
         "CLOSED"
-      ]
+      ],
+      "branches": [
+        "OFFERED->REJECTED",
+        "REJECTED->REQUESTED"
+      ],
+      "unreviewed_branches": []
     },
     "execution": {
       "owner": "crates/execution",
@@ -172,7 +245,15 @@
         "EXITED",
         "EVIDENCE_CAPTURED",
         "RECORDED"
-      ]
+      ],
+      "branches": [
+        "RUNNING->TIMEOUT",
+        "RUNNING->CANCELED",
+        "RUNNING->CRASHED",
+        "POLICY_CHECK->DENIED",
+        "CRASHED->CLEANUP_REQUIRED"
+      ],
+      "unreviewed_branches": []
     },
     "validation": {
       "owner": "crates/validation",
@@ -189,7 +270,12 @@
         "COLLECTING_EVIDENCE",
         "RUNNING_CHECKS",
         "RESULTS_RECORDED"
-      ]
+      ],
+      "branches": [
+        "RESULTS_RECORDED->PASS",
+        "RESULTS_RECORDED->FAIL"
+      ],
+      "unreviewed_branches": []
     },
     "repair": {
       "owner": "crates/core",
@@ -209,7 +295,14 @@
         "ACTIVE",
         "VERIFYING",
         "REGRESSION"
-      ]
+      ],
+      "branches": [
+        "REGRESSION->RESOLVED",
+        "REGRESSION->RETRY_PENDING",
+        "REGRESSION->BLOCKED",
+        "RETRY_PENDING->BLOCKED"
+      ],
+      "unreviewed_branches": []
     },
     "context": {
       "owner": "crates/core",
@@ -219,10 +312,13 @@
         "INVALIDATED"
       ],
       "spine": [
-        "CURRENT",
-        "SUPERSEDED",
-        "INVALIDATED"
-      ]
+        "CURRENT"
+      ],
+      "branches": [
+        "CURRENT->SUPERSEDED",
+        "CURRENT->INVALIDATED"
+      ],
+      "unreviewed_branches": []
     },
     "message_delivery": {
       "owner": "crates/bus",
@@ -249,7 +345,16 @@
         "ACKED",
         "PROCESSING",
         "PROCESSED"
-      ]
+      ],
+      "branches": [
+        "RETRYING->EXPIRED",
+        "PROCESSING->RETRYING",
+        "RETRYING->QUEUED",
+        "QUEUED->EXPIRED",
+        "PROCESSING->REJECTED",
+        "REJECTED->DEAD_LETTER"
+      ],
+      "unreviewed_branches": []
     },
     "barrier": {
       "owner": "crates/council",
@@ -263,7 +368,13 @@
       "spine": [
         "OPEN",
         "WAITING"
-      ]
+      ],
+      "branches": [
+        "WAITING->SATISFIED",
+        "WAITING->BLOCKED",
+        "WAITING->TIMED_OUT"
+      ],
+      "unreviewed_branches": []
     }
   },
   "transitions": {
@@ -1389,46 +1500,6 @@
         "failure_transition": null
       },
       {
-        "transition_id": "agent_session.STOPPED->LOST",
-        "owner": "crates/agents",
-        "source_state": "STOPPED",
-        "event_type": "AGENT_LOST",
-        "command": "ADVANCE_AGENT_SESSION",
-        "guards": [
-          {
-            "project": "current phase == STOPPED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id",
-          "session_id",
-          "agent_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "agent_session.state = LOST",
-        "emitted_events": [
-          "AGENT_LOST"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "agent_session.LOST->RECONNECTING",
         "owner": "crates/agents",
         "source_state": "LOST",
@@ -2142,45 +2213,6 @@
         "failure_transition": null
       },
       {
-        "transition_id": "task.COMPLETED->BLOCKED",
-        "owner": "crates/tasks",
-        "source_state": "COMPLETED",
-        "event_type": "TASK_BLOCKED",
-        "command": "ADVANCE_TASK",
-        "guards": [
-          {
-            "project": "current phase == COMPLETED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id",
-          "task_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "task.state = BLOCKED",
-        "emitted_events": [
-          "TASK_BLOCKED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "task.BLOCKED->FAILED",
         "owner": "crates/tasks",
         "source_state": "BLOCKED",
@@ -2799,84 +2831,6 @@
         "state_mutation": "lease.state = EXPIRED",
         "emitted_events": [
           "LEASE_EXPIRED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "lease.EXPIRED->RELEASED",
-        "owner": "crates/tasks",
-        "source_state": "EXPIRED",
-        "event_type": "LEASE_RELEASED",
-        "command": "ADVANCE_LEASE",
-        "guards": [
-          {
-            "project": "current phase == EXPIRED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id",
-          "task_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "lease.state = RELEASED",
-        "emitted_events": [
-          "LEASE_RELEASED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "lease.RELEASED->REVOKED",
-        "owner": "crates/tasks",
-        "source_state": "RELEASED",
-        "event_type": "LEASE_REVOKED",
-        "command": "ADVANCE_LEASE",
-        "guards": [
-          {
-            "project": "current phase == RELEASED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id",
-          "task_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "lease.state = REVOKED",
-        "emitted_events": [
-          "LEASE_REVOKED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -3968,14 +3922,14 @@
         "failure_transition": null
       },
       {
-        "transition_id": "execution.RECORDED->DENIED",
+        "transition_id": "execution.POLICY_CHECK->DENIED",
         "owner": "crates/execution",
-        "source_state": "RECORDED",
+        "source_state": "POLICY_CHECK",
         "event_type": "EXECUTION_DENIED",
         "command": "ADVANCE_EXECUTION",
         "guards": [
           {
-            "project": "current phase == RECORDED; next phase admission gates satisfied",
+            "project": "current phase == POLICY_CHECK; next phase admission gates satisfied",
             "agent_session": "session identity valid; target transition supported by adapter/process state",
             "task": "task ownership and dependency predicates satisfy transition",
             "lease": "lease version and persisted timestamps satisfy transition",
@@ -3998,120 +3952,6 @@
         "state_mutation": "execution.state = DENIED",
         "emitted_events": [
           "EXECUTION_DENIED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "execution.DENIED->TIMEOUT",
-        "owner": "crates/execution",
-        "source_state": "DENIED",
-        "event_type": "EXECUTION_TIMEOUT",
-        "command": "ADVANCE_EXECUTION",
-        "guards": [
-          {
-            "project": "current phase == DENIED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "execution.state = TIMEOUT",
-        "emitted_events": [
-          "EXECUTION_TIMEOUT"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "execution.TIMEOUT->CANCELED",
-        "owner": "crates/execution",
-        "source_state": "TIMEOUT",
-        "event_type": "EXECUTION_CANCELED",
-        "command": "ADVANCE_EXECUTION",
-        "guards": [
-          {
-            "project": "current phase == TIMEOUT; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "execution.state = CANCELED",
-        "emitted_events": [
-          "EXECUTION_CANCELED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "execution.CANCELED->CRASHED",
-        "owner": "crates/execution",
-        "source_state": "CANCELED",
-        "event_type": "EXECUTION_CRASHED",
-        "command": "ADVANCE_EXECUTION",
-        "guards": [
-          {
-            "project": "current phase == CANCELED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "execution.state = CRASHED",
-        "emitted_events": [
-          "EXECUTION_CRASHED"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,
@@ -5076,44 +4916,6 @@
         "failure_transition": null
       },
       {
-        "transition_id": "context.SUPERSEDED->INVALIDATED",
-        "owner": "crates/core",
-        "source_state": "SUPERSEDED",
-        "event_type": "CONTEXT_INVALIDATED",
-        "command": "ADVANCE_CONTEXT",
-        "guards": [
-          {
-            "project": "current phase == SUPERSEDED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "context.state = INVALIDATED",
-        "emitted_events": [
-          "CONTEXT_INVALIDATED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
         "transition_id": "context.CURRENT->SUPERSEDED",
         "owner": "crates/core",
         "source_state": "CURRENT",
@@ -5870,82 +5672,6 @@
         "state_mutation": "barrier.state = SATISFIED",
         "emitted_events": [
           "BARRIER_SATISFIED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "barrier.SATISFIED->BLOCKED",
-        "owner": "crates/council",
-        "source_state": "SATISFIED",
-        "event_type": "BARRIER_BLOCKED",
-        "command": "ADVANCE_BARRIER",
-        "guards": [
-          {
-            "project": "current phase == SATISFIED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "barrier.state = BLOCKED",
-        "emitted_events": [
-          "BARRIER_BLOCKED"
-        ],
-        "epoch_effect": "NONE",
-        "outbox_effect": true,
-        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
-        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
-        "failure_transition": null
-      },
-      {
-        "transition_id": "barrier.BLOCKED->TIMED_OUT",
-        "owner": "crates/council",
-        "source_state": "BLOCKED",
-        "event_type": "BARRIER_TIMED_OUT",
-        "command": "ADVANCE_BARRIER",
-        "guards": [
-          {
-            "project": "current phase == BLOCKED; next phase admission gates satisfied",
-            "agent_session": "session identity valid; target transition supported by adapter/process state",
-            "task": "task ownership and dependency predicates satisfy transition",
-            "lease": "lease version and persisted timestamps satisfy transition",
-            "council_round": "round ownership and required participation predicates satisfy transition",
-            "handoff": "sender/receiver/task ownership predicates satisfy transition",
-            "execution": "execution request authorized and process state matches",
-            "validation": "validation scope is immutable and required evidence predicates are met",
-            "repair": "failure fingerprint and repair budget permit transition",
-            "context": "project epoch and state dependencies satisfy transition",
-            "message_delivery": "delivery record exists and transition guard is idempotent",
-            "barrier": "predicate evaluation is derived from durable authoritative facts"
-          }
-        ],
-        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
-        "required_fields": [
-          "project_id",
-          "correlation_id"
-        ],
-        "forbidden_fields": [],
-        "state_mutation": "barrier.state = TIMED_OUT",
-        "emitted_events": [
-          "BARRIER_TIMED_OUT"
         ],
         "epoch_effect": "NONE",
         "outbox_effect": true,

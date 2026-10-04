@@ -3,10 +3,12 @@
   "$id":"https://mayasaba.local/schemas/mcf-v2/message-payloads.schema.json",
   "title":"MCF-v2 message payload registry schema",
   "type":"object","additionalProperties":false,
-  "required":["version","authority","messages"],
+  "required":["registry_version","authority","messages"],
   "properties":{
-    "version":{"type":"string"},
+    "$schema":{"type":"string"},
+    "registry_version":{"type":"string"},
     "authority":{"const":"schemas/mcf-v2/message-payloads.registry.json"},
+    "rule":{"type":"string"},
     "messages":{"type":"object","minProperties":1,"additionalProperties":{"type":"string"}}
   }
 }
