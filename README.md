@@ -215,6 +215,17 @@ and are not installed by a default toolchain:
 rustup component add rustfmt clippy
 ~~~
 
+`cargo fmt --all --check` skips the two files under `crates/protocol/src/generated/`, because the contract
+gate compares them byte-for-byte with `tools/codegen/generate-protocol.mjs`'s output and rustfmt would rewrap
+them — the generator owns that formatting, and `#[rustfmt::skip]` on the module declarations says so.
+
+`git blame` can also skip the repo-wide formatting commit, which otherwise attributes every reformatted line
+to it rather than to the change that wrote it:
+
+~~~text
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+~~~
+
 ## Local validation
 
 Contract verification runs locally on the user's Windows PC — there is no hosted CI (DEC-036). From the repository root:
