@@ -8,18 +8,30 @@
 /// Every state machine Mayasaba coordinates, from transition-types.json:machines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Machine {
-    /// owned by crates/agents    agent_session
-    /// owned by crates/council          barrier
-    /// owned by crates/core          context
-    /// owned by crates/council    council_round
-    /// owned by crates/execution        execution
-    /// owned by crates/tasks          handoff
-    /// owned by crates/tasks            lease
-    /// owned by crates/bus message_delivery
-    /// owned by crates/core          project
-    /// owned by crates/core           repair
-    /// owned by crates/tasks             task
-    /// owned by crates/validation       validation
+    /// owned by crates/agents
+    AgentSession,
+    /// owned by crates/council
+    Barrier,
+    /// owned by crates/core
+    Context,
+    /// owned by crates/council
+    CouncilRound,
+    /// owned by crates/execution
+    Execution,
+    /// owned by crates/tasks
+    Handoff,
+    /// owned by crates/tasks
+    Lease,
+    /// owned by crates/bus
+    MessageDelivery,
+    /// owned by crates/core
+    Project,
+    /// owned by crates/core
+    Repair,
+    /// owned by crates/tasks
+    Task,
+    /// owned by crates/validation
+    Validation,
 }
 
 impl Machine {
@@ -227,17 +239,17 @@ pub const SERVICE_EMITTED_EVENTS: &[&str] = &["ACTION_PROGRESS", "ADMISSION_RECO
 /// Crate owning each machine, from machines[].owner.
 pub fn owner_crate(machine: Machine) -> Option<&'static str> {
     match machine {
-        Machine::AgentSession => "crates/agents",
-        Machine::Barrier => "crates/council",
-        Machine::Context => "crates/core",
-        Machine::CouncilRound => "crates/council",
-        Machine::Execution => "crates/execution",
-        Machine::Handoff => "crates/tasks",
-        Machine::Lease => "crates/tasks",
-        Machine::MessageDelivery => "crates/bus",
-        Machine::Project => "crates/core",
-        Machine::Repair => "crates/core",
-        Machine::Task => "crates/tasks",
-        Machine::Validation => "crates/validation",
+        Machine::AgentSession => Some("crates/agents"),
+        Machine::Barrier => Some("crates/council"),
+        Machine::Context => Some("crates/core"),
+        Machine::CouncilRound => Some("crates/council"),
+        Machine::Execution => Some("crates/execution"),
+        Machine::Handoff => Some("crates/tasks"),
+        Machine::Lease => Some("crates/tasks"),
+        Machine::MessageDelivery => Some("crates/bus"),
+        Machine::Project => Some("crates/core"),
+        Machine::Repair => Some("crates/core"),
+        Machine::Task => Some("crates/tasks"),
+        Machine::Validation => Some("crates/validation"),
     }
 }

@@ -35,7 +35,13 @@ const rustDoc = (s) => s.replace(/\*\//g, "*\\/").replace(/\r?\n/g, " ").trim();
 const variantDocs = (names, describe) => {
   const described = names.map((n) => [n, describe(n)]);
   const width = Math.max(...described.map(([n]) => n.length));
-  return described.map(([n, d]) => `    /// ${d}${" ".repeat(width - n.length)} ${n}`).join("\n");
+  // The doc comment and the variant are separate lines. Putting the name at the end of the comment
+  // produces an enum with doc comments and no variants, which is exactly what happened the first time
+  // this was generated: rustc rejected it with E0585 and no other check in the repository could see it.
+  // The variant is the idiomatic Rust CamelCase form; the contract's snake_case identifier is what
+  // id() returns. Emitting the raw snake_case name here would not compile, because every accessor below
+  // refers to the PascalCase form - a mismatch that produced 121 errors the first time this was built.
+  return described.map(([n, d]) => `    /// ${d}\n    ${pascal(n)},`).join("\n");
 };
 
 const machineNames = Object.keys(machines).sort();
@@ -174,7 +180,7 @@ pub const SERVICE_EMITTED_EVENTS: &[&str] = &[${serviceEvents.map((e) => JSON.st
 /// Crate owning each machine, from machines[].owner.
 pub fn owner_crate(machine: Machine) -> Option<&'static str> {
     match machine {
-${machineNames.map((n) => `        Machine::${pascal(n)} => ${machines[n].owner ? JSON.stringify(machines[n].owner) : "None"},`).join("\n")}
+${machineNames.map((n) => `        Machine::${pascal(n)} => ${machines[n].owner ? `Some(${JSON.stringify(machines[n].owner)})` : "None"},`).join("\n")}
     }
 }
 `;
