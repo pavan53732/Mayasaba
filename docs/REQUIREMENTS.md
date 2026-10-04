@@ -30,6 +30,18 @@ Each available agent can independently analyze the user request and scoped works
 ### FR-004 Council deliberation
 Agents can propose, question, critique, rebut, revise, agree, disagree, block, accept, reject, abstain and synthesize through MCF-v2. Deliberation terminates on convergence of the position set, with a bounded round cap as a backstop; the round records exactly one termination outcome.
 
+### FR-004a Decision-proportional deliberation depth
+Every material decision point receives a council mode — `SOLO`, `REVIEW` or `FULL` — selected deterministically by the controller from the decision class, the blast radius, prior validation-failure and dispute counts, and an explicit user override. A `ModeSelection` record is persisted for every material decision point, including `SOLO`, which creates a record and no round. Escalation is upward only and only between rounds; there is never a silent downgrade mid-round. Modes parameterise participants and required phase content and add no state, edge, command or guard to the `council_round` machine, and the mode thresholds are configuration rather than locked constants.
+
+### FR-004b Evidence-backed positions and lineage-group corroboration
+The controller computes a grade for every council claim — `ASSUMPTION < CITED < VERIFIED` — and an agent-supplied grade is ignored. A claim is load-bearing unless it is flagged `supporting`, and a position's grade is its weakest load-bearing claim. A round on a material decision cannot seal `CONVERGED` while a surviving position carries a load-bearing `ASSUMPTION` claim. Corroboration counts distinct lineage groups rather than agents, lineage comes from static adapter facts and never from agent self-report, and fewer than two lineage groups is `uncorroborated`.
+
+### FR-004c Council budgets and failure handling
+Per-round and per-council caps bound rounds, wall-clock, tokens and spikes. Exhausting a cap yields an existing termination outcome and never silent acceptance; where an adapter does not report token usage, the time and round budgets are enforced and tokens are recorded as `UNAVAILABLE`, never invented. Paused time is excluded from the wall-clock budget and the exclusion is recorded. An agent going offline or a provider drop pauses the round through the existing barrier machine, records non-participation and surfaces which agents are offline; silence is never agreement and a timeout is never assent.
+
+### FR-004d Decision outcome tracking
+Whether a decision later held, was amended, was reversed or stayed unresolved is recorded append-only, derived only from controller facts: validation results, the `reopen_decision` command and decision supersession. `HELD` requires a validation evidence reference, and supersession appends with no update or delete path. Outcome tracking is informational only and must not affect routing, thresholds, mode selection or authority.
+
 ### FR-005 Targeted interview
 Mayasaba clusters and deduplicates agent questions, removes questions answerable from evidence, and asks the user only material unresolved questions.
 

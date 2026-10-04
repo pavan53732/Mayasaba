@@ -94,6 +94,74 @@ The packet's recommendation is advisory: it is not a decision, and it never carr
 
 A round that ends `SEALED_WITH_OPEN_QUESTION` links its question to the packet through the question's `escalation_ref`.
 
+## Decision quality
+
+The rules above bound deliberation and give termination a vocabulary. They do not make depth proportional to risk, grade the evidence a convergence rests on, distinguish independent agreement from two forks of one codebase agreeing, check the chair's synthesis, or record whether a decision later held. The rules below govern that quality. None of them adds an MCF-v2 message type, envelope field or payload-schema field that an agent may set.
+
+### Council modes
+
+A material decision point receives exactly one mode: `SOLO`, `REVIEW` or `FULL`. The controller selects it deterministically from structured inputs — the decision class, the blast radius, prior validation-failure and dispute counts, and an explicit user override. No LLM chooses the mode, and no agent may select or downgrade one.
+
+A `ModeSelection` record is persisted for every material decision point, including `SOLO`, carrying the mode, the inputs, the reason list, the selector version and the override source, and is validated by `schemas/council-v1/mode-selection.schema.json`. `SOLO` creates that record and no round.
+
+Escalation is upward only, `SOLO → REVIEW → FULL`, and only between rounds; repeated validation failure or a reviewer `BLOCK` is the trigger. There is never a silent downgrade mid-round.
+
+Modes parameterise participants and required phase content. They do not add states, edges, commands or guards to the `council_round` machine: `council_round` declares `spine` identical to its eight states and every registered transition is between adjacent spine states, so a phase-skipping round would require a new off-spine edge in `branches`. Every `REVIEW` and `FULL` round therefore traverses the full eight-state spine, and `SOLO` runs no round at all. This is recorded as an interpretation of the mode rule, not silently assumed.
+
+Mode and budget thresholds are configuration, not locked constants, consistent with `max_rounds`. Council policy is declared in `schemas/council-v1/council-policies.json`.
+
+### Evidence grades
+
+The controller computes a grade for every claim: `ASSUMPTION < CITED < VERIFIED`. An agent-supplied grade is not representable and is ignored.
+
+`CITED` requires every evidence reference to resolve to an existing repository fact, document or `evidence` row. `VERIFIED` requires a controller-executed check or spike stored in `evidence`.
+
+A claim is load-bearing unless it is flagged `supporting`. A position's grade is its weakest load-bearing claim.
+
+### Convergence precondition
+
+A round on a material decision may not seal `CONVERGED` while a surviving position carries a load-bearing `ASSUMPTION` claim. It continues while rounds remain, and otherwise ends `ESCALATED` or `CAP_REACHED` under the existing rules.
+
+The fixpoint predicate is unchanged and no `outcome_type` value is added. This is a precondition on sealing, not a machine guard.
+
+### Lineage-group corroboration
+
+Corroboration counts distinct lineage groups, not agents. Lineage is derived from static adapter facts and never from agent self-report.
+
+The Purpose section records that Kilo Code CLI is a fork of OpenCode CLI, so the two are one lineage group and their agreement counts as one corroboration. Fewer than two lineage groups is recorded as `uncorroborated`.
+
+### Round roles
+
+The controller assigns the `proposer`, `skeptic` and `verifier` roles for each round by deterministic rotation. Roles are delivered through the existing round participant context and the existing `review_target_position_ids` mechanism.
+
+The skeptic is drawn from a different lineage group than the leading proposal's author when possible, and `LINEAGE_UNAVOIDABLE` is recorded when it is not.
+
+A role is task framing and never authority. A missed duty is recorded as non-participation for that duty, never fabricated as agreement.
+
+### Synthesis review
+
+A non-chair participant reviews each `SYNTHESIS` for omitted or distorted positions using the existing `CRITIQUE` type targeting the synthesis position id. No new message type is added.
+
+A deterministic coverage check verifies that the synthesis cites every surviving position. The chair can never self-certify its own synthesis. Detected distortions are surfaced in the escalation packet and in the Control Room.
+
+### Budgets
+
+Per-round and per-council caps cover rounds, wall-clock, tokens and spikes, and are declared in `schemas/council-v1/council-policies.json` following the `schemas/validation-v1/repair-policies.json` pattern.
+
+Exhausting a cap yields an existing outcome and never silent acceptance. Where an adapter does not report token usage, the time and round budgets are enforced and tokens are recorded as `UNAVAILABLE`; a number is never invented. Time spent paused is excluded from the wall-clock budget and the exclusion is recorded.
+
+### Outcome tracking
+
+Whether a decision later held, was amended, was reversed or stayed unresolved is recorded append-only, derived only from controller facts: validation results, the `reopen_decision` command and decision supersession. `HELD` requires a validation evidence reference. Supersession appends; there is no update or delete path. Outcome records are validated by `schemas/council-v1/decision-outcome.schema.json`.
+
+Outcome tracking is informational only. It must not affect routing, thresholds, mode selection or authority; using it that way would be a hidden second authority and requires its own decision.
+
+### Offline agents and provider drops
+
+An agent going offline or a provider drop mid-round pauses the round through the existing `barrier` machine, records non-participation and surfaces which agents are offline.
+
+Silence is never agreement, and a timeout is never assent.
+
 ## Independent-first rule
 
 Agents should produce their initial analysis before exposure to other agents' proposals when the phase is designed for independent reasoning. This reduces anchoring.

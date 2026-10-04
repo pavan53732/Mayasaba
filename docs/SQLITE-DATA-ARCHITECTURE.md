@@ -21,7 +21,7 @@ projects, project_paths, project_briefs, project_epochs, project_status
 agents, agent_sessions, agent_capabilities
 
 ### Council
-council_sessions, council_rounds, council_participants, council_positions, council_questions, council_outcomes, council_barriers
+council_sessions, council_rounds, council_participants, council_positions, council_questions, council_outcomes, council_mode_selections, council_round_roles, council_claim_grades, council_budget_ledger, council_decision_outcomes, council_outcome_agent_links, barriers
 
 ### Traceability
 trace_links, trace_link_versions, trace_coverage
@@ -33,7 +33,7 @@ messages, message_attempts, message_receipts, inbox, outbox, dead_letters
 events, event_cursors, context_snapshots
 
 ### Product/design
-requirements, requirement_acceptance, decisions, decision_versions, architecture_artifacts, contracts
+requirements, requirement_acceptance, decisions, architecture_artifacts, contracts
 
 ### Tasks
 tasks, task_dependencies, task_leases, handoffs, barriers

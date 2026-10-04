@@ -101,6 +101,10 @@ CouncilSession and CouncilRound are persisted in SQLite with participants, posit
 
 A round's termination result is persisted in `council_outcomes` with exactly one `outcome_type` — `CONVERGED`, `SYNTHESIZED`, `CAP_REACHED`, `ESCALATED` or `SEALED_WITH_OPEN_QUESTION`. A `SYNTHESIS` position is persisted in `council_positions` like any other position and is referenced by the outcome's `synthesis_position_id`. An escalation packet is persisted as the round outcome's structured body and referenced by the question's `escalation_ref`; escalation packets are validated by `schemas/council-v1/escalation.schema.json`.
 
+`CouncilModeSelection`, `CouncilRoundRole`, `CouncilClaimGrade`, `CouncilBudgetLedger`, `CouncilDecisionOutcome` and `CouncilOutcomeAgentLink` are durable decision-quality records owned by CouncilService and persisted in `council_mode_selections`, `council_round_roles`, `council_claim_grades`, `council_budget_ledger`, `council_decision_outcomes` and `council_outcome_agent_links`. A mode selection is persisted for every material decision point, including `SOLO`, which persists a record and no round; mode selections are validated by `schemas/council-v1/mode-selection.schema.json`. Grades, round roles and budget-ledger entries are controller-computed records, not agent-supplied fields. Outcome records are validated by `schemas/council-v1/decision-outcome.schema.json`.
+
+`council_decision_outcomes` references `decisions(decision_id)`, and an outcome's supporting evidence is referenced directly by `validation_evidence_id` rather than through `evidence_links`, because `evidence_links` links evidence to artifacts only. Outcome records are append-only: a supersession appends through `supersedes_outcome_id` and there is no update or delete path. Outcome tracking is informational only and never affects routing, thresholds, mode selection or authority.
+
 ## Traceability persistence
 
 Trace links are first-class durable relationships represented by `trace_links` and coverage projections. Traceability indexes authoritative objects and is not a second source of truth.

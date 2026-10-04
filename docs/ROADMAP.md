@@ -72,7 +72,9 @@ Before broad task execution or full Control Room implementation, prove Mayasaba'
 - controller-assigned critique targets, references to prior positions, and rebuttal/revision;
 - a material unresolved question deduplicated and shown in a minimal Control Room question surface;
 - a user answer persisted through `answer_user_question`, followed by a scoped `CONTEXT_UPDATE`, a new/current ContextPack and agent revision;
-- a recorded council outcome/decision candidate without allowing an agent to commit an authoritative lock.
+- a recorded council outcome/decision candidate without allowing an agent to commit an authoritative lock;
+- a persisted mode selection for each simulated material decision point, including a `SOLO` record with no round;
+- controller-computed claim grades and lineage-group corroboration for the simulated positions.
 
 No live AI CLI is required for this proof. The slice passes only when the question/answer is durable, targeted agents receive the new context, stale context cannot authorize work, duplicate delivery is safe, and non-participation is explicit. M6 completes the production Council Engine after this behavior is demonstrated.
 
@@ -100,6 +102,10 @@ No live AI CLI is required for this proof. The slice passes only when the questi
 - decision locks
 - council barriers
 - participation/timeout semantics
+- deterministic council modes and controller-owned mode-selection records
+- controller-computed claim grades, lineage-group corroboration and round roles
+- independent non-chair synthesis review, council budget caps and pause-on-offline failure handling
+- append-only decision outcome tracking, informational only
 
 ## M7 — Software build/run/test/E2E
 - toolchain discovery
