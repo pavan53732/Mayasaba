@@ -1904,6 +1904,23 @@ impl Storage {
         tx.commit().map_err(StorageError::Db)
     }
 
+    /// The highest ordering position any message holds in a `(session_id, channel)` stream.
+    ///
+    /// This is what gap detection reads. It needs no column and no table of its own: the positions are already
+    /// durable in `messages`, so "is a position missing?" is derived from the record rather than recorded
+    /// separately - and a second record of the same fact is a second fact that can disagree.
+    pub fn highest_sequence(&self, session_id: &str, channel: &str) -> Result<Option<i64>> {
+        self.conn
+            .query_row(
+                "SELECT MAX(sequence) FROM messages WHERE session_id = ?1 AND channel = ?2",
+                rusqlite::params![session_id, channel],
+                |row| row.get(0),
+            )
+            .optional()
+            .map(|found| found.flatten())
+            .map_err(StorageError::Db)
+    }
+
     /// A message's delivery state, which decides whether an arrival is a redelivery or a duplicate.
     pub fn delivery_state(&self, message_id: &str) -> Result<Option<String>> {
         self.conn

@@ -937,3 +937,105 @@ fn expiring_a_requeued_message_abandons_its_queue_entry() {
         "{ids:?}"
     );
 }
+
+// -----------------------------------------------------------------------------------------------------------
+// Gap detection: reported, never refused
+// -----------------------------------------------------------------------------------------------------------
+
+#[test]
+fn an_arrival_that_skips_a_position_reports_the_gap_and_is_still_accepted() {
+    let (mut bus, _dir) = bus_with_project("gap");
+    let clock = at("2026-10-04T00:00:10Z");
+    // Position 1 is taken by an outbound message, so position 2 is the next the stream may continue at.
+    bus.enqueue(&envelope(
+        "msg_g_1",
+        "prj_gap",
+        1,
+        Some("op_g_1"),
+        r#"{"task":"a"}"#,
+    ))
+    .expect("enqueue");
+
+    let arriving = envelope("msg_g_3", "prj_gap", 3, Some("op_g_3"), r#"{"task":"c"}"#);
+    let received = bus.receive(&arriving, &clock).expect("receive");
+
+    let gap = received.gap.expect("a skipped position must be reported");
+    assert_eq!(gap.session_id, "sess_1");
+    assert_eq!(gap.channel, "task");
+    assert_eq!(
+        gap.expected, 2,
+        "the position the stream should have continued at"
+    );
+    assert_eq!(gap.found, 3);
+    // Reported, not refused: refusing would discard the arrival that makes the gap visible.
+    assert!(!received.duplicate);
+    assert_eq!(state_of(&bus, "msg_g_3"), "ACKED");
+}
+
+#[test]
+fn an_arrival_at_the_next_position_reports_no_gap() {
+    let (mut bus, _dir) = bus_with_project("no_gap");
+    let clock = at("2026-10-04T00:00:10Z");
+    bus.enqueue(&envelope(
+        "msg_n_1",
+        "prj_no_gap",
+        1,
+        Some("op_n_1"),
+        r#"{"task":"a"}"#,
+    ))
+    .expect("enqueue");
+
+    let received = bus
+        .receive(
+            &envelope(
+                "msg_n_2",
+                "prj_no_gap",
+                2,
+                Some("op_n_2"),
+                r#"{"task":"b"}"#,
+            ),
+            &clock,
+        )
+        .expect("receive");
+    assert_eq!(received.gap, None, "position 2 follows position 1");
+}
+
+#[test]
+fn the_first_message_in_a_channel_reports_no_gap() {
+    let (mut bus, _dir) = bus_with_project("first_in_channel");
+    // Nothing precedes it, so there is nothing to be missing from - a high position is not a gap on its own.
+    let received = bus
+        .receive(
+            &envelope(
+                "msg_f_9",
+                "prj_first_in_channel",
+                9,
+                Some("op_f_9"),
+                r#"{"task":"z"}"#,
+            ),
+            &at("2026-10-04T00:00:10Z"),
+        )
+        .expect("receive");
+    assert_eq!(received.gap, None);
+    assert_eq!(state_of(&bus, "msg_f_9"), "ACKED");
+}
+
+#[test]
+fn a_redelivery_reports_no_gap() {
+    let (mut bus, _dir) = bus_with_project("gap_dup");
+    let clock = at("2026-10-04T00:00:10Z");
+    let arriving = envelope(
+        "msg_g_4",
+        "prj_gap_dup",
+        1,
+        Some("op_g_4"),
+        r#"{"task":"a"}"#,
+    );
+    bus.receive(&arriving, &clock).expect("receive");
+    let again = bus.receive(&arriving, &clock).expect("redelivery");
+    assert!(again.duplicate);
+    assert_eq!(
+        again.gap, None,
+        "nothing new arrived, so nothing new can be missing"
+    );
+}

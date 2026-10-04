@@ -242,6 +242,20 @@ Must prove:
 - a message refused, requeued and refused again reaches a **second** `ACTION_FAILED` event under its own
   pass-suffixed id, which is the pass count above two that DEC-061 could not reach.
 
+## Ordering gap detection (DEC-063)
+
+A gap means a message the peer sent never arrived, and the only way to notice used to be for a reader to query the
+positions and compare them. `crates/bus/tests/inbox.rs` proves the bus now notices and says so - and that it does
+**not** refuse the arrival, because refusing would discard the very message that makes the gap visible.
+
+Must prove:
+
+- an arrival past the stream's highest position reports the gap with `expected` as the position the stream should
+  have continued at and `found` as the one that arrived, and is still accepted and `ACKED`;
+- an arrival at the next position reports no gap;
+- a first message in a channel reports no gap, because a high position is not a gap on its own;
+- a redelivery reports no gap, because nothing new arrived and so nothing new can be missing.
+
 ## Project intent and user-contribution tests
 
 Must prove:

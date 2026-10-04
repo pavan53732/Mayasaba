@@ -337,6 +337,27 @@ pub struct Received {
     pub duplicate: bool,
     pub processing_state: String,
     pub terminal_event_id: Option<String>,
+    /// A missing ordering position this arrival revealed, if any.
+    ///
+    /// A gap is **reported, not refused**: the message is still accepted, because refusing it would discard the
+    /// very arrival that makes the gap visible and would leave the receiver unable to ask for what is missing.
+    /// The design's answer to a gap is to request a resync, which is a decision the caller takes.
+    ///
+    /// Nothing stores the gap. The positions are already durable in `messages`, so "a position is missing" is
+    /// derived from the record rather than recorded a second time - and a second record of one fact is a second
+    /// fact that can disagree.
+    pub gap: Option<SequenceGap>,
+}
+
+/// An ordering position that no message holds, revealed by one that arrived past it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SequenceGap {
+    pub session_id: String,
+    pub channel: String,
+    /// The position the stream was expected to continue at.
+    pub expected: i64,
+    /// The position that actually arrived.
+    pub found: i64,
 }
 
 impl Bus {
@@ -399,6 +420,7 @@ impl Bus {
                     duplicate: true,
                     processing_state: row.processing_state,
                     terminal_event_id: row.terminal_event_id,
+                    gap: None,
                 });
             }
             redelivery = true;
@@ -432,6 +454,22 @@ impl Bus {
             });
         }
 
+        // Gap detection: the stream's highest position is durable, so what is missing is derived rather than
+        // stored. A first message in a channel has nothing to be missing from, so it reports no gap.
+        let highest = self
+            .storage
+            .highest_sequence(session_id, channel)
+            .map_err(error::classify)?;
+        let gap = match highest {
+            Some(h) if sequence > h + 1 => Some(SequenceGap {
+                session_id: session_id.to_string(),
+                channel: channel.to_string(),
+                expected: h + 1,
+                found: sequence,
+            }),
+            _ => None,
+        };
+
         let incoming = IncomingMessage {
             message_id: message_id.to_string(),
             event_id: envelope.event_id().to_string(),
@@ -456,6 +494,7 @@ impl Bus {
             duplicate: false,
             processing_state: "ACKED".to_string(),
             terminal_event_id: None,
+            gap,
         })
     }
 
