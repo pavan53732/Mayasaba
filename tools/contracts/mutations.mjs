@@ -165,8 +165,8 @@ const MUTATIONS = [
     edits: [
       {
         file: REGISTRY,
-        find: '"meaning":"A message, payload or document does not conform to the schema declared for it."',
-        replace: '"meaning":""',
+        find: '"meaning": "A message, payload or document does not conform to the schema declared for it."',
+        replace: '"meaning": ""',
       },
     ],
     expect: ["declares no meaning, so the code is a name nothing downstream can act on"],
@@ -176,7 +176,7 @@ const MUTATIONS = [
     what: "registry.json: an mcf_code is not a member of the protocol's closed code enum",
     check: GATE,
     edits: [
-      { file: REGISTRY, find: '"mcf_code":"MCF_SCHEMA_INVALID"', replace: '"mcf_code":"MCF_NOT_A_REAL_CODE"' },
+      { file: REGISTRY, find: '"mcf_code": "MCF_SCHEMA_INVALID"', replace: '"mcf_code": "MCF_NOT_A_REAL_CODE"' },
     ],
     expect: ["is not a member of the MCF error code enum"],
   },
@@ -184,7 +184,7 @@ const MUTATIONS = [
     id: "dec055-c",
     what: "registry.json: two registry codes claim the same MCF code",
     check: GATE,
-    edits: [{ file: REGISTRY, find: '"mcf_code":"MCF_TIMEOUT"', replace: '"mcf_code":"MCF_CANCELED"' }],
+    edits: [{ file: REGISTRY, find: '"mcf_code": "MCF_TIMEOUT"', replace: '"mcf_code": "MCF_CANCELED"' }],
     expect: ["is already declared by", "one MCF code maps to one registry code"],
   },
   {
