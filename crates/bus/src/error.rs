@@ -99,6 +99,18 @@ pub(crate) fn classify(e: StorageError) -> BusError {
             column: "messages.message_id".to_string(),
             detail,
         },
+        // Only a terminal message can be replayed, and the declared machine has no edge from an in-flight state
+        // back to `CREATED`. Asking to replay one is therefore a request the contract cannot express, which is the
+        // schema-invalid condition - not a storage failure, since nothing failed to be stored.
+        StorageError::NotTerminal {
+            message_id,
+            delivery_state,
+        } => BusError::Malformed {
+            column: "messages.delivery_state".to_string(),
+            detail: format!(
+                "message {message_id} is {delivery_state}, which is not terminal, so it cannot be replayed"
+            ),
+        },
     }
 }
 

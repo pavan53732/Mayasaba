@@ -45,6 +45,15 @@ pub enum StorageError {
     UnscopedEvent,
     /// A value could not be reduced to its RFC 8785 canonical form, so no digest over it is well defined.
     Canonical(crate::canonical::CanonicalError),
+    /// A message is not in a terminal state, so there is nothing to replay.
+    ///
+    /// Only `EXPIRED` and `DEAD_LETTER` end a message's life. A message still in flight has not finished failing,
+    /// so replaying it would duplicate work that is still in progress - and the declared machine has no edge from
+    /// any in-flight state back to `CREATED`, so there would be no way to express it even if it were wanted.
+    NotTerminal {
+        message_id: String,
+        delivery_state: String,
+    },
     /// A second message already occupies the same `(session_id, channel, sequence)`.
     ///
     /// The table's `UNIQUE` constraint is the enforcement; this variant is the *named* report of it, so a
@@ -79,6 +88,13 @@ impl std::fmt::Display for StorageError {
             StorageError::Schema(e) => write!(f, "canonical schema could not be applied: {e}"),
             StorageError::Db(e) => write!(f, "storage operation failed: {e}"),
             StorageError::NotFound(what) => write!(f, "not found: {what}"),
+            StorageError::NotTerminal {
+                message_id,
+                delivery_state,
+            } => write!(
+                f,
+                "message {message_id} is {delivery_state}, which is not terminal, so it cannot be replayed"
+            ),
             StorageError::Malformed { column, detail } => {
                 write!(
                     f,
@@ -263,6 +279,19 @@ pub struct NewOutboundMessage {
     pub envelope_json: String,
     pub created_at: String,
     pub project_epoch: i64,
+}
+
+/// A terminal message rewritten as a new one, ready to be enqueued.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplaySource {
+    /// The original envelope with `message_id`, `sequence`, `created_at` and `causation_id` rewritten.
+    pub envelope_json: String,
+    /// The original's project, which the replay belongs to as well.
+    pub project_id: String,
+    /// The ordering position the replay took.
+    pub sequence: i64,
+    /// The original's terminal event, which the replay names as its cause.
+    pub terminal_event_id: Option<String>,
 }
 
 /// What an enqueue did.
@@ -839,6 +868,17 @@ fn find_enqueued_message(conn: &Connection, message_id: &str) -> Result<Option<E
     }
 }
 
+/// The existing message that already claims a `(project_id, operation_id)`, if any is still live.
+///
+/// **Only a live claim counts.** Idempotency exists to stop one operation being queued twice while it is still
+/// pending; once it has terminated, re-enqueueing that operation is exactly what a replay is, so a terminal
+/// message must not absorb the replay as a duplicate of the very message being replayed. This was found by
+/// replay: the replay carries the original's `operation_id` - it is the same operation - so without this the
+/// replay was refused as a duplicate of its own original and `Bus::replay` returned the original's identity.
+///
+/// `PROCESSED` is deliberately not excluded. It is terminal, but it is a receiver's outcome rather than a
+/// sender's, and an outbound message reaching it would mean the sender processed its own message - a case this
+/// crate does not produce, so excluding it would be a rule with no case behind it.
 fn find_outbound_by_operation_in(
     conn: &Connection,
     project_id: &str,
@@ -848,6 +888,7 @@ fn find_outbound_by_operation_in(
         "SELECT m.message_id, o.outbox_id, m.envelope_json, json_extract(m.envelope_json, '$.payload')
          FROM messages m JOIN outbox o ON o.message_id = m.message_id
          WHERE m.project_id = ?1 AND json_extract(m.envelope_json, '$.operation_id') = ?2
+           AND m.delivery_state NOT IN ('EXPIRED', 'DEAD_LETTER')
          ORDER BY m.rowid LIMIT 1",
         rusqlite::params![project_id, operation_id],
         |r| {
@@ -1935,6 +1976,91 @@ impl Storage {
                 |row| row.get(0),
             )
             .map_err(StorageError::Db)
+    }
+
+    /// Everything needed to replay a terminal message as a new one.
+    ///
+    /// The envelope is rewritten with `json_set` rather than parsed and re-serialized: SQLite's JSON1 functions
+    /// edit the stored document exactly, and string surgery on JSON would be a parser written by hand.
+    ///
+    /// Three fields change, and the protocol anticipates exactly these three - `envelope.rs` records that "a retry
+    /// legitimately carries a new `message_id`, a new `sequence` and a new `created_at`":
+    ///
+    /// - `message_id`, because the original row keeps its identity and its terminal state;
+    /// - `sequence`, because `(session_id, channel, sequence)` is unique and the original still holds its position,
+    ///   so the replay takes the next free one rather than stealing the old one;
+    /// - `created_at`, because this is a new event in the log and DEC-034's chain records when things happened,
+    ///   not when the thing they retry happened.
+    ///
+    /// `causation_id` is set to the original's terminal event, so the log says why the new message exists rather
+    /// than leaving it looking unrelated.
+    pub fn replay_source(
+        &self,
+        message_id: &str,
+        new_message_id: &str,
+        now: &str,
+    ) -> Result<ReplaySource> {
+        let (envelope_json, project_id, session_id, channel, delivery_state) = self
+            .conn
+            .query_row(
+                "SELECT envelope_json, project_id, session_id, channel, delivery_state FROM messages
+                  WHERE message_id = ?1",
+                [message_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("messages.message_id = {message_id}")))?;
+        if delivery_state != "EXPIRED" && delivery_state != "DEAD_LETTER" {
+            return Err(StorageError::NotTerminal {
+                message_id: message_id.to_string(),
+                delivery_state,
+            });
+        }
+        // The next free position in the stream. The original keeps its own, so the replay cannot be a copy of it.
+        let sequence: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM messages WHERE session_id = ?1 AND channel = ?2",
+                rusqlite::params![session_id, channel],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
+        let terminal_event_id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT event_id FROM events
+                  WHERE json_extract(payload_json, '$.message_id') = ?1
+                    AND event_type IN ('MESSAGE_EXPIRED', 'MESSAGE_DEAD_LETTERED')
+                  ORDER BY rowid DESC LIMIT 1",
+                [message_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let envelope_json: String = self
+            .conn
+            .query_row(
+                "SELECT json_set(json_set(json_set(json_set(?1, '$.message_id', ?2), '$.sequence', ?3),
+                                          '$.created_at', ?4), '$.causation_id', ?5)",
+                rusqlite::params![envelope_json, new_message_id, sequence, now, terminal_event_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
+        Ok(ReplaySource {
+            envelope_json,
+            project_id,
+            sequence,
+            terminal_event_id,
+        })
     }
 
     /// A message's delivery state, which decides whether an arrival is a redelivery or a duplicate.

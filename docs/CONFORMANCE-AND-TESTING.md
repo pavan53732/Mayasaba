@@ -271,6 +271,27 @@ Must prove:
 - a batch-bounded pass leaves the rest outstanding - the case the measurement exists for, since it is the case
   where a producer that cannot see the backlog keeps producing.
 
+## Explicit controller-invoked replay (DEC-065)
+
+Replay was the last unimplemented part of this slice. `crates/bus/tests/replay.rs` proves it is a **new message**
+rather than a reset, that it names the failure it answers, and that it is refused for anything that has not
+finished failing - because the declared machine has no `EXPIRED -> *` edge, so a reset is not expressible.
+
+Must prove:
+
+- a replay creates a new message that leaves the original's identity and terminal state untouched, and sets
+  `causation_id` to the original's terminal event;
+- the replay takes the next free ordering position rather than stealing the original's;
+- a replay is dispatched by an ordinary pass under its own identity - it is not a special message only a replay
+  path can move;
+- replaying a message that has not finished failing is refused as `SCHEMA_INVALID`, and creates nothing;
+- replaying a message that does not exist is `SCHEMA_INVALID`, not `STORAGE_FAILURE`: nothing went wrong with the
+  database;
+- a second replay while the first is live is **deduplicated** onto it, because idempotency stops one operation
+  being queued twice while pending - and a further replay after it terminates is a new message;
+- a replay carries a fresh `created_at`, because it is a new event in the log and DEC-034's chain records when
+  things happened, not when the thing they retry happened.
+
 ## Project intent and user-contribution tests
 
 Must prove:

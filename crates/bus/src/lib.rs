@@ -31,12 +31,14 @@
 pub mod clock;
 pub mod dispatch;
 pub mod error;
+mod id;
 pub mod policy;
 pub mod transport;
 
 pub use clock::{Clock, FixedClock};
 pub use dispatch::{decide, DispatchDecision};
 pub use error::BusError;
+pub use id::{FixedIdSource, IdSource};
 pub use policy::{BackoffPolicy, DispatchPolicy};
 pub use transport::{Transport, TransportError};
 
@@ -561,6 +563,34 @@ impl Bus {
         self.storage
             .expire_retrying(message_id, &clock.now_rfc3339())
             .map_err(error::classify)
+    }
+
+    /// Replay a terminal message as a new one: the controller's explicit decision to try again.
+    ///
+    /// This is **explicit and controller-invoked**, not automatic. Nothing in this crate replays on its own: a
+    /// dead letter is a record that a message failed, and deciding that it is worth another attempt is a judgement
+    /// the bus has no standing to make - the same reason requeue and expiry are decisions rather than timers.
+    ///
+    /// The replay is a **new message**, not a reset. `messages.message_id` is a primary key and the original row
+    /// still holds the terminal state that justified the replay, so reusing the identity would rewrite history
+    /// rather than add to it; and the declared machine has no `EXPIRED -> *` or `DEAD_LETTER -> *` edge, so there
+    /// is no transition to express a reset with even if one were wanted. The new message begins at `CREATED` like
+    /// any other and carries the original's terminal event as its `causation_id`, so the log says why it exists.
+    ///
+    /// The identity comes from the injected `IdSource`, because a production source would have to read a clock or
+    /// a random device and this crate performs no I/O.
+    pub fn replay(
+        &mut self,
+        message_id: &str,
+        ids: &dyn IdSource,
+        clock: &dyn Clock,
+    ) -> Result<EnqueuedMessage, BusError> {
+        let new_message_id = ids.next_message_id();
+        let source = self
+            .storage
+            .replay_source(message_id, &new_message_id, &clock.now_rfc3339())
+            .map_err(error::classify)?;
+        self.enqueue(&source.envelope_json)
     }
 
     /// How much dispatch work is outstanding right now, for a producer that wants to throttle before enqueueing.
