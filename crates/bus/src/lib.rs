@@ -56,6 +56,15 @@ pub const CRATE_NAME: &str = "mayasaba-bus";
 pub struct DispatchReport {
     /// One entry per queue entry the pass claimed, in the order it was claimed.
     pub outcomes: Vec<DispatchOutcome>,
+    /// How much dispatch work was still outstanding when the pass ended.
+    ///
+    /// `batch_size` bounds how much **one pass** does; this is what bounds the **queue**, by making the backlog
+    /// visible to whoever produces into it. The bus measures and the caller decides, which is the same shape as
+    /// requeue, expiry and gap detection - and it is the only shape available here, because the error registry has
+    /// no code for transient capacity (see DEC-064): the bus cannot refuse an enqueue for being too busy without
+    /// either inventing a code or reusing `POLICY_DENIED`, and reusing it would make a permanent denial
+    /// indistinguishable from a temporary one.
+    pub remaining: i64,
 }
 
 /// What happened to one claimed queue entry.
@@ -246,6 +255,11 @@ impl Bus {
             }
         }
 
+        // Read after the pass, so the number describes the queue as the pass left it rather than as it found it.
+        report.remaining = self
+            .storage
+            .pending_outbound_count()
+            .map_err(error::classify)?;
         Ok(report)
     }
 
@@ -546,6 +560,16 @@ impl Bus {
     pub fn expire_retrying(&mut self, message_id: &str, clock: &dyn Clock) -> Result<(), BusError> {
         self.storage
             .expire_retrying(message_id, &clock.now_rfc3339())
+            .map_err(error::classify)
+    }
+
+    /// How much dispatch work is outstanding right now, for a producer that wants to throttle before enqueueing.
+    ///
+    /// The same fact a dispatch pass reports as `remaining`, readable without running a pass - because a producer
+    /// that has to run a pass to discover the backlog has already done the work it wanted to avoid.
+    pub fn backlog(&self) -> Result<i64, BusError> {
+        self.storage
+            .pending_outbound_count()
             .map_err(error::classify)
     }
 

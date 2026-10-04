@@ -1921,6 +1921,22 @@ impl Storage {
             .map_err(StorageError::Db)
     }
 
+    /// How much dispatch work is still outstanding: queue entries whose message is still `QUEUED`.
+    ///
+    /// This is what a producer needs in order to throttle, and it is a read of the queue itself rather than a
+    /// counter kept beside it. A message that has been handed over is `DISPATCHED`, and one that has terminated
+    /// is `EXPIRED` or `DEAD_LETTER`; neither is work still to do, so neither is counted.
+    pub fn pending_outbound_count(&self) -> Result<i64> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM outbox o JOIN messages m ON m.message_id = o.message_id
+                  WHERE o.dispatch_state IN ('PENDING', 'FAILED') AND m.delivery_state = 'QUEUED'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)
+    }
+
     /// A message's delivery state, which decides whether an arrival is a redelivery or a duplicate.
     pub fn delivery_state(&self, message_id: &str) -> Result<Option<String>> {
         self.conn

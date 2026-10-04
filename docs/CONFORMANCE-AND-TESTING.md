@@ -256,6 +256,21 @@ Must prove:
 - a first message in a channel reports no gap, because a high position is not a gap on its own;
 - a redelivery reports no gap, because nothing new arrived and so nothing new can be missing.
 
+## Backpressure as measurement (DEC-064)
+
+`batch_size` bounded one pass, not the queue, and nothing reported the queue's size - so a producer could add work
+indefinitely while every individual pass looked healthy. `crates/bus/tests/dispatch.rs` proves the backlog is now
+visible; it does **not** prove enforcement, because there is none, and the reason is an open architecture gap
+rather than an omission.
+
+Must prove:
+
+- a pass whose handovers all fail reports all of that work still outstanding, and a later successful pass reports
+  none, because a message that was handed over is not work still to do;
+- a pass that empties the queue reports nothing outstanding;
+- a batch-bounded pass leaves the rest outstanding - the case the measurement exists for, since it is the case
+  where a producer that cannot see the backlog keeps producing.
+
 ## Project intent and user-contribution tests
 
 Must prove:

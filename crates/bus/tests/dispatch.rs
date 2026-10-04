@@ -632,3 +632,111 @@ fn a_pass_serves_the_control_lane_before_the_bulk_lane() {
         "the bulk message waits for the next pass"
     );
 }
+
+// -----------------------------------------------------------------------------------------------------------
+// Backpressure: batch_size bounds one pass, this bounds the queue
+// -----------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_pass_reports_how_much_work_is_still_outstanding() {
+    let (mut bus, _dir) = {
+        let (s, d) = storage_with_project("backlog");
+        (Bus::new(s), d)
+    };
+    let clock = at("2026-10-04T00:00:10Z");
+    for n in 1..=3 {
+        bus.enqueue(&due_with_identity(
+            &format!("msg_b{n}"),
+            "prj_backlog",
+            n,
+            &format!("op_b{n}"),
+            "2026-10-04T00:00:00Z",
+        ))
+        .expect("enqueue");
+    }
+    assert_eq!(
+        bus.backlog().expect("backlog"),
+        3,
+        "three messages are waiting"
+    );
+
+    // Every handover fails, so nothing leaves the queue.
+    let mut transport = ScriptedTransport::always(TransportError::Unavailable(
+        "the adapter is not running".to_string(),
+    ));
+    let report = bus.dispatch_due(&clock, &mut transport).expect("pass");
+    assert_eq!(report.failed(), 3);
+    assert_eq!(
+        report.remaining, 3,
+        "a pass that handed nothing over has left all of it outstanding"
+    );
+    assert_eq!(bus.backlog().expect("backlog"), 3);
+
+    // Now every handover succeeds, and the queue empties.
+    let mut transport = ScriptedTransport::always_ok();
+    let report = bus
+        .dispatch_due(&at("2026-10-04T00:10:00Z"), &mut transport)
+        .expect("pass");
+    assert_eq!(report.dispatched(), 3);
+    assert_eq!(
+        report.remaining, 0,
+        "a message that was handed over is not work still to do"
+    );
+    assert_eq!(bus.backlog().expect("backlog"), 0);
+}
+
+#[test]
+fn a_pass_that_empties_the_queue_reports_nothing_outstanding() {
+    let (mut bus, _dir) = {
+        let (s, d) = storage_with_project("backlog_empty");
+        (Bus::new(s), d)
+    };
+    bus.enqueue(&due_with_identity(
+        "msg_be",
+        "prj_backlog_empty",
+        1,
+        "op_be",
+        "2026-10-04T00:00:00Z",
+    ))
+    .expect("enqueue");
+    let mut transport = ScriptedTransport::always_ok();
+    let report = bus
+        .dispatch_due(&at("2026-10-04T00:00:10Z"), &mut transport)
+        .expect("pass");
+    assert_eq!(report.dispatched(), 1);
+    assert_eq!(report.remaining, 0);
+}
+
+#[test]
+fn a_batch_bound_pass_leaves_the_rest_outstanding() {
+    let clock = at("2026-10-04T00:00:10Z");
+    // A batch of two, so the pass is bounded and the queue is not emptied - which is exactly the case the report
+    // has to make visible, because it is the case where a producer that cannot see the backlog keeps producing.
+    let (storage, _dir2) = storage_with_project("backlog_batch");
+    let mut bounded = Bus::with_policy(
+        storage,
+        DispatchPolicy {
+            batch_size: 2,
+            ..DispatchPolicy::default()
+        },
+        BackoffPolicy::default(),
+    );
+    for n in 1..=4 {
+        bounded
+            .enqueue(&due_with_identity(
+                &format!("msg_bb{n}"),
+                "prj_backlog_batch",
+                n,
+                &format!("op_bb{n}"),
+                "2026-10-04T00:00:00Z",
+            ))
+            .expect("enqueue");
+    }
+    let mut transport = ScriptedTransport::always_ok();
+    let report = bounded.dispatch_due(&clock, &mut transport).expect("pass");
+    assert_eq!(report.dispatched(), 2);
+    assert_eq!(
+        report.remaining, 2,
+        "the batch bound limited the pass, and what it did not reach is still outstanding"
+    );
+}
