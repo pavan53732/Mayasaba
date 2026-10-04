@@ -124,7 +124,7 @@ Rust bridge DTO/metadata + TypeScript bridge types
 Tauri command/event runtime
 ```
 
-Generated outputs are checked in and must not be hand-edited. The local contract gate (`npm run verify:contracts`) verifies their identifiers and ownership against `workspace.manifest.json`; it does not read the generated files themselves, and a regeneration-and-diff drift check is not yet implemented, so the "not hand-edited" rule is not yet mechanically enforced.
+Generated outputs are checked in and must not be hand-edited. `tools/codegen/generate-bridge.mjs` emits both surfaces — `apps/desktop/src/generated/bridge.ts` and `apps/desktop/src-tauri/src/generated/bridge.rs` — from the identifier schema, and its `--check` mode compares both against what the contract implies, so the "not hand-edited" rule is mechanically enforced. The local contract gate (`npm run verify:contracts`) runs that check and additionally reads both sides of the bridge: the registered handlers in `apps/desktop/src-tauri/src/main.rs` and the frontend's `transport(...)` call sites. A handler or a call naming an operation the contract does not declare fails; a declared operation that nothing implements is reported with its count (DEC-053).
 
 ## Runtime schema distribution
 
