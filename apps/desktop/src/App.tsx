@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 
-import { createProject, listProjects, pickFolder, recoveryStatus, validateWorkspace } from "./intake/bridge";
+import { createProject, listProjects, pickFolder, getRecoveryStatus, validateWorkspace } from "./intake/bridge";
 import {
   EMPTY_DRAFT,
   initialState,
@@ -47,7 +47,7 @@ export default function App() {
   // empty Control Room that looks like a fresh install.
   useEffect(() => {
     void (async () => {
-      const report = await recoveryStatus();
+      const report = await getRecoveryStatus();
       // A transport failure is not a clean report. Treating "could not check" as "nothing wrong" is exactly
       // the silent-success mistake the authority boundary exists to prevent.
       setRecovery("clean" in report ? report : null);

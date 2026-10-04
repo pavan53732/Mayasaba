@@ -142,7 +142,7 @@ struct RecoveryIssueView {
 }
 
 #[tauri::command]
-fn recovery_status(
+fn get_recovery_status(
     service: State<'_, Mutex<ProjectService>>,
 ) -> Result<RecoveryView, CommandError> {
     let service = service.lock().map_err(|_| CommandError {
@@ -252,7 +252,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             create_project,
             list_projects,
-            recovery_status,
+            get_recovery_status,
             validate_workspace
         ])
         .run(tauri::generate_context!())

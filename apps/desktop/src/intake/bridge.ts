@@ -60,9 +60,9 @@ export interface RecoveryReport {
 }
 
 /** The startup recovery scan result. Recovery reports; it never repairs. */
-export async function recoveryStatus(): Promise<RecoveryReport | CommandError> {
+export async function getRecoveryStatus(): Promise<RecoveryReport | CommandError> {
   try {
-    return (await transport("recovery_status", {})) as RecoveryReport;
+    return (await transport("get_recovery_status", {})) as RecoveryReport;
   } catch (thrown) {
     const candidate = thrown as Partial<CommandError>;
     if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
