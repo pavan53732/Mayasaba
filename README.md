@@ -234,7 +234,9 @@ Contract verification runs locally on the user's Windows PC — there is no host
 npm run verify:contracts
 ~~~
 
-This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, both sides of the Tauri bridge — the registered handlers in `apps/desktop/src-tauri/src/main.rs` and the frontend's `transport(...)` call sites — the generated bridge and protocol surfaces against the contract they are derived from, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
+This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, both sides of the Tauri bridge — the registered handlers in `apps/desktop/src-tauri/src/main.rs` and the frontend's `transport(...)` call sites — each handler's arguments against the operation's declared request fields, the canonical error registry against the protocol's own error enums and against the codes the implementation produces, the generated bridge and protocol surfaces against the contract they are derived from, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
+
+The payload types the contract declares are checked separately, by the shell's own test suite rather than by the gate: `cargo test -p mayasaba-desktop` runs a conformance test that serializes each implemented operation's response struct and validates it against its declared type in `schemas/tauri-bridge-v1/payload-types.json`, so a renamed, added, removed or recased wire field fails by name.
 
 The gate is wired to a version-controlled pre-commit hook, so it is not merely available but run:
 
@@ -251,8 +253,9 @@ follow-ups; each decision record states the exact validation performed and the o
 machine-readable contract is packaged and gated: `npm run verify:contracts` checks the MCF registries and enums,
 the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, the agent-adapter set
 and its declared controls, the declared manifests, each crate's declared dependencies, the canonical error
-registry against the protocol's own error enums and against the codes the implementation produces, and both
-sides of the Tauri bridge. It reports 59 MCF message types, 121 events, 12 state machines, 32 Tauri commands, 27
+registry against the protocol's own error enums and against the codes the implementation produces, both
+sides of the Tauri bridge, and each handler's arguments against the operation's declared request fields. It
+reports 59 MCF message types, 121 events, 12 state machines, 32 Tauri commands, 27
 queries, 30 UI events and 31 registered error codes, of which 11 are produced by the implementation. It
 invariant-checks 28 of the 68 canonical artifacts; the other 40 are parsed but have no invariant enforced
 against them.
@@ -274,7 +277,11 @@ What is implemented:
   `#[tauri::command(rename_all = "snake_case")]`, so the frontend renames nothing and no translation layer has
   to be kept in step with Rust by hand (DEC-054). Every error code they can return is registered with its
   category, retryability, severity, MCF spelling and meaning, and the gate fails if the implementation produces
-  a code the registry does not declare (DEC-055).
+  a code the registry does not declare (DEC-055). What each of the four returns is declared in
+  `schemas/tauri-bridge-v1/payload-types.json` and checked: `mod wire_shape_tests` in `main.rs` serializes every
+  one of these structs and validates it against the type its operation declares, and the gate compares each
+  handler's arguments with the operation's declared request fields, so a field that is renamed, added, removed
+  or recased on either side fails by name instead of reaching the frontend as `undefined` (DEC-056).
 - MCF-v2 envelope validation in `crates/protocol`, with the envelope's vocabulary and per-field JSON types
   generated from the contract rather than hand-copied (DEC-051), plus startup recovery and durable-state
   inconsistency reporting in `crates/storage`.

@@ -366,8 +366,8 @@ for(const n of registered) if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) fail(
 // command as missing, which is a check that fails on the shape of the annotation rather than on the bridge.
 const commandAttrCount=(rustCode.match(/#\[tauri::command\s*(?:\([^)]*\))?\s*\]/g)??[]).length;
 const commandFns=[...rustCode.matchAll(
-  /#\[tauri::command\s*(?:\(([^)]*)\))?\s*\]\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/g
-)].map(m=>({name:m[2],args:m[1]??""}));
+  /#\[tauri::command\s*(?:\(([^)]*)\))?\s*\]\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/g
+)].map(m=>({name:m[2],args:m[1]??"",params:m[3]}));
 if(commandFns.length!==commandAttrCount) fail(
   `${BRIDGE_RUST}: ${commandAttrCount} #[tauri::command] attribute(s) but only ${commandFns.length} resolved to a function name.\n`+
   `An attribute whose function name cannot be read is unchecked, so this is a failure rather than a skip.`
@@ -1005,6 +1005,89 @@ for(const section of ["commands","queries"]){
 }
 if(typeDrift.length) fail(`Tauri request_fields disagree with the payload type they reference:\n  - ${typeDrift.join("\n  - ")}`);
 
+// --- The declared request fields must be the arguments the handler actually accepts, under the names the wire
+// actually uses (DEC-056).
+//
+// `payloads.json` declares each operation's request fields, and `payload-types.json` declares their types, but
+// neither was ever compared with the Rust function that receives them. The casing divergence proved the cost:
+// `create_project` accepted `local_path` and the wire sent `localPath`, and both declarations were satisfied
+// because nothing looked at the function. The wire name of an argument is decided by the command's
+// `rename_all`, whose Tauri default is camelCase, so the default is modelled here rather than assumed away.
+const camelCase=(name)=>name.replace(/_([a-z0-9])/g,(_,c)=>c.toUpperCase());
+const renameConventions={
+  snake_case:(name)=>name,
+  camelCase,
+  lowercase:(name)=>name.toLowerCase(),
+  UPPERCASE:(name)=>name.toUpperCase(),
+  PascalCase:(name)=>name.charAt(0).toUpperCase()+camelCase(name).slice(1),
+  "kebab-case":(name)=>name.replace(/_/g,"-"),
+};
+/** The wire name of a Rust argument, given the command's `rename_all`. */
+const wireName=(convention,name)=>{
+  if(convention===null) return camelCase(name); // Tauri's default for command arguments.
+  const fn=renameConventions[convention];
+  if(!fn) fail(
+    `${BRIDGE_RUST}: a #[tauri::command] declares rename_all = "${convention}", which this gate cannot model.\n`+
+    `The gate derives the wire name of each argument from it, so an unmodelled convention means the argument `+
+    `names are unchecked. Add it to renameConventions rather than leaving the request surface unchecked.`
+  );
+  return fn(name);
+};
+/** Split a Rust parameter list on top-level commas, so a generic type's own commas do not split an argument. */
+const splitParams=(params)=>{
+  const out=[];let depth=0,current="";
+  for(const ch of params){
+    if(ch==="<"||ch==="("||ch==="[") depth++;
+    else if(ch===">"||ch===")"||ch==="]") depth--;
+    if(ch===","&&depth===0){ out.push(current); current=""; continue; }
+    current+=ch;
+  }
+  if(current.trim()) out.push(current);
+  return out.map(s=>s.trim()).filter(Boolean);
+};
+const requestProblems=[];
+const optionalFieldsNotAccepted=[];
+for(const command of commandFns){
+  const declared=payloadRegistry.commands?.[command.name]?.request_fields;
+  if(!declared){ continue; }
+  const renameAll=/rename_all\s*=\s*"([^"]+)"/.exec(command.args)?.[1] ?? null;
+  const accepted=[];
+  for(const param of splitParams(command.params)){
+    const colon=param.indexOf(":");
+    if(colon<0) continue;
+    const rustName=param.slice(0,colon).trim();
+    const rustType=param.slice(colon+1).trim();
+    // Tauri injects state and windows; they are not request fields and never appear on the wire.
+    if(/^State\b|^Window\b|^AppHandle\b|^WebviewWindow\b/.test(rustType)) continue;
+    accepted.push({wire:wireName(renameAll,rustName),rustName,optional:rustType.startsWith("Option<")});
+  }
+  const acceptedNames=accepted.map(a=>a.wire);
+  const declaredByName=new Map(declared.map(f=>[f.name,f]));
+  for(const arg of accepted){
+    if(!declaredByName.has(arg.wire)) requestProblems.push(
+      `commands.${command.name} accepts the argument "${arg.wire}", which its declared request_fields do not contain`+
+      (arg.wire!==arg.rustName?` (the Rust argument is "${arg.rustName}"; rename_all decides the wire name)`:"")
+    );
+    else if(Boolean(declaredByName.get(arg.wire).required)===arg.optional) requestProblems.push(
+      `commands.${command.name} accepts "${arg.wire}" as ${arg.optional?"Option<T> (optional)":"a required value"} but declares it required=${Boolean(declaredByName.get(arg.wire).required)}`
+    );
+  }
+  for(const field of declared){
+    if(acceptedNames.includes(field.name)) continue;
+    // Required-but-unaccepted is a failure: the contract says a caller must send it and the handler cannot
+    // receive it. Optional-but-unaccepted is reported instead, because it is the contract leading
+    // implementation - the same asymmetry DEC-053 applies to whole operations.
+    if(field.required) requestProblems.push(
+      `commands.${command.name} declares the required request field "${field.name}", which the handler does not accept`
+    );
+    else optionalFieldsNotAccepted.push(`commands.${command.name}.${field.name}`);
+  }
+}
+if(requestProblems.length) fail(
+  `Tauri handler arguments disagree with the declared request fields (DEC-056):\n  - ${requestProblems.join("\n  - ")}\n`+
+  `The contract is the authority (AGENTS.md section 5): declare the field, or stop accepting it.`
+);
+
 // --- Initial project creation must carry its intent anchor. DEC-030 makes the ProjectBrief the canonical
 // representation of user intent; CONTROL-ROOM-DESIGN.md states the Initial Intake Composer persists the
 // stated intent as the first brief version. If create_project stops declaring a required initial brief, a
@@ -1541,6 +1624,9 @@ console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: 
 // The error vocabulary's own figures, stated every run for the same reason as the bridge figures: a count that
 // lives only in a document drifts away from the thing it counts.
 console.log(`Error registry: ${errorRegistryReport.registered} codes registered; ${errorRegistryReport.emitted} produced by the implementation; ${errorRegistryReport.tauriCodesEmitted} of ${errorRegistryReport.registered} tauri_code values emitted anywhere (the wire carries the canonical registry key; reported, not blocking)`);
+if(optionalFieldsNotAccepted.length) console.log(
+  `Declared optional request fields the handler does not accept (reported, not blocking; the contract leads implementation): ${optionalFieldsNotAccepted.join(", ")}`
+);
 // The reported half of the two-way bridge gate. Stated every run, including when it is large, because a gap
 // that is only visible in a document is a gap that drifts; the README figure and this line are the same fact.
 console.log(`Bridge: ${bridgeImplemented.length} of ${declaredOps.size} declared operations implemented; ${bridgeUnimplemented.length} declared with no handler (reported, not blocking)`);

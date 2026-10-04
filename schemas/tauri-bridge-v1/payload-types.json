@@ -3,7 +3,7 @@
   "$id":"https://mayasaba.local/schemas/tauri-bridge-v1/payload-types.json",
   "title":"Mayasaba Tauri request and response payload type definitions",
   "authority":"schemas/tauri-bridge-v1/payload-types.json",
-  "rule":"Every type name referenced by payloads.json request_fields must resolve here. Types are declared as operations gain declared request fields, not speculatively: an operation that does not declare request_fields has no payload type yet, and inventing one would be a declaration nothing consumes.",
+  "rule":"Every type name referenced by payloads.json request_fields must resolve here. Types are declared as operations gain declared request fields, not speculatively: an operation that does not declare request_fields has no payload type yet, and inventing one would be a declaration nothing consumes. A type is also declared for an operation that is implemented end to end, because that is when the shape exists on the wire and can be checked against the declaration instead of asserted (DEC-056).",
   "types":{
     "ProjectBriefDraft":{
       "title":"The user's stated project intent, submitted at project creation",
@@ -33,6 +33,46 @@
         "purpose":{"type":"string","enum":["WORKSPACE_ROOT","TASK_SCOPE"],"description":"Why the path is in scope."}
       }
     },
+    "ProjectView":{
+      "title":"The authoritative project projection the Control Room displays",
+      "description":"A projection of stored state, never UI-side draft state, and one shape rather than one per operation: create_project and list_projects return the same projection, because a created project and a listed project that differed in shape would be two descriptions of one thing. There is no name field on the request side; the display name here is derived by the owning service from the validated canonical workspace folder leaf (DEC-050). Every field is required and always present: a nullable field is sent as null rather than omitted, so a caller can tell \"no brief\" from \"this build does not send briefs\".",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","name","local_path","phase","status","current_epoch","brief_id","brief_version","brief_body","created_at"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1,"description":"Generated independently of the path; never derived from it (DEC-050)."},
+        "name":{"type":"string","minLength":1,"description":"Display name derived from the canonical workspace folder leaf."},
+        "local_path":{"type":"string","minLength":1,"description":"The canonicalized workspace root that was persisted, not the spelling the caller sent."},
+        "phase":{"type":"string","description":"Lifecycle phase; DISCOVERY at intake."},
+        "status":{"type":"string"},
+        "current_epoch":{"type":"integer","minimum":0,"description":"The project's current epoch. It is the project's epoch, not the epoch at creation, so a listed project reports the epoch it is in now."},
+        "brief_id":{"type":["string","null"],"description":"ProjectBrief version 1. The project cannot exist without it, so null here means the stored row is inconsistent."},
+        "brief_version":{"type":["integer","null"]},
+        "brief_body":{"type":["string","null"]},
+        "created_at":{"type":"string","description":"RFC3339 UTC."}
+      }
+    },
+    "RecoveryIssue":{
+      "title":"One finding from the startup recovery scan",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["kind","detail"],
+      "properties":{
+        "kind":{"type":"string","minLength":1,"description":"A machine-readable finding kind, so the Control Room does not classify findings by reading their prose."},
+        "detail":{"type":"string","description":"Human-readable detail."}
+      }
+    },
+    "CommandError":{
+      "title":"The payload of a rejected invocation, for every operation",
+      "description":"Every command and query returns either its declared response payload or this shape, which is why it is declared once rather than per operation: it is not operation-specific. code is the canonical key of an entry in schemas/error-v1/registry.json, which is where the category, retryability, severity and meaning of each code live - the enum is deliberately not repeated here, because a second copy of the code vocabulary would be a competing source of truth (DEC-021). A caller branches on code, never on message.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["code","message"],
+      "properties":{
+        "code":{"type":"string","minLength":1,"description":"A registered code from schemas/error-v1/registry.json. The gate fails if the implementation produces a code the registry does not declare (DEC-055)."},
+        "message":{"type":"string","description":"Human-readable detail. Never parsed: the code carries the meaning."}
+      }
+    },
     "create_projectRequest":{
       "title":"Create a project from its local workspace, atomically",
       "description":"There is deliberately no name field. The human-readable project display name is derived by ProjectService from the validated canonical workspace folder name, so the caller cannot supply identity metadata that disagrees with the filesystem (DEC-050). project_id is generated independently and is never derived from a path.",
@@ -47,16 +87,25 @@
     },
     "create_projectResponse":{
       "title":"The authoritative state that exists after project creation committed",
+      "description":"The projection declared once as ProjectView, so a created project and a listed project cannot drift apart in shape. This name is kept as an alias rather than deleted, because payloads.json declares it as the operation's response type and a declared identifier is not removed to save a level of indirection.",
+      "$ref":"#/$defs/ProjectView"
+    },
+    "list_projectsResponse":{
+      "title":"Every persisted project, newest first",
+      "description":"An array of the same projection create_project returns. It is a distinct declared type rather than a second name for ProjectView because the two responses genuinely differ: one is a project and the other is a list of them.",
+      "type":"array",
+      "items":{"$ref":"#/$defs/ProjectView"}
+    },
+    "get_recovery_statusResponse":{
+      "title":"The startup recovery scan result",
+      "description":"Recovery reports and never repairs, so this is a report rather than a repair outcome. clean is true only when the scan found nothing; integrity_ok reports whether SQLite's own integrity check passed, which is a different question from whether the stored rows agree with each other, and the two are separate fields so neither can be inferred from the other. An empty issues list with clean false is not a state this scan produces.",
       "type":"object",
       "additionalProperties":false,
-      "required":["project_id","brief_id","epoch","phase","status"],
+      "required":["clean","integrity_ok","issues"],
       "properties":{
-        "project_id":{"type":"string","minLength":1},
-        "brief_id":{"type":"string","minLength":1,"description":"ProjectBrief version 1. The project cannot exist without it."},
-        "epoch":{"type":"integer","minimum":0,"description":"Initial project epoch, always 0 at creation."},
-        "phase":{"type":"string","description":"Lifecycle phase after creation; DISCOVERY at intake."},
-        "status":{"type":"string"},
-        "created_at":{"type":"string","description":"RFC3339 UTC."}
+        "clean":{"type":"boolean","description":"True when the scan found no inconsistencies in stored state."},
+        "integrity_ok":{"type":"boolean","description":"Whether SQLite's integrity check passed. False means the durable file itself is suspect."},
+        "issues":{"type":"array","items":{"$ref":"#/$defs/RecoveryIssue"}}
       }
     },
     "get_council_roundRequest":{
@@ -116,6 +165,14 @@
   },
   "$defs":{
     "ProjectBriefDraft":{"$ref":"#/types/ProjectBriefDraft"},
-    "ProjectPathDraft":{"$ref":"#/types/ProjectPathDraft"}
+    "ProjectPathDraft":{"$ref":"#/types/ProjectPathDraft"},
+    "ProjectView":{"$ref":"#/types/ProjectView"},
+    "RecoveryIssue":{"$ref":"#/types/RecoveryIssue"},
+    "CommandError":{"$ref":"#/types/CommandError"}
+  },
+  "error":{
+    "title":"What every operation returns instead of its response payload when it is rejected",
+    "description":"Declared once rather than per operation, because a rejection is not operation-specific. See CommandError for why code is not enumerated here.",
+    "$ref":"#/$defs/CommandError"
   }
 }

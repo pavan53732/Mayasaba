@@ -263,3 +263,358 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
 }
+
+/// Conformance between the serialized wire structs and the payload types the contract declares for them.
+///
+/// The gate proves that operation **names** agree between the contract and both sides of the bridge. It never
+/// proved that a handler's *shape* agrees with the type the contract declares for it, and that gap is not
+/// hypothetical: the wire renamed every multi-word field to camelCase while `payload-types.json` declared
+/// snake_case, and nothing noticed until it was measured by hand (DEC-053, fixed by DEC-054). A test that
+/// serializes the real struct and validates it against the real declaration closes that class of divergence,
+/// because it compares the bytes Rust produces with the file the contract names, rather than comparing two
+/// copies of a name.
+///
+/// Two properties make this more than a spot check. The validator fails on any JSON Schema keyword it does not
+/// implement, so the contract cannot quietly start using a keyword that would go unchecked. And
+/// `every_registered_handler_is_covered` reads this file's own `generate_handler![...]` list, so registering a
+/// fifth handler without a shape test for it is a test failure rather than an omission nobody notices.
+#[cfg(test)]
+mod wire_shape_tests {
+    use super::*;
+    use serde::Serialize;
+    use serde_json::Value;
+
+    const PAYLOAD_TYPES: &str =
+        include_str!("../../../../schemas/tauri-bridge-v1/payload-types.json");
+
+    /// The operations this module checks the shape of. Kept as data so `every_registered_handler_is_covered`
+    /// can compare it against the registration list rather than against a comment.
+    const COVERED_OPERATIONS: &[&str] = &[
+        "create_project",
+        "list_projects",
+        "get_recovery_status",
+        "validate_workspace",
+    ];
+
+    /// The JSON Schema keywords this validator implements. A validated type that uses anything else is a test
+    /// failure, not a silently ignored constraint: under-validation that reports success is worse than no
+    /// check, because it is indistinguishable from a check that passed.
+    const SUPPORTED_KEYWORDS: &[&str] = &[
+        "$ref",
+        "title",
+        "description",
+        "type",
+        "required",
+        "properties",
+        "additionalProperties",
+        "enum",
+        "items",
+        "minimum",
+        "minLength",
+    ];
+
+    fn contract() -> Value {
+        serde_json::from_str(PAYLOAD_TYPES).expect("payload-types.json is not parseable JSON")
+    }
+
+    /// Follow `#/...` references until a concrete schema is reached. A reference that does not resolve is a
+    /// failure rather than a skip, because a declaration that resolves to nothing validates nothing.
+    fn resolve<'a>(root: &'a Value, schema: &'a Value) -> &'a Value {
+        let mut current = schema;
+        for _ in 0..8 {
+            let Some(reference) = current.get("$ref").and_then(Value::as_str) else {
+                return current;
+            };
+            let path = reference
+                .strip_prefix("#/")
+                .unwrap_or_else(|| panic!("unsupported $ref {reference}"));
+            let mut node = root;
+            for segment in path.split('/') {
+                node = node.get(segment).unwrap_or_else(|| {
+                    panic!("$ref {reference} does not resolve in payload-types.json")
+                });
+            }
+            current = node;
+        }
+        panic!("$ref chain is deeper than 8 hops; payload-types.json is probably circular");
+    }
+
+    fn type_matches(want: &str, value: &Value) -> bool {
+        match want {
+            "object" => value.is_object(),
+            "array" => value.is_array(),
+            "string" => value.is_string(),
+            "boolean" => value.is_boolean(),
+            "null" => value.is_null(),
+            "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+            "number" => value.is_number(),
+            _ => false,
+        }
+    }
+
+    fn validate(root: &Value, schema: &Value, value: &Value, at: &str, problems: &mut Vec<String>) {
+        let schema = resolve(root, schema);
+        if let Some(object) = schema.as_object() {
+            for keyword in object.keys() {
+                if !SUPPORTED_KEYWORDS.contains(&keyword.as_str()) {
+                    problems.push(format!(
+                        "{at}: the contract uses the JSON Schema keyword \"{keyword}\", which this validator does \
+                         not implement. Add it here rather than leaving the shape unchecked."
+                    ));
+                }
+            }
+        }
+        if let Some(declared) = schema.get("type") {
+            let wanted: Vec<&str> = match declared {
+                Value::String(one) => vec![one.as_str()],
+                Value::Array(many) => many.iter().filter_map(Value::as_str).collect(),
+                _ => Vec::new(),
+            };
+            if !wanted.iter().any(|want| type_matches(want, value)) {
+                problems.push(format!(
+                    "{at} must be {}, found {}",
+                    wanted.join("|"),
+                    json_kind(value)
+                ));
+                return;
+            }
+        }
+        if let Some(allowed) = schema.get("enum").and_then(Value::as_array) {
+            if !allowed.contains(value) {
+                problems.push(format!("{at} must be one of {allowed:?}, found {value}"));
+            }
+        }
+        if let Some(minimum) = schema.get("minimum").and_then(Value::as_i64) {
+            if let Some(number) = value.as_i64() {
+                if number < minimum {
+                    problems.push(format!("{at} must be >= {minimum}, found {number}"));
+                }
+            }
+        }
+        if let Some(min_length) = schema.get("minLength").and_then(Value::as_u64) {
+            if let Some(text) = value.as_str() {
+                if (text.chars().count() as u64) < min_length {
+                    problems.push(format!("{at} must be at least {min_length} character(s)"));
+                }
+            }
+        }
+        if let (Some(items), Some(array)) = (schema.get("items"), value.as_array()) {
+            for (index, item) in array.iter().enumerate() {
+                validate(root, items, item, &format!("{at}[{index}]"), problems);
+            }
+        }
+        if let Some(object) = value.as_object() {
+            let properties = schema.get("properties").and_then(Value::as_object);
+            if let Some(required) = schema.get("required").and_then(Value::as_array) {
+                for key in required.iter().filter_map(Value::as_str) {
+                    if !object.contains_key(key) {
+                        problems.push(format!("{at} is missing required key \"{key}\""));
+                    }
+                }
+            }
+            if let Some(properties) = properties {
+                for (key, sub) in properties {
+                    if let Some(field) = object.get(key) {
+                        validate(root, sub, field, &format!("{at}.{key}"), problems);
+                    }
+                }
+            }
+            if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+                if let Some(properties) = properties {
+                    for key in object.keys() {
+                        if !properties.contains_key(key) {
+                            problems.push(format!(
+                                "{at} declares \"{key}\", which the declared type does not permit"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn json_kind(value: &Value) -> &'static str {
+        match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(number) if number.is_i64() || number.is_u64() => "integer",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        }
+    }
+
+    /// Serialize a real wire value and validate it against the named declared type.
+    fn conforms<T: Serialize>(type_name: &str, value: &T) {
+        let root = contract();
+        let schema = root
+            .get("types")
+            .and_then(|types| types.get(type_name))
+            .unwrap_or_else(|| {
+                panic!(
+                    "payload-types.json declares no type \"{type_name}\", so the shape of the value that claims \
+                     to be one is unconstrained"
+                )
+            });
+        let serialized =
+            serde_json::to_value(value).expect("a wire struct failed to serialize as JSON");
+        let mut problems = Vec::new();
+        validate(&root, schema, &serialized, type_name, &mut problems);
+        assert!(
+            problems.is_empty(),
+            "{type_name} does not conform to its declared payload type:\n  - {}\nserialized: {serialized}",
+            problems.join("\n  - ")
+        );
+    }
+
+    fn project_view() -> ProjectView {
+        ProjectView {
+            project_id: "prj_2f1c9a4b6e0d3857".to_string(),
+            name: "proj".to_string(),
+            local_path: "C:\\work\\proj".to_string(),
+            phase: "DISCOVERY".to_string(),
+            status: "ACTIVE".to_string(),
+            current_epoch: 0,
+            brief_id: Some("brf_7d3e5c1a9b204f68".to_string()),
+            brief_version: Some(1),
+            brief_body: Some("Build something real.".to_string()),
+            created_at: "2026-10-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn create_project_response_conforms() {
+        conforms("create_projectResponse", &project_view());
+    }
+
+    #[test]
+    fn list_projects_response_conforms() {
+        conforms(
+            "list_projectsResponse",
+            &vec![project_view(), project_view()],
+        );
+    }
+
+    #[test]
+    fn a_projection_with_no_brief_conforms() {
+        // The nullable fields are sent as null rather than omitted, so the null case is part of the shape and
+        // is checked rather than assumed.
+        let no_brief = ProjectView {
+            brief_id: None,
+            brief_version: None,
+            brief_body: None,
+            ..project_view()
+        };
+        conforms("create_projectResponse", &no_brief);
+    }
+
+    #[test]
+    fn get_recovery_status_response_conforms() {
+        conforms(
+            "get_recovery_statusResponse",
+            &RecoveryView {
+                clean: true,
+                integrity_ok: true,
+                issues: Vec::new(),
+            },
+        );
+        conforms(
+            "get_recovery_statusResponse",
+            &RecoveryView {
+                clean: false,
+                integrity_ok: false,
+                issues: vec![RecoveryIssueView {
+                    kind: "ORPHANED_BRIEF".to_string(),
+                    detail: "brief has no project".to_string(),
+                }],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_workspace_response_conforms() {
+        conforms(
+            "validate_workspaceResponse",
+            &WorkspaceCheck {
+                status: "AUTHORIZED",
+                canonical_path: Some("C:\\work\\proj".to_string()),
+                requested_path: "C:\\work\\proj".to_string(),
+                derived_project_name: Some("proj".to_string()),
+                code: None,
+                message: None,
+            },
+        );
+        conforms(
+            "validate_workspaceResponse",
+            &WorkspaceCheck {
+                status: "INVALID",
+                canonical_path: None,
+                requested_path: "Z:\\nope".to_string(),
+                derived_project_name: None,
+                code: Some("WORKSPACE_DOES_NOT_EXIST".to_string()),
+                message: Some("That folder does not exist.".to_string()),
+            },
+        );
+    }
+
+    #[test]
+    fn a_rejection_conforms_to_the_error_payload_type() {
+        // The error payload is declared once, under `error`, because a rejection is not operation-specific.
+        let root = contract();
+        let schema = root
+            .get("error")
+            .expect("payload-types.json declares no error payload type");
+        let serialized = serde_json::to_value(CommandError {
+            code: "WORKSPACE_DOES_NOT_EXIST",
+            message: "That folder does not exist.".to_string(),
+        })
+        .expect("CommandError failed to serialize");
+        let mut problems = Vec::new();
+        validate(&root, schema, &serialized, "error", &mut problems);
+        assert!(
+            problems.is_empty(),
+            "error does not conform:\n  - {}",
+            problems.join("\n  - ")
+        );
+    }
+
+    /// A handler registered in `generate_handler![...]` with no shape test is a wire surface nothing checks.
+    #[test]
+    fn every_registered_handler_is_covered() {
+        let source = include_str!("main.rs");
+        // Comment lines are removed first. The macro name is mentioned in prose in this file, and a comment that
+        // happened to sit above the real registration would otherwise be parsed as the registration list, which
+        // would make this test pass for the wrong reason or fail for no reason.
+        let code: String = source
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let list = code
+            .split_once("generate_handler![")
+            .and_then(|(_, rest)| rest.split_once(']'))
+            .map(|(list, _)| list)
+            .expect("could not find the generate_handler![...] list in this file");
+        let registered: Vec<&str> = list
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(|name| name.rsplit("::").next().unwrap_or(name))
+            .collect();
+        for name in &registered {
+            assert!(
+                COVERED_OPERATIONS.contains(name),
+                "{name} is registered in generate_handler![...] but no shape test covers it. Add a conformance \
+                 test for the payload it returns, and add it to COVERED_OPERATIONS."
+            );
+        }
+        for name in COVERED_OPERATIONS {
+            assert!(
+                registered.contains(name),
+                "COVERED_OPERATIONS names {name}, which generate_handler![...] does not register. The list of \
+                 covered operations must describe the handlers that exist."
+            );
+        }
+    }
+}
