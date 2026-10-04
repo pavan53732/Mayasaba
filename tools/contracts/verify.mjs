@@ -928,6 +928,32 @@ const unregistered=[...new Set(fs.readdirSync(path.join(root,"schemas"),{withFil
   .filter(dir=>!canonicalDirs.some(f=>f.startsWith(`${dir}/`))&&!declaredNonCanonical.has(dir));
 if(unregistered.length) fail(`Schema director(y|ies) exist that are absent from workspace.manifest.json:schema_sources:\n  - ${unregistered.join("\n  - ")}\nRegister every canonical file in schema_sources, or declare the directory non-canonical in verify.mjs with a reason. An unregistered schema directory is an authority nobody reviews.`);
 
+// Per-file registration. The directory check above let 21 real MCF contract files sit outside the allowlist
+// unnoticed, because a directory counts as registered if any one of its files is. Every file a package
+// manifest declares canonical must itself appear in schema_sources, or it exists but nothing parses it,
+// drift-checks it or reports on it.
+//
+// The test is "named in a package manifest", not "exists on disk". A file that exists but is declared nowhere
+// and consumed by nothing is an orphan, which is a different problem from an unregistered canonical file, and
+// conflating the two would force dead files into the canonical set. schemas/recovery-v1/recovery-events.json
+// is exactly that case: it declares its own authority and is referenced by nothing.
+const registeredSet=new Set(canonicalDirs);
+const manifests=fs.readdirSync(path.join(root,"schemas"),{withFileTypes:true})
+  .filter(d=>d.isDirectory() && fs.existsSync(path.join(root,"schemas",d.name,"manifest.json")))
+  .map(d=>`schemas/${d.name}/manifest.json`);
+const declaredCanonical=new Set();
+for(const mf of manifests){
+  let parsed;
+  try{ parsed=JSON.parse(fs.readFileSync(path.join(root,mf),"utf8")); }catch{ continue; }
+  const collect=(value)=>{
+    if(Array.isArray(value)){ for(const v of value){ if(typeof v==="string") collectOne(v); } }
+  };
+  const collectOne=(name)=>{ if(typeof name==="string" && name.includes(".")) declaredCanonical.add(`schemas/${mf.split("/")[1]}/${name}`); };
+  for(const value of Object.values(parsed)) collect(value);
+}
+const unregisteredFiles=[...declaredCanonical].filter(f=>!registeredSet.has(f));
+if(unregisteredFiles.length) fail(`${unregisteredFiles.length} file(s) are declared canonical by a package manifest but absent from workspace.manifest.json:schema_sources:\n  - ${unregisteredFiles.sort().join("\n  - ")}\nRegister each one. A declared canonical file that is unregistered is parsed by nothing, checked by nothing, and can drift silently.`);
+
 // --- Repeated entries in a canonical schema's own `required` or `enum` array.
 // `envelope.schema.json` listed `authorization_context` twice in its conditional `required`: seven entries, six
 // unique. JSON Schema requires the elements of `required` to be unique, so the file was not a conformant schema
