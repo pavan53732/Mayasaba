@@ -20,6 +20,33 @@ CREATE TABLE IF NOT EXISTS project_epochs (
   FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
+-- ProjectPath and ProjectBrief are core entities in docs/DATA-MODEL.md. Before these tables existed the
+-- data model asserted durable entities this schema did not implement, and contract verification could not
+-- see it because nothing read schema.sql. verify.mjs now resolves every DATA-MODEL core entity to a table,
+-- a declared column, or a declared alias, so a documented entity without storage fails the gate.
+CREATE TABLE IF NOT EXISTS project_paths (
+  path_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, path),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_briefs (
+  brief_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  body TEXT NOT NULL,
+  source TEXT NOT NULL,
+  supersedes_brief_id TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, version),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(supersedes_brief_id) REFERENCES project_briefs(brief_id)
+);
+
 CREATE TABLE IF NOT EXISTS agents (
   agent_id TEXT PRIMARY KEY,
   agent_type TEXT NOT NULL,
@@ -333,6 +360,20 @@ CREATE TABLE IF NOT EXISTS message_attempts (
   FOREIGN KEY(message_id) REFERENCES messages(message_id)
 );
 
+-- MessageReceipt is a core entity in docs/DATA-MODEL.md: the durable record that a message was dispatched
+-- and whether its receipt was acknowledged. ACK means receipt, not successful execution (AGENTS.md §7), so
+-- receipt state is tracked separately from delivery state on messages.
+CREATE TABLE IF NOT EXISTS message_receipts (
+  receipt_id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  receipt_state TEXT NOT NULL,
+  acknowledged_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(message_id) REFERENCES messages(message_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
 CREATE TABLE IF NOT EXISTS inbox (
   message_id TEXT PRIMARY KEY,
   received_at TEXT NOT NULL,
@@ -560,6 +601,28 @@ CREATE TABLE IF NOT EXISTS user_answers (
   FOREIGN KEY(question_id) REFERENCES user_questions(question_id)
 );
 
+-- UserContribution is a core entity in docs/DATA-MODEL.md: a post-intake free-text user message plus the
+-- advisory classification the intake router produced and the authoritative outcome the owning service
+-- returned. The classification is advisory; result_type is what the service actually did, and the Control
+-- Room displays the outcome rather than the label. A contribution never substitutes for the authoritative
+-- object it produced.
+CREATE TABLE IF NOT EXISTS user_contributions (
+  contribution_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  classification TEXT NOT NULL,
+  classification_confidence REAL,
+  classification_source TEXT NOT NULL,
+  result_type TEXT NOT NULL,
+  result_reference TEXT,
+  epoch_before INTEGER NOT NULL,
+  epoch_after INTEGER NOT NULL,
+  context_snapshot_before TEXT,
+  context_snapshot_after TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
 CREATE TABLE IF NOT EXISTS barriers (
   barrier_id TEXT PRIMARY KEY,
   round_id TEXT NOT NULL,
@@ -585,3 +648,9 @@ CREATE INDEX IF NOT EXISTS idx_trace_target ON trace_links(project_id, target_ty
 CREATE INDEX IF NOT EXISTS idx_validation_status ON validation_runs(project_id, verdict);
 CREATE INDEX IF NOT EXISTS idx_council_round_state ON council_rounds(project_id, state);
 CREATE INDEX IF NOT EXISTS idx_barrier_state ON barriers(project_id, state);
+CREATE INDEX IF NOT EXISTS idx_briefs_project_version ON project_briefs(project_id, version);
+CREATE INDEX IF NOT EXISTS idx_briefs_supersedes ON project_briefs(supersedes_brief_id);
+CREATE INDEX IF NOT EXISTS idx_paths_project ON project_paths(project_id);
+CREATE INDEX IF NOT EXISTS idx_receipts_message ON message_receipts(message_id);
+CREATE INDEX IF NOT EXISTS idx_receipts_state ON message_receipts(project_id, receipt_state);
+CREATE INDEX IF NOT EXISTS idx_contributions_project ON user_contributions(project_id, created_at);

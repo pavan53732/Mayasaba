@@ -3,7 +3,10 @@ import path from "node:path";
 import {execFileSync} from "node:child_process";
 
 const root=process.cwd();
-const read=(p)=>JSON.parse(fs.readFileSync(path.join(root,p),"utf8"));
+const contentRead=new Set();
+let gateCoverage={verified:0,canonical:0,unverified:0};
+const read=(p)=>{contentRead.add(p);return JSON.parse(fs.readFileSync(path.join(root,p),"utf8"))};
+const readText=(p)=>{contentRead.add(p);return fs.readFileSync(path.join(root,p),"utf8")};
 const exists=(p)=>fs.existsSync(path.join(root,p));
 const fail=(m)=>{throw new Error(m)};
 
@@ -677,9 +680,152 @@ for(const [name,def] of Object.entries(contract.agents)){
   if(def.version_gate?.unverified_lines?.includes("2.x") && !def.scope_hazards_2x) fail(`Contract ${name} gates 2.x but records no scope_hazards_2x; the 2.x workspace/config/watcher mitigations would be unstated`);
 }
 
+// --- DATA-MODEL core entities vs the canonical SQLite schema.
+// docs/DATA-MODEL.md owns the entity inventory; schemas/sqlite-v1/schema.sql owns persistence. An entity
+// documented as durable with no table is a contract divergence: the documentation asserts persistence the
+// schema does not implement, so an agent can read one and implement the other, or invent a third.
+// Nothing read schema.sql before this check, so the divergence was invisible to a gate that was otherwise
+// fully green - the enforcement this series built was blind to exactly the layer where an implementation
+// agent looks first.
+//
+// The entity list is read from the document's own machine-parseable "Core entities" block rather than
+// inferred from prose. A regex over prose cannot decide whether a CamelCase term is an entity, a value
+// object or a column, and guessing produces false positives that get dismissed, which is worse than no
+// check at all. If that block cannot be parsed the check fails loudly rather than passing on nothing.
+const dataModel=readText("docs/DATA-MODEL.md");
+const coreBlock=dataModel.split(/^##\s+Core entities\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
+const coreEntities=coreBlock.split(/\r?\n/).map(l=>l.trim()).filter(l=>/^[A-Z][A-Za-z]*$/.test(l));
+if(coreEntities.length<10) fail(`DATA-MODEL.md Core entities block parsed to ${coreEntities.length} entities; the document structure changed and this check can no longer read it`);
+const sqlText=readText("schemas/sqlite-v1/schema.sql");
+const sqlTables=new Set([...sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)/g)].map(m=>m[1]));
+const snake=(n)=>n.replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase();
+// English pluralisation is irregular and a naive rule produces false positives, which is the same reason
+// prose regexes are not trusted above. One general rule plus an explicit override for words it cannot
+// know: a new entity with an irregular plural must be declared here rather than silently mismatched.
+const irregularPlurals=new Map([["project_epoch","project_epochs"]]);
+const plural=(s)=>{
+  if(irregularPlurals.has(s)) return irregularPlurals.get(s);
+  if(/is$/.test(s)) return s.slice(0,-2)+"es";
+  if(/(?:s|x|z|ch|sh)$/.test(s)) return s+"es";
+  if(/[^aeiou]y$/.test(s)) return s.slice(0,-1)+"ies";
+  return s+"s";
+};
+// An entity may legitimately be a value object or an alias rather than its own table. Declaring that with
+// a reason is what makes this a contract rather than a guess, and it is why adding a table is not the only
+// way to satisfy the check. Both entries below are justified by an owning machine, not by convenience.
+const entityStorage=new Map([
+  ["ProjectStatus",{storage:"projects.status",why:"value object, not a durable entity; project status is a column on projects"}],
+  ["Checkpoint",{storage:"workspace_checkpoints",why:"alias; the documented checkpoint is the workspace checkpoint, owned by the workspace machine"}],
+]);
+const entityProblems=[];
+for(const e of coreEntities){
+  const declared=entityStorage.get(e);
+  if(declared){
+    const target=declared.storage.split(".")[0];
+    if(!sqlTables.has(target)) entityProblems.push(`Entity ${e} is declared as stored in ${declared.storage}, but no table ${target} exists in schema.sql`);
+    continue;
+  }
+  const base=snake(e);
+  if(sqlTables.has(base)||sqlTables.has(plural(base))) continue;
+  entityProblems.push(`Entity ${e} is documented as a core entity in DATA-MODEL.md but has no table in schema.sql (tried ${base}, ${plural(base)}). Add the table, or declare its storage in verify.mjs with a reason.`);
+}
+if(entityProblems.length) fail(entityProblems.length+" DATA-MODEL entity/persistence divergence(s):\n  - "+entityProblems.join("\n  - "));
+
+// --- SQLite schema referential integrity. schema.sql is the durable local source of truth, and until the
+// entity check above nothing in this file read it at all. A foreign key naming a table that does not exist
+// is accepted by SQLite until the moment a row is written, so the divergence surfaces at runtime rather
+// than at contract time.
+const sqlTablesArr=[...sqlTables];
+const danglingFk=[];
+for(const m of sqlText.matchAll(/REFERENCES\s+(\w+)\s*\(/g)){
+  if(!sqlTables.has(m[1])) danglingFk.push(m[1]);
+}
+if(danglingFk.length) fail(`schema.sql declares foreign keys to non-existent table(s): ${[...new Set(danglingFk)].join(", ")}`);
+
+// --- Registry conformance against its own schema. payloads.json required `errors` on every operation while
+// every operation carried an undeclared `owner`, so the file did not satisfy payloads.schema.json on any of
+// its 58 operations and nothing detected it. The gate validated that the file existed, never its contents.
+// This is a shape check rather than a full JSON Schema evaluation, which is enough for these two files and
+// honest about being so: it enforces required keys, forbidden keys, and key types.
+const payloadSchema=read("schemas/tauri-bridge-v1/payloads.schema.json");
+const typeOk=(v,t)=>t==="string"?typeof v==="string":t==="boolean"?typeof v==="boolean":t==="array"?Array.isArray(v):t==="object"?(v!==null&&typeof v==="object"&&!Array.isArray(v)):true;
+const opProblems=[];
+const checkOperation=(section,def,name)=>{
+  const where=`${section}.${name}`;
+  for(const key of def.required ?? []) if(!(key in payloadRegistry[section][name])) opProblems.push(`${where} is missing required key "${key}"`);
+  for(const key of Object.keys(payloadRegistry[section][name])) if(def.properties && !(key in def.properties)) opProblems.push(`${where} declares "${key}", which ${name ? "payloads.schema.json" : ""} does not permit`);
+  for(const [key,spec] of Object.entries(def.properties ?? {})){
+    if(!(key in payloadRegistry[section][name])) continue;
+    const v=payloadRegistry[section][name][key];
+    const t=spec.type;
+    if(typeof t==="string" && !typeOk(v,t)) opProblems.push(`${where}.${key} must be ${t}, found ${Array.isArray(v)?"array":typeof v}`);
+    if(t==="array" && Array.isArray(v) && spec.minItems!==undefined && v.length<spec.minItems) opProblems.push(`${where}.${key} needs at least ${spec.minItems} item(s)`);
+  }
+  if(def.properties?.request_fields && Array.isArray(payloadRegistry[section][name].request_fields)){
+    for(const f of payloadRegistry[section][name].request_fields){
+      for(const key of (def.properties.request_fields.items?.required ?? [])) if(!(key in f)) opProblems.push(`${where}.request_fields entry ${JSON.stringify(f.name ?? "?")} is missing "${key}"`);
+    }
+  }
+};
+for(const [section,defName] of [["commands","operation"],["queries","query_operation"]]){
+  const def=payloadSchema.$defs[defName];
+  for(const name of Object.keys(payloadRegistry[section] ?? {})) checkOperation(section,def,name);
+}
+if(opProblems.length) fail(opProblems.length+" payload registry conformance problem(s):\n  - "+opProblems.join("\n  - "));
+
+// --- Initial project creation must carry its intent anchor. DEC-030 makes the ProjectBrief the canonical
+// representation of user intent; CONTROL-ROOM-DESIGN.md states the Initial Intake Composer persists the
+// stated intent as the first brief version. If create_project stops declaring a required initial brief, a
+// project can be created with no intent, which is the state the analysis-anchor rule exists to prevent.
+const createProject=payloadRegistry.commands?.create_project;
+if(!createProject) fail("payloads.json has no create_project command; project intake cannot be verified");
+const briefFields=(createProject.request_fields ?? []).filter(f=>f.required && /brief/i.test(f.name ?? ""));
+if(!briefFields.length) fail("create_project declares no required initial brief field. Project creation must persist the user's stated intent as ProjectBrief version 1 in the same transaction (DEC-030); a project must never exist without its intent anchor.");
+if(!createProject.atomicity) fail("create_project declares no atomicity. Creating a project, its first brief, the PROJECT_CREATED event and the initial epoch is one domain transaction, not a sequence of calls.");
+
+// --- Gate coverage self-report.
+// This gate was strengthened across DEC-036..DEC-043 and each fix found real defects, which is also how it
+// stayed silent about whole layers. It had never read schema.sql, so the durable layer was unverified while
+// the gate reported itself fully green - and an external audit, not the gate, found the divergence. The
+// strongest enforcement in the repository was blind to exactly the layer an implementation agent opens first.
+//
+// So coverage is declared and self-checked rather than assumed. An artifact listed as verified must actually
+// have its contents read during this run; if the check that reads it is deleted or renamed, this fails rather
+// than quietly downgrading the claim. That is what keeps this map from becoming the same stale assertion it
+// exists to prevent - the recurring defect in this repository, where a documented thing and its enforcement
+// drift apart unnoticed.
+const coverageVerified=new Set([
+  "schemas/mcf-v2/manifest.json",
+  "schemas/mcf-v2/registry.json",
+  "schemas/mcf-v2/transition-types.json",
+  "schemas/mcf-v2/event-types.schema.json",
+  "schemas/mcf-v2/message-types.schema.json",
+  "schemas/mcf-v2/message-payloads.registry.json",
+  "schemas/mcf-v2/event-payloads.registry.json",
+  "schemas/mcf-v2/event-to-ui.registry.json",
+  "schemas/agent-adapter-v1/native-event.schema.json",
+  "schemas/agent-adapter-v1/native-to-mcf.registry.json",
+  "schemas/agent-adapter-v1/native-transport-contract.json",
+  "schemas/agent-adapter-v1/probe-result.schema.json",
+  "schemas/agent-adapter-v1/adapter-types.schema.json",
+  "schemas/doctor-v1/doctor-report.schema.json",
+  "schemas/tauri-bridge-v1/bridge.schema.json",
+  "schemas/tauri-bridge-v1/payloads.json",
+  "schemas/tauri-bridge-v1/payloads.schema.json",
+  "schemas/sqlite-v1/schema.sql",
+  "workspace.manifest.json",
+  "docs/DATA-MODEL.md",
+]);
+const drift=[...coverageVerified].filter(f=>!contentRead.has(f));
+if(drift.length) fail(`Gate coverage map claims these artifacts are verified, but this run did not read their contents:\n  - ${drift.join("\n  - ")}\nEither restore the check that reads them or remove them from the coverage map. A coverage claim that nothing enforces is the defect this block exists to prevent.`);
+const canonical=read("workspace.manifest.json").schema_sources ?? [];
+const unverified=canonical.filter(f=>!coverageVerified.has(f));
+gateCoverage={verified:coverageVerified.size,canonical:canonical.length,unverified:unverified.length};
+
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+console.log(`Gate coverage: ${gateCoverage.verified} artifacts content-verified of ${gateCoverage.canonical} canonical (${gateCoverage.unverified} existence-checked only, reported not enforced)`);
 // Hook status is reported, never enforced. A pre-commit gate that checks whether the pre-commit gate
 // is installed would need its own hook, so the recursion is stopped one level down: the mechanism
 // cannot verify itself, but its absence is a reported fact in the gate's own output rather than a

@@ -46,6 +46,10 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-040 | Every canonical MCF event declares its emitter in `registry.json:event_emitters` — a transition (machine list) or a service (service + crate) — and the local gate enforces coverage and emission | HARD_LOCK |
 | DEC-041 | Every state has its own canonical entry event: `LEASE_ACTIVE`, `EXECUTION_CLEANUP_REQUIRED` and `HANDOFF_PACKAGE_BUILT` are added so three states stop borrowing a neighbouring state's event | HARD_LOCK |
 | DEC-042 | Every machine declares its `spine` explicitly (no `states` fallback) and every off-spine edge is declared in `branches` (blessed) or `unreviewed_branches` (legal but unblessed); the local gate enforces both | HARD_LOCK |
+| DEC-043 | Every core entity in `DATA-MODEL.md` resolves to storage: a table in `schema.sql`, a declared column, or a declared alias; the local gate enforces it | HARD_LOCK |
+| DEC-044 | Brief versioning and epoch increment are independent; a brief version bump is not a material truth change by itself | HARD_LOCK |
+| DEC-045 | Only the transaction performing the `DISCOVERY → INDEPENDENT_ANALYSIS` transition establishes the analysis anchor, and it establishes it from the brief current in that same transaction | HARD_LOCK |
+| DEC-046 | For one analysis lineage every agent receives the same tuple of (brief version id, project epoch, context snapshot id, state digest) | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -285,6 +289,52 @@ Classification: REPLACEMENT for the spine requirement and the `?? states` fallba
 | Tests affected | Mutation-tested in six directions: A remove a machine's `spine` -> fails; B add an undeclared off-spine edge -> fails naming that edge; C declare a branch with no record -> fails naming that branch; E move a specific-command-driven edge into `unreviewed_branches` -> fails naming it; F an `unreviewed_branches` entry with no record -> fails. **D — re-add an illegal edge and declare it — passes**, and is the mechanism's ceiling (below). |
 | Known limitations | (1) **The declaration gate does not prove correctness.** Mutation D passes: re-adding `barrier.SATISFIED->BLOCKED` and declaring it in `branches` verifies green. The gate proves the 36 edges were *declared*, never that they are *right*; their correctness rests entirely on human review of the declaration in a diff. A reader who misses this will over-trust the green. (2) **The 9 `unreviewed_branches` entries are legal but unblessed, not unknown-invalid.** They are tolerated rather than defective, and the list exists so that they are not guessed at; moving one into `branches` requires a ruling, not a discovery. (3) DEC-038's limitation (2) still holds: no gate enforces that a state's entry event is its own, so the class DEC-041 removed three instances of remains open. It shares a cause with (4): `transitions[]` is 141 records of 16 fields each - one distinct `authorization`, one `idempotency_behavior`, one `transaction_boundary` - wrapping a four-field fact (source, target, event, command). That is 235 KB of the file's 310 KB, and the format makes each edge expensive to write and cheap to get wrong, which is why both this gap and the ten illegal edges survived in it unnoticed. `state_events` would collapse those 141 records to roughly 12 short maps and let a generator read intent rather than ledger; it is recorded here as the diagnosis of why the gaps were hard to see, not as a proposal to build it now. (4) **Blessing an edge is not the same as making it triggerable.** Eight of the nine edges blessed by this record are driven by `ADVANCE_<machine>` because no specific command was ever written for them — `DENY_EXECUTION`, `FAIL_TASK`, `INVALIDATE_TASK` and `EXPIRE_LEASE` are the obvious missing ones. The edges are legal and now declared, but without their own commands those transitions can be reached only by generic advance, never by intent. This is the inverse of the defect this series has been fixing — a missing command rather than a wrong event — and it is recorded so the area is not mistaken for settled. Seen from the generator's side this is the same gap: `branches` carries 45 edges with no owner, no command and no event - enough structure for adjacency checking, not enough for code generation. The missing commands are needed either way. **Closed in the same series:** the six commands now exist (`FAIL_AGENT`, `START_TASK_REPAIR`, `MARK_TASK_LEASE_EXPIRED`, `INVALIDATE_TASK`, `DENY_EXECUTION`, `CLEANUP_EXECUTION`), nine redundant `ADVANCE_*` duplicate records were removed, and the `ADVANCE_<machine>` requirement is now derived from the declared spine - required when `spine.length >= 2`, forbidden when it is not - so a machine with no spine edge cannot hold a dangling advance command. ADVANCE-touched off-spine edges went 15 -> 0, records 141 -> 132, commands 58 -> 63. |
 | Related decision | Applies DEC-017 (one canonical owner per concept) and DEC-021 (machine-readable canonical registries). Completes the rule DEC-038 identified as missing; complements DEC-040 (event emitters) and DEC-041 (missing state-entry events). |
+
+## DEC-043 to DEC-046 records
+
+Classification: DEC-043 is ADDITIVE (one gate check, one index set, four tables). DEC-044, DEC-045 and DEC-046 are REFINEMENT of existing HARD_LOCKs — they close normative gaps in decisions already taken, and add no new behaviour.
+
+### DEC-043 entity storage resolution
+
+An external audit of the architecture reported that `docs/DATA-MODEL.md` documented `ProjectBrief` and `UserContribution` as durable entities while `schemas/sqlite-v1/schema.sql` contained neither table. That was confirmed directly, and the check found two more the audit missed: `MessageReceipt` and `ProjectPath`. All four had **zero** mentions in the schema file.
+
+The deeper defect was that nothing in the local gate read `schema.sql` at all. It checked that the file existed via `workspace.manifest.json:schema_sources` and nothing more, so the entire durable layer was unverified while the gate reported itself fully green. That is the same defect class DEC-036 through DEC-042 removed elsewhere — an assertion nothing reads — one level down.
+
+| Field | Value |
+|---|---|
+| Previous behavior | `DATA-MODEL.md` listed 40 core entities. `schema.sql` had 50 tables. Four documented entities had no storage, and no gate check read the file. |
+| New behavior | Four tables added: `project_paths`, `project_briefs` (with `UNIQUE(project_id, version)` and a self-referential `supersedes_brief_id`), `message_receipts`, `user_contributions`. The gate resolves every core entity to a table, a declared column, or a declared alias, and fails otherwise. `ProjectStatus` is declared a value object stored in `projects.status`; `Checkpoint` is declared an alias of `workspace_checkpoints`, owned by the workspace machine. Both declarations carry a reason in the check. |
+| Reason | A documented durable entity with no storage is a contract divergence: an implementation agent may follow the document, follow the schema, or invent a third, and all three are defensible from the repository alone. DEC-035 exists precisely to stop unauthorized changes becoming authoritative; the same discipline applies to the persistence contract. |
+| Compatibility impact | ADDITIVE. Four tables and seven indexes; no existing table, column or constraint changed. No data migration: no Mayasaba database has been created, so there is nothing to migrate. |
+| Migration/reconciliation | None required. Once a database exists, `user_contributions.epoch_before`/`epoch_after` and the two `context_snapshot_*` columns give the epoch effect of each contribution an explicit record rather than leaving it inferable from the epoch table. |
+| Tests affected | The new check is mutation-tested in two directions: dropping a required table fails naming the entity; pointing a foreign key at a non-existent table fails naming it. |
+
+Design note: an entity may satisfy the check by table, by declared column, or by declared alias. That is deliberate. It means "this entity is derived" is a recordable decision with a stated reason rather than a silent omission, which is the distinction the check exists to preserve.
+
+### DEC-044 brief versioning is not epoch advancement
+
+`MEMORY-CONTEXT.md` establishes that the intake router's classification is advisory and that the owning service decides whether a contribution is material, with the epoch advancing only on an actual material truth change. It did not say whether a `ProjectBrief` version bump is itself material.
+
+It is not. A brief version records that the statement of intent was restated or refined; whether project truth changed is a separate judgement made by the owning service.
+
+- Editorial or clarifying restatement producing a new brief version: **no** epoch increment.
+- A new material constraint producing a new brief version: epoch increments, once, by the owning service.
+
+The two counters are therefore independent. An implementation MUST NOT derive `epoch++` from `version++`; that would make every rewording of a brief an invalidation of every agent's context.
+
+### DEC-045 the analysis anchor is established by one transaction
+
+DEC-030 makes the brief version current when DISCOVERY closes the immutable analysis anchor for that lineage. "Close" needed a deterministic owner, and the anchor must be read and fixed inside the transaction that performs the transition.
+
+Only the transaction advancing `DISCOVERY → INDEPENDENT_ANALYSIS` may write the analysis anchor, and it writes the brief version current **as of that transaction**. No other transition may set or change it, and no consumer may resolve it as "whatever brief is current now."
+
+Without this, two agents entering the first independent round could observe different brief versions at the boundary, and the anchor would be a lookup rather than a fact. DEC-030's protection against rewritten history depends on the anchor being immutable once written, which requires exactly one writer.
+
+### DEC-046 per-lineage delivery tuple
+
+`AGENT-INTEGRATION.md` requires that every agent receive the same analysis-anchor brief. The stronger and correct form of that requirement is a tuple, not a body of text: for one analysis lineage, every agent must receive the same `(brief version id, project epoch, context snapshot id, state digest)`.
+
+Delivering identical text is insufficient, because two agents can hold the same brief body while differing in the derived state it was interpreted against. The tuple is what must match. The context machinery already carries all four values, so this is a statement of the invariant the existing fields jointly express, not a new mechanism.
 
 ## Change procedure
 
