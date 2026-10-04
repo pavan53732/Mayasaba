@@ -41,7 +41,9 @@ pub use policy::{BackoffPolicy, DispatchPolicy};
 pub use transport::{Transport, TransportError};
 
 use mayasaba_protocol::envelope::{parse_envelope, Envelope};
-use mayasaba_storage::{DeliveryAttempt, EnqueuedMessage, NewOutboundMessage, Storage};
+use mayasaba_storage::{
+    DeliveryAttempt, EnqueuedMessage, IncomingMessage, NewOutboundMessage, Storage,
+};
 
 /// Mayasaba durable bus crate boundary.
 pub const CRATE_NAME: &str = "mayasaba-bus";
@@ -320,5 +322,168 @@ impl Bus {
             message_id: enqueued.message_id.clone(),
             operation_id: new.operation_id.clone(),
         })
+    }
+}
+
+/// What a receive did.
+///
+/// `duplicate` is the whole point of the inbound side: a redelivery is answered from the durable inbox rather
+/// than processed again, so the caller is told which of the two happened and what the message's state already
+/// was. A duplicate reports the state the message reached, not the state a fresh receive would have produced,
+/// which is what "return the prior terminal outcome" requires.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Received {
+    pub message_id: String,
+    pub duplicate: bool,
+    pub processing_state: String,
+    pub terminal_event_id: Option<String>,
+}
+
+impl Bus {
+    /// Take delivery of an envelope: validate it, persist its identity, then acknowledge receipt of it.
+    ///
+    /// The order is the design's and it is load-bearing. The envelope is validated by the protocol crate's own
+    /// validator rather than by a second opinion written here, the project must exist, and the message's
+    /// identity must be new. Only then is anything written, and what is written is the inbox row first and the
+    /// acknowledgement second - so a crash between them leaves a message that has been seen and not yet
+    /// acknowledged, which a redelivery resolves, rather than an acknowledgement of a message nothing recorded.
+    ///
+    /// **A redelivery is not an error.** It returns `duplicate: true` and the state the message already reached,
+    /// and it writes nothing at all: no second inbox row, no second receipt, no second event. That is what makes
+    /// duplicate delivery safe, and it is why the caller must act on `duplicate` rather than on `Ok`.
+    ///
+    /// Two collisions are refused rather than absorbed, because both mean two different messages claim one
+    /// identity. A `message_id` already used by a message this bus dispatched is `DuplicateMessage`; a
+    /// `(session_id, channel, sequence)` position already taken is `SequenceConflict`. Both directions share one
+    /// ordering space per channel - the channel is a single ordered stream - so a position is not reusable.
+    pub fn receive(
+        &mut self,
+        envelope_json: &str,
+        clock: &dyn Clock,
+    ) -> Result<Received, BusError> {
+        let envelope = parse_envelope(envelope_json).map_err(BusError::InvalidEnvelope)?;
+        let message_id = envelope.message_id();
+        let project_id = envelope.project_id();
+        if !self
+            .storage
+            .project_exists(project_id)
+            .map_err(error::classify)?
+        {
+            return Err(BusError::UnknownProject {
+                project_id: project_id.to_string(),
+            });
+        }
+        if let Some(row) = self
+            .storage
+            .inbox_row(message_id)
+            .map_err(error::classify)?
+        {
+            return Ok(Received {
+                message_id: message_id.to_string(),
+                duplicate: true,
+                processing_state: row.processing_state,
+                terminal_event_id: row.terminal_event_id,
+            });
+        }
+        if self
+            .storage
+            .message_exists(message_id)
+            .map_err(error::classify)?
+        {
+            return Err(BusError::DuplicateMessage {
+                message_id: message_id.to_string(),
+            });
+        }
+        let session_id = envelope.session_id();
+        let channel = envelope.channel();
+        let sequence = envelope.sequence();
+        if self
+            .storage
+            .message_at_position(session_id, channel, sequence)
+            .map_err(error::classify)?
+            .is_some()
+        {
+            return Err(BusError::SequenceConflict {
+                session_id: session_id.to_string(),
+                channel: channel.to_string(),
+                sequence,
+            });
+        }
+
+        let incoming = IncomingMessage {
+            message_id: message_id.to_string(),
+            event_id: envelope.event_id().to_string(),
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+            message_type: envelope.message_type().to_string(),
+            channel: channel.to_string(),
+            sequence,
+            correlation_id: envelope.correlation_id().to_string(),
+            causation_id: envelope.causation_id().map(str::to_string),
+            idempotency_key: envelope.idempotency_key().map(str::to_string),
+            // The canonical re-encoding, not the caller's bytes, for the same reason the outbound side stores
+            // it: two spellings of one envelope must not be two different durable records.
+            envelope_json: envelope.to_json_text(),
+            created_at: envelope.created_at().to_string(),
+        };
+        self.storage
+            .receive_message(&incoming, &clock.now_rfc3339())
+            .map_err(error::classify)?;
+        Ok(Received {
+            message_id: message_id.to_string(),
+            duplicate: false,
+            processing_state: "ACKED".to_string(),
+            terminal_event_id: None,
+        })
+    }
+
+    /// Begin processing a message that has been acknowledged: the declared `ACKED -> PROCESSING` edge.
+    ///
+    /// The side effect belongs between this and one of the two outcomes below, which is why the bus does not
+    /// perform it: this crate performs no I/O, and the design puts the side effect outside the durable boundary
+    /// so that a crash during it leaves a message that is `PROCESSING` and can be accounted for.
+    pub fn start_processing(
+        &mut self,
+        message_id: &str,
+        clock: &dyn Clock,
+    ) -> Result<(), BusError> {
+        self.storage
+            .start_processing(message_id, &clock.now_rfc3339())
+            .map_err(error::classify)
+    }
+
+    /// Finish processing a message successfully: the declared `PROCESSING -> PROCESSED` edge.
+    pub fn complete_processing(
+        &mut self,
+        message_id: &str,
+        clock: &dyn Clock,
+    ) -> Result<(), BusError> {
+        self.storage
+            .complete_processing(message_id, &clock.now_rfc3339())
+            .map_err(error::classify)
+    }
+
+    /// Refuse a message that was being processed.
+    ///
+    /// `retryable` chooses which declared path the refusal takes, and it is the only thing that does: a
+    /// retryable refusal advances `PROCESSING -> RETRYING` and waits to be requeued, and a terminal one
+    /// advances `PROCESSING -> REJECTED -> DEAD_LETTER` and writes a dead letter. **Retryability is therefore
+    /// carried by the transition, not by a flag stored beside it**, so a message cannot be marked retryable and
+    /// simultaneously be terminal.
+    ///
+    /// The `reason` is recorded in the event payload, and for the terminal path also as the dead letter's
+    /// `final_error_json` under the registry's `PROCESS_FAILED`. `message_receipts` has no column for a reason
+    /// and the table is fixed, so the event log - the durable record of why a decision was taken - is where it
+    /// belongs rather than in a column invented for it.
+    pub fn reject_processing(
+        &mut self,
+        message_id: &str,
+        reason: &str,
+        retryable: bool,
+        clock: &dyn Clock,
+    ) -> Result<(), BusError> {
+        self.storage
+            .reject_processing(message_id, reason, retryable, &clock.now_rfc3339())
+            .map_err(error::classify)
     }
 }

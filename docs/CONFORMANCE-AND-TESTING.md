@@ -161,6 +161,39 @@ Must prove:
 - the crate's shipped defaults are the numbers `schemas/mcf-v2/bus-policies.json` declares, and the contract gate
   reads both and requires them to agree.
 
+## Durable bus inbound tests (M2, DEC-059)
+
+The inbound side's two dangerous failures are acknowledging a message that was never recorded and processing one
+twice, so these tests count what was written rather than trusting that the call returned `Ok` — a duplicate
+returns `Ok` too. `crates/bus/tests/inbox.rs` runs them through a real bus, a real database and a fixed clock.
+
+Must prove:
+
+- a receive persists the inbox row and **then** acknowledges receipt, advancing `DISPATCHED -> RECEIVED ->
+  ACKED` with `MESSAGE_RECEIVED` then `MESSAGE_ACKED` and nothing invented between them;
+- the message ends `ACKED` and not `PROCESSED`, because an acknowledgement is a receipt and not a success;
+- an `ACKED` receipt is written with its acknowledgement instant, and the stored envelope is the canonical
+  re-encoding rather than the caller's bytes;
+- **a redelivery returns the prior state and writes nothing at all**: no second event, no second inbox row, no
+  second receipt, no second message row;
+- a redelivery **after processing** reports the state the message actually reached and its terminal event, which
+  is what makes the answer an outcome rather than a state name;
+- a receive for a project that does not exist is refused and leaves no message row behind;
+- a receive reusing a `message_id` that a known message holds is `DUPLICATE_CONFLICT` — one id naming two
+  messages is refused rather than absorbed, because absorbing it would silently replace the first record;
+- a receive reusing a `(session_id, channel, sequence)` position is `DUPLICATE_CONFLICT`, since both directions
+  share one ordering space per channel;
+- processing advances `ACKED -> PROCESSING -> PROCESSED` with the declared events, sets the terminal event on the
+  inbox row, and leaves the receipt acknowledged;
+- a **retryable** refusal advances `PROCESSING -> RETRYING`, marks the receipt `NACKED`, records the reason and
+  the retryability in the event payload, and writes no dead letter;
+- a **terminal** refusal reaches `DEAD_LETTER` through both declared edges (`ACTION_FAILED` then
+  `MESSAGE_DEAD_LETTERED`) with a dead letter whose `final_error_json` is the registry's `PROCESS_FAILED` and the
+  reason, and whose attempt count is the one delivery that brought the message here;
+- processing a message that was never received, or starting one that is already processed, is refused with
+  nothing written;
+- a refused transition **names the state it found** rather than reporting that zero rows changed.
+
 ## Project intent and user-contribution tests
 
 Must prove:

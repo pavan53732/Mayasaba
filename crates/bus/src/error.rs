@@ -36,6 +36,12 @@ pub enum BusError {
         channel: String,
         sequence: i64,
     },
+    /// An arriving message reuses a `message_id` that a message this bus already knows is using.
+    ///
+    /// Distinct from a redelivery, which is the same message arriving twice and is answered from the inbox. This
+    /// is two different messages claiming one identity, and it is refused rather than absorbed: absorbing it
+    /// would mean the second message's contents silently replaced the first's record under the first's id.
+    DuplicateMessage { message_id: String },
     /// A stored value does not satisfy what the schema declares of its column.
     Malformed { column: String, detail: String },
     /// The durable write failed, so the message is not queued and nothing may be assumed about it.
@@ -83,9 +89,16 @@ pub(crate) fn classify(e: StorageError) -> BusError {
         // variants listed here are named rather than absorbed so that a new one has to be considered.
         StorageError::Schema(_)
         | StorageError::Db(_)
-        | StorageError::NotFound(_)
         | StorageError::UnscopedEvent
         | StorageError::Canonical(_) => BusError::Storage(e),
+        // A named row that does not exist is not a storage failure: nothing went wrong with the database, and
+        // reporting it as one would send a caller looking for a broken disk. It is the request naming something
+        // the durable record does not hold, which is the schema-invalid condition - the same family as a column
+        // that does not hold what the contract declares of it.
+        StorageError::NotFound(detail) => BusError::Malformed {
+            column: "messages.message_id".to_string(),
+            detail,
+        },
     }
 }
 
@@ -99,6 +112,10 @@ impl BusError {
             // Not SEQUENCE_GAP: nothing is missing. Two distinct messages claim one place, which is the
             // condition MCF_DUPLICATE_CONFLICT names and MCF_SEQUENCE_GAP does not.
             BusError::SequenceConflict { .. } => "DUPLICATE_CONFLICT",
+            // Two messages claiming one identity is the same condition as two claiming one position: the
+            // registry's `DUPLICATE_CONFLICT` is "a duplicate was detected where the contract forbids one", and
+            // the contract forbids a `message_id` naming two messages.
+            BusError::DuplicateMessage { .. } => "DUPLICATE_CONFLICT",
             BusError::Malformed { .. } => "SCHEMA_INVALID",
             BusError::Storage(_) => "STORAGE_FAILURE",
             // The message expired, so the condition is that it is dead-lettered and will not be retried. The
@@ -139,6 +156,11 @@ impl std::fmt::Display for BusError {
                 f,
                 "sequence {sequence} on channel `{channel}` for session `{session_id}` is already occupied by \
                  a different message"
+            ),
+            BusError::DuplicateMessage { message_id } => write!(
+                f,
+                "message `{message_id}` already names a different message, so this one cannot reuse the \
+                 identity: a redelivery of the same message is answered from the inbox instead"
             ),
             BusError::Malformed { column, detail } => {
                 write!(f, "stored value in `{column}` is not usable: {detail}")

@@ -42,6 +42,11 @@ pub enum JcsValue<'a> {
     Str(&'a str),
     /// A JSON integer, emitted in decimal.
     Int(i64),
+    /// A JSON boolean, emitted as `true` or `false`.
+    ///
+    /// RFC 8785 has exactly three literal forms - `true`, `false` and `null` - and this is the one that had no
+    /// constructor until the inbound side needed to record whether a refusal was retryable.
+    Bool(bool),
     /// A JSON null.
     Null,
 }
@@ -89,6 +94,8 @@ pub fn jcs_object(members: &[(&str, JcsValue<'_>)]) -> Result<String, CanonicalE
         match value {
             JcsValue::Str(s) => push_jcs_string(&mut out, s),
             JcsValue::Int(n) => out.push_str(&n.to_string()),
+            JcsValue::Bool(true) => out.push_str("true"),
+            JcsValue::Bool(false) => out.push_str("false"),
             JcsValue::Null => out.push_str("null"),
         }
     }

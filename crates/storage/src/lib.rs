@@ -1189,6 +1189,588 @@ fn transition_payload_fields(
     ])?)
 }
 
+/// The same payload with extra members. The caller may pass them in any order, because `jcs_object` sorts them:
+/// a payload stays canonical however it was assembled, which is what DEC-034 needs of every hashed document.
+fn transition_payload_fields_and(
+    message_id: &str,
+    message_type: &str,
+    sequence: i64,
+    extra: &[(&str, canonical::JcsValue<'_>)],
+) -> Result<String> {
+    let mut members = vec![
+        ("message_id", canonical::JcsValue::Str(message_id)),
+        ("message_type", canonical::JcsValue::Str(message_type)),
+        ("sequence", canonical::JcsValue::Int(sequence)),
+    ];
+    members.extend_from_slice(extra);
+    Ok(canonical::jcs_object(&members)?)
+}
+
+// -----------------------------------------------------------------------------------------------------------
+// The inbound side: the durable inbox, the receipt, and the processing spine (DEC-059).
+// -----------------------------------------------------------------------------------------------------------
+
+/// An envelope that arrived from a peer, as the plain data this crate can store.
+///
+/// This crate deliberately does not depend on `crates/protocol`, so the bus hands the fields over rather than
+/// the envelope: the boundary between "what an envelope means" and "what a row holds" stays where it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncomingMessage {
+    pub message_id: String,
+    pub event_id: String,
+    pub project_id: String,
+    pub session_id: String,
+    pub message_type: String,
+    pub channel: String,
+    /// The sender's ordering position within `(session_id, channel)`, which both directions share.
+    pub sequence: i64,
+    pub correlation_id: String,
+    pub causation_id: Option<String>,
+    pub idempotency_key: Option<String>,
+    pub envelope_json: String,
+    pub created_at: String,
+}
+
+/// What the durable inbox knows about a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InboxRow {
+    pub message_id: String,
+    pub received_at: String,
+    pub persisted_at: String,
+    pub acked_at: Option<String>,
+    pub processing_state: String,
+    pub terminal_event_id: Option<String>,
+}
+
+/// What the durable receipt table knows about a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceiptRow {
+    pub receipt_id: String,
+    pub message_id: String,
+    pub project_id: String,
+    pub receipt_state: String,
+    pub acknowledged_at: Option<String>,
+    pub created_at: String,
+}
+
+/// One receipt per message, derived rather than minted.
+///
+/// `message_receipts` declares no uniqueness on `message_id`, so the derivation is what makes the one-to-one
+/// relation true rather than merely intended, and it is what lets the acknowledgement be updated to a
+/// non-acknowledgement without a second row appearing.
+fn receipt_id_for(message_id: &str) -> String {
+    format!("rcpt_{message_id}")
+}
+
+/// Move a message along a declared edge, or refuse.
+///
+/// The `WHERE delivery_state = ?2` clause is the whole point: a transition that is not legal from the state the
+/// row is actually in changes nothing, and the caller is told which state it found instead of being told that
+/// zero rows were updated. This is what keeps the bus inside the machine even when its own bookkeeping is wrong.
+fn advance_in(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    from: &str,
+    to: &str,
+    operation: &str,
+) -> Result<()> {
+    let changed = tx
+        .execute(
+            "UPDATE messages SET delivery_state = ?3 WHERE message_id = ?1 AND delivery_state = ?2",
+            rusqlite::params![message_id, from, to],
+        )
+        .map_err(StorageError::Db)?;
+    if changed == 1 {
+        return Ok(());
+    }
+    let found: Option<String> = tx
+        .query_row(
+            "SELECT delivery_state FROM messages WHERE message_id = ?1",
+            [message_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(StorageError::Db)?;
+    Err(StorageError::Malformed {
+        column: "messages.delivery_state".to_string(),
+        detail: format!(
+            "{operation} requires {from}, found {}",
+            found.unwrap_or_else(|| "no such message".to_string())
+        ),
+    })
+}
+
+/// A lifecycle event for a declared transition, with the fields every one of them carries.
+#[allow(clippy::too_many_arguments)]
+fn transition_event(
+    message_id: &str,
+    event_type: &str,
+    project_id: &str,
+    session_id: &str,
+    correlation_id: &str,
+    causation_id: Option<&str>,
+    payload_json: String,
+    created_at: &str,
+) -> NewEvent {
+    NewEvent {
+        event_id: transition_event_id(message_id, event_type),
+        project_id: Some(project_id.to_string()),
+        session_id: Some(session_id.to_string()),
+        event_type: event_type.to_string(),
+        correlation_id: Some(correlation_id.to_string()),
+        causation_id: causation_id.map(str::to_string),
+        // Every `message_delivery` transition record declares `epoch_effect: NONE`, so a lifecycle event carries
+        // the epoch it was written under and does not change the project's.
+        epoch: None,
+        payload_json,
+        created_at: created_at.to_string(),
+    }
+}
+
+/// Take delivery of a message: persist its identity, then acknowledge receipt of it.
+///
+/// **Persist before acknowledge**, and both before any side effect. That order is what makes duplicate delivery
+/// safe: the inbox row is the durable statement "this message has been seen", so a redelivery is answered from
+/// it rather than processed twice, and a crash between the two leaves a message that is `RECEIVED` but not yet
+/// `ACKED`, which the sender will send again and which the inbox will then recognise.
+///
+/// The row is born `DISPATCHED`. That is not a transition this crate performs: the message *arrived*, which
+/// means its sender dispatched it, and the receiver's part of the machine begins where the sender's ended. The
+/// two transitions written here are the receiver's own, and both are declared: `DISPATCHED -> RECEIVED`
+/// (`MESSAGE_RECEIVED`) and `RECEIVED -> ACKED` (`MESSAGE_ACKED`). An acknowledgement is a receipt and not a
+/// success (AGENTS.md section 7), which is why `ACKED` precedes `PROCESSING` rather than following it.
+fn receive_message_in(
+    tx: &rusqlite::Transaction<'_>,
+    incoming: &IncomingMessage,
+    now: &str,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
+                               correlation_id, causation_id, idempotency_key, delivery_state, envelope_json,
+                               created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'DISPATCHED', ?11, ?12)",
+        rusqlite::params![
+            incoming.message_id,
+            incoming.event_id,
+            incoming.project_id,
+            incoming.session_id,
+            incoming.message_type,
+            incoming.channel,
+            incoming.sequence,
+            incoming.correlation_id,
+            incoming.causation_id,
+            incoming.idempotency_key,
+            incoming.envelope_json,
+            incoming.created_at,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "INSERT INTO inbox (message_id, received_at, persisted_at, acked_at, processing_state, terminal_event_id)
+         VALUES (?1, ?2, ?2, NULL, 'PERSISTED', NULL)",
+        rusqlite::params![incoming.message_id, now],
+    )
+    .map_err(StorageError::Db)?;
+
+    advance_in(
+        tx,
+        &incoming.message_id,
+        "DISPATCHED",
+        "RECEIVED",
+        "a receive",
+    )?;
+    append_event_in(
+        tx,
+        &transition_event(
+            &incoming.message_id,
+            "MESSAGE_RECEIVED",
+            &incoming.project_id,
+            &incoming.session_id,
+            &incoming.correlation_id,
+            incoming.causation_id.as_deref(),
+            transition_payload_fields(
+                &incoming.message_id,
+                &incoming.message_type,
+                incoming.sequence,
+            )?,
+            now,
+        ),
+    )?;
+
+    advance_in(
+        tx,
+        &incoming.message_id,
+        "RECEIVED",
+        "ACKED",
+        "an acknowledgement",
+    )?;
+    append_event_in(
+        tx,
+        &transition_event(
+            &incoming.message_id,
+            "MESSAGE_ACKED",
+            &incoming.project_id,
+            &incoming.session_id,
+            &incoming.correlation_id,
+            incoming.causation_id.as_deref(),
+            transition_payload_fields(
+                &incoming.message_id,
+                &incoming.message_type,
+                incoming.sequence,
+            )?,
+            now,
+        ),
+    )?;
+    tx.execute(
+        "INSERT INTO message_receipts (receipt_id, message_id, project_id, receipt_state, acknowledged_at,
+                                       created_at)
+         VALUES (?1, ?2, ?3, 'ACKED', ?4, ?4)",
+        rusqlite::params![
+            receipt_id_for(&incoming.message_id),
+            incoming.message_id,
+            incoming.project_id,
+            now
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE inbox SET acked_at = ?2, processing_state = 'ACKED' WHERE message_id = ?1",
+        rusqlite::params![incoming.message_id, now],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// `ACKED -> PROCESSING` (`ACTION_STARTED`), which is the boundary the side effect sits behind.
+fn start_processing_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &str) -> Result<()> {
+    let message = load_message_in(tx, message_id)?;
+    advance_in(tx, message_id, "ACKED", "PROCESSING", "starting processing")?;
+    append_event_in(
+        tx,
+        &transition_event(
+            message_id,
+            "ACTION_STARTED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            transition_payload_fields(message_id, &message.message_type, message.sequence)?,
+            now,
+        ),
+    )?;
+    tx.execute(
+        "UPDATE inbox SET processing_state = 'PROCESSING' WHERE message_id = ?1",
+        [message_id],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// `PROCESSING -> PROCESSED` (`ACTION_COMPLETED`), and the terminal event is recorded on the inbox row.
+fn complete_processing_in(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    now: &str,
+) -> Result<()> {
+    let message = load_message_in(tx, message_id)?;
+    let event_id = transition_event_id(message_id, "ACTION_COMPLETED");
+    advance_in(
+        tx,
+        message_id,
+        "PROCESSING",
+        "PROCESSED",
+        "completing processing",
+    )?;
+    append_event_in(
+        tx,
+        &transition_event(
+            message_id,
+            "ACTION_COMPLETED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            transition_payload_fields(message_id, &message.message_type, message.sequence)?,
+            now,
+        ),
+    )?;
+    tx.execute(
+        "UPDATE inbox SET processing_state = 'PROCESSED', terminal_event_id = ?2 WHERE message_id = ?1",
+        rusqlite::params![message_id, event_id],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE message_receipts SET receipt_state = 'ACKED' WHERE message_id = ?1",
+        [message_id],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// `PROCESSING -> RETRYING` (`ACTION_FAILED`, retryable) or `PROCESSING -> REJECTED -> DEAD_LETTER`
+/// (`ACTION_FAILED` then `MESSAGE_DEAD_LETTERED`, not retryable).
+///
+/// **The reason travels in the event payload**, which is the durable record of why a decision was taken, and
+/// for the terminal path it is also the dead letter's `final_error_json` under the registry's `PROCESS_FAILED`.
+/// `message_receipts` has no column for a reason, and inventing one is not available: the table is fixed.
+///
+/// A non-retryable rejection reaches `DEAD_LETTER` through both of its declared edges rather than jumping to
+/// the end. `DEAD_LETTER` is the receiver's terminal state, and it means the receiver refused a message it had
+/// already received and had begun to process - which is exactly what happened here. A sender that never managed
+/// to hand a message over never reaches it, because it was never refused.
+fn reject_processing_in(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    reason: &str,
+    retryable: bool,
+    now: &str,
+) -> Result<()> {
+    let message = load_message_in(tx, message_id)?;
+    let failure_payload = transition_payload_fields_and(
+        message_id,
+        &message.message_type,
+        message.sequence,
+        &[
+            ("reason", canonical::JcsValue::Str(reason)),
+            ("retryable", canonical::JcsValue::Bool(retryable)),
+        ],
+    )?;
+    if retryable {
+        advance_in(
+            tx,
+            message_id,
+            "PROCESSING",
+            "RETRYING",
+            "a retryable rejection",
+        )?;
+    } else {
+        advance_in(tx, message_id, "PROCESSING", "REJECTED", "a rejection")?;
+    }
+    append_event_in(
+        tx,
+        &transition_event(
+            message_id,
+            "ACTION_FAILED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            failure_payload,
+            now,
+        ),
+    )?;
+    tx.execute(
+        "UPDATE message_receipts SET receipt_state = 'NACKED' WHERE message_id = ?1",
+        [message_id],
+    )
+    .map_err(StorageError::Db)?;
+
+    if retryable {
+        tx.execute(
+            "UPDATE inbox SET processing_state = 'RETRYING' WHERE message_id = ?1",
+            [message_id],
+        )
+        .map_err(StorageError::Db)?;
+        return Ok(());
+    }
+
+    advance_in(tx, message_id, "REJECTED", "DEAD_LETTER", "dead-lettering")?;
+    let terminal_event = transition_event_id(message_id, "MESSAGE_DEAD_LETTERED");
+    append_event_in(
+        tx,
+        &transition_event(
+            message_id,
+            "MESSAGE_DEAD_LETTERED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            transition_payload_fields_and(
+                message_id,
+                &message.message_type,
+                message.sequence,
+                &[
+                    ("reason", canonical::JcsValue::Str(reason)),
+                    ("retryable", canonical::JcsValue::Bool(false)),
+                ],
+            )?,
+            now,
+        ),
+    )?;
+    tx.execute(
+        "INSERT INTO dead_letters (dead_letter_id, message_id, project_id, final_error_json, attempts,
+                                   created_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5)",
+        rusqlite::params![
+            format!("dl_{message_id}"),
+            message_id,
+            message.project_id,
+            canonical::jcs_object(&[
+                ("code", canonical::JcsValue::Str("PROCESS_FAILED")),
+                ("detail", canonical::JcsValue::Str(reason)),
+            ])?,
+            now
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE inbox SET processing_state = 'DEAD_LETTER', terminal_event_id = ?2 WHERE message_id = ?1",
+        rusqlite::params![message_id, terminal_event],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// The message a lifecycle event needs to describe, read inside the transaction that is about to describe it.
+fn load_message_in(conn: &rusqlite::Connection, message_id: &str) -> Result<IncomingMessage> {
+    conn.query_row(
+        "SELECT message_id, event_id, project_id, session_id, message_type, channel, sequence,
+                correlation_id, causation_id, idempotency_key, envelope_json, created_at
+         FROM messages WHERE message_id = ?1",
+        [message_id],
+        |row| {
+            Ok(IncomingMessage {
+                message_id: row.get(0)?,
+                event_id: row.get(1)?,
+                project_id: row.get(2)?,
+                session_id: row.get(3)?,
+                message_type: row.get(4)?,
+                channel: row.get(5)?,
+                sequence: row.get(6)?,
+                correlation_id: row.get(7)?,
+                causation_id: row.get(8)?,
+                idempotency_key: row.get(9)?,
+                envelope_json: row.get(10)?,
+                created_at: row.get(11)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(StorageError::Db)?
+    .ok_or_else(|| StorageError::NotFound(format!("message {message_id}")))
+}
+
+/// The durable inbox row for a message, if it has ever been seen.
+fn inbox_row_in(conn: &rusqlite::Connection, message_id: &str) -> Result<Option<InboxRow>> {
+    conn.query_row(
+        "SELECT message_id, received_at, persisted_at, acked_at, processing_state, terminal_event_id
+         FROM inbox WHERE message_id = ?1",
+        [message_id],
+        |row| {
+            Ok(InboxRow {
+                message_id: row.get(0)?,
+                received_at: row.get(1)?,
+                persisted_at: row.get(2)?,
+                acked_at: row.get(3)?,
+                processing_state: row.get(4)?,
+                terminal_event_id: row.get(5)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(StorageError::Db)
+}
+
+/// The receipt for a message, if one was written.
+fn receipt_row_in(conn: &rusqlite::Connection, message_id: &str) -> Result<Option<ReceiptRow>> {
+    conn.query_row(
+        "SELECT receipt_id, message_id, project_id, receipt_state, acknowledged_at, created_at
+         FROM message_receipts WHERE message_id = ?1",
+        [message_id],
+        |row| {
+            Ok(ReceiptRow {
+                receipt_id: row.get(0)?,
+                message_id: row.get(1)?,
+                project_id: row.get(2)?,
+                receipt_state: row.get(3)?,
+                acknowledged_at: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(StorageError::Db)
+}
+
+/// The inbound side of the bus, as storage operations.
+///
+/// Each of these is one transaction: the state mutation, the lifecycle event and the outbox-or-inbox effect
+/// land together or not at all, which is what the transition records' `transaction_boundary` declares.
+impl Storage {
+    /// Take delivery of a message. The caller must have established that the message is not already known.
+    pub fn receive_message(&mut self, incoming: &IncomingMessage, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        receive_message_in(&tx, incoming, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Begin processing a message that has been acknowledged.
+    pub fn start_processing(&mut self, message_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        start_processing_in(&tx, message_id, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Finish processing a message successfully.
+    pub fn complete_processing(&mut self, message_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        complete_processing_in(&tx, message_id, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Refuse a message that was being processed, retryably or terminally.
+    pub fn reject_processing(
+        &mut self,
+        message_id: &str,
+        reason: &str,
+        retryable: bool,
+        now: &str,
+    ) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        reject_processing_in(&tx, message_id, reason, retryable, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// The durable inbox row for a message, which is how a redelivery is recognised.
+    pub fn inbox_row(&self, message_id: &str) -> Result<Option<InboxRow>> {
+        inbox_row_in(&self.conn, message_id)
+    }
+
+    /// The receipt for a message.
+    pub fn receipt_row(&self, message_id: &str) -> Result<Option<ReceiptRow>> {
+        receipt_row_in(&self.conn, message_id)
+    }
+
+    /// The message already holding a `(session_id, channel, sequence)` position, if any.
+    ///
+    /// Both directions share one ordering space per channel, so this is how the inbound side refuses to reuse a
+    /// position the outbound side has taken rather than discovering it as a constraint violation.
+    pub fn message_at_position(
+        &self,
+        session_id: &str,
+        channel: &str,
+        sequence: i64,
+    ) -> Result<Option<String>> {
+        find_message_at_position(&self.conn, session_id, channel, sequence)
+    }
+    /// Whether a project exists to route to.
+    pub fn project_exists(&self, project_id: &str) -> Result<bool> {
+        project_exists(&self.conn, project_id)
+    }
+    /// Whether a message id is already known, in either direction.
+    pub fn message_exists(&self, message_id: &str) -> Result<bool> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE message_id = ?1",
+                [message_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
+        Ok(count > 0)
+    }
+}
+
 impl Storage {
     /// Open the database and apply the canonical schema.
     ///
