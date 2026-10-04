@@ -1,0 +1,137 @@
+//! Structured bus errors, and the canonical registry code each one carries.
+//!
+//! Every variant maps to a code in `schemas/error-v1/registry.json` (DEC-055). The mapping is a total function
+//! over the enum rather than a string field, so a variant cannot be constructed carrying a code that does not
+//! describe it, and adding a variant without deciding its code does not compile.
+//!
+//! The contract gate reads this function: `tools/contracts/verify.mjs` names this file as one of the
+//! error-code mapping sites, so a code named here that the registry does not register fails verification. That
+//! is why the arms are written as bare `=> "CODE"` and why the function keeps its name.
+
+use mayasaba_protocol::envelope::EnvelopeRejection;
+use mayasaba_storage::StorageError;
+
+/// Why a bus operation did not complete.
+#[derive(Debug)]
+pub enum BusError {
+    /// The text is not a legal MCF-v2 envelope, so there is nothing to deliver.
+    InvalidEnvelope(EnvelopeRejection),
+    /// A retry reused an idempotency identity with a different request body.
+    ///
+    /// The scope is `project_id + operation_id` (DEC-027, and the implementation design's "Idempotency scope"),
+    /// and the body is the envelope's `payload`. Both halves matter: the same operation with the same body is a
+    /// retry and is absorbed, and the same operation with a different body is two different requests that
+    /// cannot both be applied at one position.
+    IdempotencyConflict {
+        /// The message the enqueue matched, whether by its own id or through the operation scope.
+        message_id: String,
+        /// The operation the two enqueues shared, when the match was made through the operation scope.
+        operation_id: Option<String>,
+    },
+    /// The envelope names a project that does not exist.
+    UnknownProject { project_id: String },
+    /// A different message already occupies the ordering position this one claims.
+    SequenceConflict {
+        session_id: String,
+        channel: String,
+        sequence: i64,
+    },
+    /// A stored value does not satisfy what the schema declares of its column.
+    Malformed { column: String, detail: String },
+    /// The durable write failed, so the message is not queued and nothing may be assumed about it.
+    Storage(StorageError),
+}
+
+/// Turn a storage refusal into the bus's own report of it.
+///
+/// Storage names the condition; the bus names the registry code. A blanket `From<StorageError>` would file every
+/// refusal under `STORAGE_FAILURE`, whose meaning is "the durable source of truth could not be read or written" -
+/// which is untrue of a duplicate position and of an unknown project. Storage read the database perfectly well
+/// in both cases; it refused the write on purpose. Filing those under an internal failure would also tell the
+/// caller to back off and retry, which can never succeed for either.
+///
+/// The match is exhaustive with no catch-all arm naming a code of its own, so adding a `StorageError` variant
+/// forces a decision here rather than silently inheriting `STORAGE_FAILURE`.
+pub(crate) fn classify(e: StorageError) -> BusError {
+    match e {
+        StorageError::SequenceConflict {
+            session_id,
+            channel,
+            sequence,
+        } => BusError::SequenceConflict {
+            session_id,
+            channel,
+            sequence,
+        },
+        StorageError::UnknownProject { project_id } => BusError::UnknownProject { project_id },
+        StorageError::MalformedJson { column } => BusError::Malformed {
+            column,
+            detail: "must hold JSON text, and this is not JSON".to_string(),
+        },
+        StorageError::Malformed { column, detail } => BusError::Malformed { column, detail },
+        // Everything else is the database itself failing, which is what STORAGE_FAILURE describes. The
+        // variants listed here are named rather than absorbed so that a new one has to be considered.
+        StorageError::Schema(_)
+        | StorageError::Db(_)
+        | StorageError::NotFound(_)
+        | StorageError::UnscopedEvent
+        | StorageError::Canonical(_) => BusError::Storage(e),
+    }
+}
+
+impl BusError {
+    /// The canonical registry key for this error (DEC-055).
+    pub fn code(&self) -> &'static str {
+        match self {
+            BusError::InvalidEnvelope(_) => "SCHEMA_INVALID",
+            BusError::IdempotencyConflict { .. } => "IDEMPOTENCY_CONFLICT",
+            BusError::UnknownProject { .. } => "PROJECT_MISMATCH",
+            // Not SEQUENCE_GAP: nothing is missing. Two distinct messages claim one place, which is the
+            // condition MCF_DUPLICATE_CONFLICT names and MCF_SEQUENCE_GAP does not.
+            BusError::SequenceConflict { .. } => "DUPLICATE_CONFLICT",
+            BusError::Malformed { .. } => "SCHEMA_INVALID",
+            BusError::Storage(_) => "STORAGE_FAILURE",
+        }
+    }
+}
+
+impl std::fmt::Display for BusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BusError::InvalidEnvelope(e) => write!(f, "{e}"),
+            BusError::IdempotencyConflict {
+                message_id,
+                operation_id,
+            } => match operation_id {
+                Some(operation) => write!(
+                    f,
+                    "operation `{operation}` was already enqueued as message `{message_id}` with a different \
+                     payload, so the two cannot both be applied"
+                ),
+                None => write!(
+                    f,
+                    "message `{message_id}` was already enqueued with a different payload, so the two cannot \
+                     both be applied"
+                ),
+            },
+            BusError::UnknownProject { project_id } => {
+                write!(f, "no project `{project_id}` exists to route to")
+            }
+            BusError::SequenceConflict {
+                session_id,
+                channel,
+                sequence,
+            } => write!(
+                f,
+                "sequence {sequence} on channel `{channel}` for session `{session_id}` is already occupied by \
+                 a different message"
+            ),
+            BusError::Malformed { column, detail } => {
+                write!(f, "stored value in `{column}` is not usable: {detail}")
+            }
+            BusError::Storage(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for BusError {}

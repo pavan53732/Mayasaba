@@ -636,6 +636,14 @@ CREATE TABLE IF NOT EXISTS barriers (
 
 CREATE INDEX IF NOT EXISTS idx_messages_project_state ON messages(project_id, delivery_state);
 CREATE INDEX IF NOT EXISTS idx_messages_correlation ON messages(correlation_id);
+-- DEC-027 makes `project_id + operation_id` the canonical idempotency scope, and `operation_id` is an optional
+-- envelope field with no column of its own: it lives inside `envelope_json`. This index covers the extracted
+-- value so the lookup the bus performs on every enqueue is indexed rather than a scan.
+--
+-- An index is additive and reaches a database that already exists, because `open()` re-executes this whole
+-- batch on every connection and `CREATE INDEX IF NOT EXISTS` is a no-op when it is already there. A new column
+-- could not: there is no migration runner, so an ALTER here would never reach an existing database.
+CREATE INDEX IF NOT EXISTS idx_messages_operation ON messages(project_id, json_extract(envelope_json, '$.operation_id'));
 CREATE INDEX IF NOT EXISTS idx_events_project_sequence ON events(project_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_events_project_hash ON events(project_id, event_hash);

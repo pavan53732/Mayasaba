@@ -1237,6 +1237,7 @@ for(const [file,src] of scannedText){
 }
 const mappingSites=[
   ["crates/workspace/src/validation.rs",/pub\s+fn\s+code\s*\([^)]*\)\s*->\s*&'static\s+str\s*\{/],
+  ["crates/bus/src/error.rs",/pub\s+fn\s+code\s*\(\s*&self\s*\)\s*->\s*&'static\s+str\s*\{/],
   ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<ProjectValidationError>\s+for\s+CommandError\s*\{/],
 ];
 for(const [file,openRe] of mappingSites){

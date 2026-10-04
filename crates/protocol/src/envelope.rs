@@ -66,6 +66,8 @@ pub enum EnvelopeRejection {
     },
     /// A nested object carries a field the contract does not define.
     UnknownNestedField { object: &'static str, field: String },
+    /// The text is not JSON at all, so there is no envelope to validate.
+    Malformed(String),
 }
 
 impl std::fmt::Display for EnvelopeRejection {
@@ -111,6 +113,9 @@ impl std::fmt::Display for EnvelopeRejection {
             EnvelopeRejection::UnknownNestedField { object, field } => {
                 write!(f, "`{object}` carries undefined field `{field}`")
             }
+            EnvelopeRejection::Malformed(detail) => {
+                write!(f, "envelope text is not JSON: {detail}")
+            }
         }
     }
 }
@@ -122,25 +127,171 @@ impl std::error::Error for EnvelopeRejection {}
 /// The raw value is retained rather than a typed struct with twenty-two fields, because this slice decides
 /// legality; it does not claim to model the domain. Typing every field is the next slice's work, and doing it
 /// now would mean writing two definitions of the same contract.
+///
+/// What it does carry is a typed reader per field the delivery bus needs. That is deliberate: the bus owns
+/// transport and depends only on `protocol` and `storage`, so it cannot reach for a JSON library of its own.
+/// Handing it the raw `Value` would make every bus field access a string lookup with an unwrap-shaped hole in
+/// it, and the field names would live in the bus instead of beside the contract that defines them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Envelope {
     pub value: Value,
 }
 
 impl Envelope {
-    pub fn message_type(&self) -> &str {
+    /// A required string field.
+    ///
+    /// Infallible because [`validate_envelope`] has already established that every required field is present
+    /// with the contract's own JSON type, so the `unwrap_or_default` below is unreachable for any envelope this
+    /// crate produced. It is not unreachable for one built by hand - `value` is public - which is why the bus
+    /// accepts envelope *text* and validates it rather than accepting an `Envelope` a caller assembled.
+    fn text(&self, field: &str) -> &str {
         self.value
-            .get("message_type")
+            .get(field)
             .and_then(Value::as_str)
             .unwrap_or_default()
     }
 
-    pub fn project_id(&self) -> &str {
+    /// An optional string field: absent and explicit `null` are both `None`.
+    fn optional_text(&self, field: &str) -> Option<&str> {
+        self.value.get(field).and_then(Value::as_str)
+    }
+
+    /// A required integer field.
+    ///
+    /// The same convention as [`Envelope::text`]: a field the contract requires is read infallibly, and a field
+    /// it makes optional is read as an `Option`. `sequence` and `project_epoch` are the contract's only two
+    /// integers and it requires both, so there is no optional-integer reader to pair with this one.
+    fn integer(&self, field: &str) -> i64 {
         self.value
-            .get("project_id")
-            .and_then(Value::as_str)
+            .get(field)
+            .and_then(Value::as_i64)
             .unwrap_or_default()
     }
+
+    /// A boolean field, false when absent.
+    fn flag(&self, field: &str) -> bool {
+        self.value
+            .get(field)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    pub fn message_type(&self) -> &str {
+        self.text("message_type")
+    }
+
+    pub fn message_id(&self) -> &str {
+        self.text("message_id")
+    }
+
+    pub fn event_id(&self) -> &str {
+        self.text("event_id")
+    }
+
+    pub fn project_id(&self) -> &str {
+        self.text("project_id")
+    }
+
+    pub fn session_id(&self) -> &str {
+        self.text("session_id")
+    }
+
+    pub fn channel(&self) -> &str {
+        self.text("channel")
+    }
+
+    pub fn phase(&self) -> &str {
+        self.text("phase")
+    }
+
+    /// The sender's ordering position within `(session_id, channel)`.
+    pub fn sequence(&self) -> i64 {
+        self.integer("sequence")
+    }
+
+    /// The project epoch the sender believed current when it built this envelope.
+    pub fn project_epoch(&self) -> i64 {
+        self.integer("project_epoch")
+    }
+
+    pub fn correlation_id(&self) -> &str {
+        self.text("correlation_id")
+    }
+
+    pub fn causation_id(&self) -> Option<&str> {
+        self.optional_text("causation_id")
+    }
+
+    /// The key a retry of one logical request reuses, so the bus can recognise the retry.
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.optional_text("idempotency_key")
+    }
+
+    /// The operation this message performs. DEC-027 and the implementation design make `project_id +
+    /// operation_id` the canonical idempotency scope, which is why the bus reads this and not the key alone.
+    pub fn operation_id(&self) -> Option<&str> {
+        self.optional_text("operation_id")
+    }
+
+    pub fn priority(&self) -> &str {
+        self.text("priority")
+    }
+
+    pub fn created_at(&self) -> &str {
+        self.text("created_at")
+    }
+
+    /// Whether the sender requires a receipt for this message.
+    pub fn requires_ack(&self) -> bool {
+        self.flag("requires_ack")
+    }
+
+    pub fn expires_at(&self) -> Option<&str> {
+        self.optional_text("expires_at")
+    }
+
+    /// The envelope's `payload` member as compact JSON.
+    ///
+    /// The payload is the message's request body, and it is the part of an envelope that a retry must repeat
+    /// exactly: a retry legitimately carries a new `message_id`, a new `sequence` and a new `created_at`, so
+    /// comparing whole envelopes would call every retry a conflict and comparing nothing would call every
+    /// conflict a retry. This is the text the bus compares.
+    pub fn payload_json_text(&self) -> String {
+        match self.value.get("payload") {
+            Some(payload) => payload.to_string(),
+            // Unreachable for a validated envelope, which must carry a `payload` object. `{}` rather than an
+            // empty string because an empty string is not JSON, and a caller comparing it would be comparing
+            // against a document that cannot exist.
+            None => "{}".to_string(),
+        }
+    }
+
+    /// The envelope as stored text: compact JSON with object members in sorted key order.
+    ///
+    /// Deterministic, so two envelopes that differ only in the sender's key order or whitespace produce the
+    /// same stored text and the same bytes in `messages.envelope_json`. `serde_json`'s object map is a sorted
+    /// map in this workspace (the `preserve_order` feature is not enabled anywhere), and a test in this crate
+    /// pins that, because the property is load-bearing here and would otherwise be a feature flag away from
+    /// being false.
+    ///
+    /// Not RFC 8785 JCS, and it does not need to be: JCS is required where the contract declares a digest over
+    /// the value (DEC-025's `state_digest`, DEC-034's event chain). No digest is declared over an envelope, so
+    /// re-encoding it as JCS would add a canonicalization step whose only effect would be to change bytes
+    /// nothing compares.
+    pub fn to_json_text(&self) -> String {
+        self.value.to_string()
+    }
+}
+
+/// Parse envelope text and validate it.
+///
+/// This is the entry point the delivery bus uses, because a bus that accepts an already-built [`Envelope`]
+/// would be trusting a value it did not check: `Envelope::value` is public, so one can be assembled by hand
+/// with any shape at all. Text in, validated envelope out, leaves no such gap.
+pub fn parse_envelope(text: &str) -> Result<Envelope, EnvelopeRejection> {
+    let value: Value =
+        serde_json::from_str(text).map_err(|e| EnvelopeRejection::Malformed(e.to_string()))?;
+    validate_envelope(&value)
 }
 
 /// The name this validator reports for a value's JSON type.

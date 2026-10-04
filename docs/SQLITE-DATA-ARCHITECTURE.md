@@ -110,6 +110,25 @@ Limitation: a plain hash chain detects accidental corruption, partial edits, del
 - every integrated changeset has an ADMITTED integration admission
 - current-state rows are changed only through authorized domain transactions
 
+## Communication state vocabulary
+
+The communication tables carry four state columns. The canonical schema puts no `CHECK` on any of them, and no
+`CHECK` can be added to a table that already exists because the schema is applied with `CREATE TABLE IF NOT
+EXISTS` and there is no migration runner. Their vocabularies therefore live here, and the crate that owns the
+table is what enforces them.
+
+| Column | Owner | Vocabulary |
+| --- | --- | --- |
+| `messages.delivery_state` | `crates/bus` | The `message_delivery` machine's twelve states, declared in `schemas/mcf-v2/transition-types.json`. This is the one column whose vocabulary is machine-readable and gate-adjacent, so it is not restated here. |
+| `outbox.dispatch_state` | `crates/bus` | `PENDING`, `DISPATCHED`, `FAILED`, `ABANDONED` (DEC-058) |
+| `inbox.processing_state` | `crates/bus` | **Undeclared.** The inbound side is not implemented; its vocabulary is declared by the record that implements it. |
+| `message_receipts.receipt_state` | `crates/bus` | **Undeclared**, for the same reason. |
+
+`outbox.next_attempt_at` is set to the message's `created_at` on enqueue, so "is this attempt due?" is the same
+single comparison for a first attempt and for a retry, and `outbox.attempts` starts at `0`. The `UNIQUE`
+constraint on `outbox.message_id` makes the queue entry one-to-one with its message, which is why the bus derives
+the queue entry's id from the message id rather than minting one.
+
 ## Transaction boundaries
 A material domain command transaction may include:
 - current-state mutation
@@ -123,7 +142,10 @@ Integration checkpoints and workspace mutations are recorded transactionally wit
 
 ## Index families
 Indexes must cover:
-project_id, status, phase, epoch, session_id, task_id, lease expiry, message delivery state, retry time, event sequence, correlation_id, artifact hash, validation status and failure fingerprint, council round/phase, barrier status, trace source/target and coverage status.
+project_id, status, phase, epoch, session_id, task_id, lease expiry, message delivery state, retry time, the
+idempotency scope (`project_id` with the envelope's `operation_id`, which has no column of its own and is reached
+through `json_extract`), event sequence, correlation_id, artifact hash, validation status and failure
+fingerprint, council round/phase, barrier status, trace source/target and coverage status.
 
 ## Recovery queries
 The database must support deterministic scans for:

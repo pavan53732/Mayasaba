@@ -33,13 +33,17 @@ fn new_project(dir: &std::path::Path, tag: &str) -> NewProject {
     }
 }
 
-fn event(project: Option<&str>, session: Option<&str>, sequence: i64, id: &str) -> NewEvent {
+/// An event to append.
+///
+/// There is no `sequence` parameter: `NewEvent` has no such field, because the position is derived from the
+/// chain as one past its last positioned event. A test that wants a specific position gets it by appending in
+/// order, which is the only way the crate itself can produce one.
+fn event(project: Option<&str>, session: Option<&str>, id: &str) -> NewEvent {
     NewEvent {
         event_id: id.to_string(),
         project_id: project.map(str::to_string),
         session_id: session.map(str::to_string),
         event_type: "TASK_PROGRESS".to_string(),
-        sequence,
         correlation_id: Some("corr_1".to_string()),
         causation_id: None,
         epoch: Some(0),
@@ -135,10 +139,10 @@ fn appended_events_extend_the_same_chain() {
         .create_project(&new_project(&dir, "append"))
         .expect("create");
     storage
-        .append_event(&event(Some("prj_append"), None, 2, "evt_append_2"))
+        .append_event(&event(Some("prj_append"), None, "evt_append_2"))
         .expect("append");
     storage
-        .append_event(&event(Some("prj_append"), None, 3, "evt_append_3"))
+        .append_event(&event(Some("prj_append"), None, "evt_append_3"))
         .expect("append");
 
     let report = storage.verify_event_chain().expect("verify");
@@ -179,7 +183,7 @@ fn a_tampered_payload_is_detected_and_recovery_reports_it() {
         .create_project(&new_project(&dir, "tamper"))
         .expect("create");
     storage
-        .append_event(&event(Some("prj_tamper"), None, 2, "evt_tamper_2"))
+        .append_event(&event(Some("prj_tamper"), None, "evt_tamper_2"))
         .expect("append");
     assert!(storage.verify_event_chain().expect("verify").is_intact());
 
@@ -233,10 +237,10 @@ fn a_deleted_event_is_detected_at_its_successor() {
         .create_project(&new_project(&dir, "delete"))
         .expect("create");
     storage
-        .append_event(&event(Some("prj_delete"), None, 2, "evt_delete_2"))
+        .append_event(&event(Some("prj_delete"), None, "evt_delete_2"))
         .expect("append");
     storage
-        .append_event(&event(Some("prj_delete"), None, 3, "evt_delete_3"))
+        .append_event(&event(Some("prj_delete"), None, "evt_delete_3"))
         .expect("append");
 
     storage
@@ -269,10 +273,10 @@ fn two_projects_chain_independently_through_storage() {
         .create_project(&new_project(&second, "twob"))
         .expect("create");
     storage
-        .append_event(&event(Some("prj_twoa"), None, 2, "evt_twoa_2"))
+        .append_event(&event(Some("prj_twoa"), None, "evt_twoa_2"))
         .expect("append");
     storage
-        .append_event(&event(Some("prj_twob"), None, 2, "evt_twob_2"))
+        .append_event(&event(Some("prj_twob"), None, "evt_twob_2"))
         .expect("append");
 
     let report = storage.verify_event_chain().expect("verify");
@@ -310,10 +314,10 @@ fn a_session_scoped_chain_is_separate_from_a_project_chain() {
         .create_project(&new_project(&dir, "session"))
         .expect("create");
     storage
-        .append_event(&event(None, Some("sess_1"), 1, "evt_sess_1"))
+        .append_event(&event(None, Some("sess_1"), "evt_sess_1"))
         .expect("append");
     storage
-        .append_event(&event(None, Some("sess_1"), 2, "evt_sess_2"))
+        .append_event(&event(None, Some("sess_1"), "evt_sess_2"))
         .expect("append");
 
     let report = storage.verify_event_chain().expect("verify");
@@ -340,7 +344,7 @@ fn a_session_scoped_chain_is_separate_from_a_project_chain() {
 fn an_event_naming_neither_a_project_nor_a_session_is_refused_and_persists_nothing() {
     let mut storage = Storage::open_in_memory().expect("open");
     let err = storage
-        .append_event(&event(None, None, 1, "evt_orphan"))
+        .append_event(&event(None, None, "evt_orphan"))
         .expect_err("an unscoped event belongs to no chain");
     assert!(
         matches!(err, mayasaba_storage::StorageError::UnscopedEvent),
@@ -392,7 +396,7 @@ fn appending_an_event_rolls_back_completely_when_the_insert_fails() {
         .expect("trigger");
 
     assert!(storage
-        .append_event(&event(Some("prj_atomic-append"), None, 2, "evt_atomic"))
+        .append_event(&event(Some("prj_atomic-append"), None, "evt_atomic"))
         .is_err());
     assert_eq!(
         storage.count("events").expect("count"),
@@ -415,7 +419,6 @@ fn the_chain_scope_of_an_event_is_derived_from_its_own_identifiers() {
         .append_event(&event(
             None,
             Some("prj_shared-spelling"),
-            1,
             "evt_shared_session",
         ))
         .expect("append");

@@ -7,7 +7,7 @@
 //! Fixtures are built from the generated vocabulary rather than hard-coded strings, so a contract change that
 //! adds a channel or a message type does not make these tests fail for the wrong reason.
 
-use mayasaba_protocol::envelope::{validate_envelope, EnvelopeRejection};
+use mayasaba_protocol::envelope::{parse_envelope, validate_envelope, EnvelopeRejection};
 use mayasaba_protocol::generated::envelope as vocab;
 use serde_json::{json, Value};
 
@@ -614,5 +614,138 @@ fn an_empty_idempotency_key_is_rejected() {
             field: "idempotency_key",
             ..
         })
+    ));
+}
+
+// -- Typed accessors, which the delivery bus reads instead of reaching into the JSON itself. ----------------
+
+#[test]
+fn every_accessor_reads_the_field_it_names() {
+    let envelope = validate_envelope(&valid_material()).expect("a legal material envelope");
+    assert_eq!(envelope.message_type(), "EXECUTION_REQUEST");
+    assert_eq!(
+        envelope.message_id(),
+        "11111111-1111-4111-8111-111111111111"
+    );
+    assert_eq!(envelope.event_id(), "22222222-2222-4222-8222-222222222222");
+    assert_eq!(
+        envelope.project_id(),
+        "33333333-3333-4333-8333-333333333333"
+    );
+    assert_eq!(
+        envelope.session_id(),
+        "44444444-4444-4444-8444-444444444444"
+    );
+    assert_eq!(envelope.channel(), "execution");
+    assert_eq!(envelope.phase(), "UNSCOPED");
+    assert_eq!(envelope.sequence(), 1);
+    assert_eq!(envelope.project_epoch(), 0);
+    assert_eq!(
+        envelope.correlation_id(),
+        "55555555-5555-4555-8555-555555555555"
+    );
+    assert_eq!(envelope.priority(), "PROGRESS_HEARTBEAT");
+    assert_eq!(envelope.created_at(), "2026-10-04T00:00:00Z");
+    assert!(!envelope.requires_ack());
+    // A material envelope is the only shape that carries these four, so reading them here is what proves the
+    // accessor is not merely returning a default.
+    assert_eq!(envelope.idempotency_key(), Some("op-1"));
+    assert_eq!(
+        envelope.operation_id(),
+        Some("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+    );
+    assert_eq!(envelope.causation_id(), None);
+    assert_eq!(envelope.expires_at(), None);
+}
+
+#[test]
+fn a_required_accessor_is_never_empty_for_a_validated_envelope() {
+    // The accessors return `""` for an absent field rather than panicking. That is only safe because
+    // validation has already run, so this pins the precondition the infallible signature depends on.
+    let envelope = validate_envelope(&valid()).expect("a legal envelope");
+    for (name, value) in [
+        ("message_id", envelope.message_id()),
+        ("event_id", envelope.event_id()),
+        ("project_id", envelope.project_id()),
+        ("session_id", envelope.session_id()),
+        ("channel", envelope.channel()),
+        ("message_type", envelope.message_type()),
+        ("phase", envelope.phase()),
+        ("correlation_id", envelope.correlation_id()),
+        ("created_at", envelope.created_at()),
+        ("priority", envelope.priority()),
+    ] {
+        assert!(!value.is_empty(), "{name} read back empty");
+    }
+}
+
+#[test]
+fn to_json_text_is_compact_deterministic_and_key_sorted() {
+    let text = validate_envelope(&valid())
+        .expect("a legal envelope")
+        .to_json_text();
+    assert!(!text.contains('\n'), "stored text must be compact: {text}");
+    assert!(
+        text.starts_with(r#"{"blocking":"#),
+        "keys must be sorted: {text}"
+    );
+
+    // Rebuilding the same object with its keys inserted in the opposite order must produce identical text.
+    // This is the property the stored bytes depend on, and it is a serde_json feature flag away from being
+    // false, so it is pinned here rather than assumed.
+    let original = valid();
+    let mut keys: Vec<String> = original
+        .as_object()
+        .expect("an object")
+        .keys()
+        .cloned()
+        .collect();
+    keys.reverse();
+    let mut reversed = serde_json::Map::new();
+    for key in keys {
+        let value = original.get(&key).cloned().unwrap_or(Value::Null);
+        reversed.insert(key, value);
+    }
+    let rebuilt = validate_envelope(&Value::Object(reversed)).expect("a legal envelope");
+    assert_eq!(
+        rebuilt.to_json_text(),
+        text,
+        "insertion order must not reach the stored bytes"
+    );
+}
+
+#[test]
+fn the_payload_reader_returns_the_body_and_not_the_envelope() {
+    let mut v = valid();
+    v["payload"] = json!({"z": 1, "a": [2, 3]});
+    let envelope = validate_envelope(&v).expect("a legal envelope");
+    // Sorted keys and no envelope fields, because the retry comparison depends on both.
+    assert_eq!(envelope.payload_json_text(), r#"{"a":[2,3],"z":1}"#);
+    assert!(!envelope.payload_json_text().contains("message_id"));
+}
+
+#[test]
+fn parse_envelope_validates_rather_than_only_parsing() {
+    let text = valid().to_string();
+    let envelope = parse_envelope(&text).expect("a legal envelope");
+    assert_eq!(envelope.message_type(), "HEARTBEAT");
+
+    // Legal JSON, illegal envelope: the parse step must not be mistaken for the validation step.
+    let mut broken = valid();
+    broken.as_object_mut().expect("an object").remove("channel");
+    let err =
+        parse_envelope(&broken.to_string()).expect_err("a missing channel is not an envelope");
+    assert_eq!(err, EnvelopeRejection::MissingField("channel"));
+}
+
+#[test]
+fn parse_envelope_reports_text_that_is_not_json_at_all() {
+    assert!(matches!(
+        parse_envelope("{not json").err(),
+        Some(EnvelopeRejection::Malformed(_))
+    ));
+    assert!(matches!(
+        parse_envelope("").err(),
+        Some(EnvelopeRejection::Malformed(_))
     ));
 }

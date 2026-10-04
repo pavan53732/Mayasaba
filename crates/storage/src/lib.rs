@@ -54,6 +54,23 @@ pub enum StorageError {
         channel: String,
         sequence: i64,
     },
+    /// A write named a project that does not exist.
+    ///
+    /// `messages`, `outbox`, `message_receipts` and `dead_letters` each carry a foreign key to `projects`, so
+    /// the write would fail regardless. Reporting it here names the missing project; SQLite's own
+    /// "FOREIGN KEY constraint failed" does not say which reference was dangling, and a caller forced to parse
+    /// that string to learn what happened would be reading a message rather than an error.
+    UnknownProject { project_id: String },
+    /// A column whose name ends in `_json` was handed text that is not JSON.
+    ///
+    /// The canonical schema puts no `CHECK (json_valid(...))` on any JSON column, so this is not a constraint
+    /// the schema declares. It is a precondition of a behaviour the contract does declare: the idempotency
+    /// scope is `project_id + operation_id` and `operation_id` has no column, so finding it means calling
+    /// SQLite's `json_extract` on `envelope_json`, and that function raises on malformed input. Without this
+    /// check the same malformed text would be refused when the message carried an `operation_id` and accepted
+    /// when it did not - the same invalid input behaving differently because of an unrelated field. Refusing it
+    /// once, by name, removes that.
+    MalformedJson { column: String },
 }
 
 impl std::fmt::Display for StorageError {
@@ -82,6 +99,12 @@ impl std::fmt::Display for StorageError {
                 "sequence {sequence} on channel `{channel}` for session `{session_id}` is already taken; \
                  (session_id, channel, sequence) is unique"
             ),
+            StorageError::UnknownProject { project_id } => {
+                write!(f, "no project `{project_id}` exists to write for")
+            }
+            StorageError::MalformedJson { column } => {
+                write!(f, "`{column}` must hold JSON text, and this is not JSON")
+            }
         }
     }
 }
@@ -181,13 +204,16 @@ pub struct Storage {
 
 /// An `events` row to append, with its chain link computed here rather than supplied.
 ///
-/// `prev_hash` and `event_hash` are deliberately absent: they are derived, not authored. A caller that could
-/// pass them could persist a link that does not belong to its chain, which is exactly the corruption DEC-034
-/// exists to detect - and it would be indistinguishable from a genuine edit after the fact.
+/// `prev_hash`, `event_hash` and `sequence` are deliberately absent: they are derived, not authored. A caller
+/// that could pass a hash could persist a link that does not belong to its chain, which is exactly the
+/// corruption DEC-034 exists to detect - and it would be indistinguishable from a genuine edit afterwards.
 ///
-/// `sequence` is required, not optional. DEC-034 orders a chain by `sequence`, so an event with no sequence
-/// has no position in one. The column is nullable, and [`Storage::verify_event_chain`] reports a null there
-/// rather than guessing, but nothing this crate writes can create one.
+/// `sequence` is derived for the same reason and one more. DEC-034 orders a chain by `sequence`, and the column
+/// is nullable with no uniqueness on it, so a caller-supplied position could collide or leave a hole and the
+/// chain would still verify. Deriving it as one past the chain's last positioned event makes the order a strict
+/// total order by construction. It is not the envelope's `sequence`: that one is the sender's ordering position
+/// within a `(session_id, channel)`, is stored on `messages`, and is the sender's to declare. The two columns
+/// share a name and nothing else, which is worth stating because they are easy to conflate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewEvent {
     pub event_id: String,
@@ -195,13 +221,77 @@ pub struct NewEvent {
     pub project_id: Option<String>,
     pub session_id: Option<String>,
     pub event_type: String,
-    pub sequence: i64,
     pub correlation_id: Option<String>,
     pub causation_id: Option<String>,
     pub epoch: Option<i64>,
     /// JSON text, hashed verbatim. See `chain::EventHashFields::payload_json` for why it is not re-encoded.
     pub payload_json: String,
     pub created_at: String,
+}
+
+/// An outbound message to persist, queue and record, in one transaction.
+///
+/// The envelope is supplied as text, not as a parsed value, because that text is what gets stored: hashing,
+/// comparing a retry against its original, or re-encoding it would all be defeated by a second
+/// serialization of the same message. The caller validates it before calling; this crate stores what it is
+/// given.
+///
+/// `message_id`, `event_id`, `project_id`, `session_id`, `channel`, `sequence` and `correlation_id` are all
+/// non-null because the MCF-v2 contract requires them on every envelope, so a message that reached here
+/// without one is not a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewOutboundMessage {
+    /// The envelope's own `message_id`.
+    pub message_id: String,
+    /// The envelope's own `event_id`, which the sender declared as the event this message carries.
+    ///
+    /// Distinct from the `event_id` of the lifecycle event rows the bus appends for this message: those are
+    /// this crate's record of the delivery transitions, and this is the sender's statement about its own event.
+    pub event_id: String,
+    pub project_id: String,
+    pub session_id: String,
+    pub message_type: String,
+    pub channel: String,
+    /// The sender's ordering position within `(session_id, channel)`.
+    pub sequence: i64,
+    pub correlation_id: String,
+    pub causation_id: Option<String>,
+    pub idempotency_key: Option<String>,
+    /// The operation this message performs. With `project_id` this is the canonical idempotency scope
+    /// (DEC-027 and the implementation design's "Idempotency scope").
+    pub operation_id: Option<String>,
+    pub envelope_json: String,
+    pub created_at: String,
+    pub project_epoch: i64,
+}
+
+/// What an enqueue did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnqueuedMessage {
+    pub message_id: String,
+    pub outbox_id: String,
+    /// True when an earlier enqueue of the same message or the same `(project_id, operation_id)` was found.
+    ///
+    /// Reported rather than hidden, because "this was already queued" and "this is now queued" are different
+    /// answers to the caller's request, and a caller that cannot tell them apart cannot tell a retry that was
+    /// absorbed from a retry that created a second delivery.
+    pub deduplicated: bool,
+    /// The stored envelope of the message this enqueue matched, when it matched one.
+    ///
+    /// Returned so the caller can compare it with what it just tried to enqueue. A retry that reuses an
+    /// idempotency identity with a different body must not be absorbed as a duplicate: the registry's
+    /// `IDEMPOTENCY_CONFLICT` says the two cannot both be applied, and only the caller holds both documents.
+    pub stored_envelope_json: Option<String>,
+    /// The stored envelope's `payload` member, extracted by SQLite, when this enqueue matched one.
+    ///
+    /// Separate from `stored_envelope_json` because comparing whole envelopes answers the wrong question. A
+    /// retry legitimately carries a new `message_id`, `sequence` and `created_at`, so whole-envelope equality
+    /// would report every retry as a conflict. The payload is the request body, and it is what must match.
+    ///
+    /// Extracted here rather than parsed by the caller because this crate is already talking to a JSON engine
+    /// and the caller is not: `json_extract` also normalizes the two sides, so `{"a":1,"b":2}` and
+    /// `{"b":2,"a":1}` compare equal, which is what "the same body" means.
+    pub stored_payload_json: Option<String>,
 }
 
 /// A blast radius, as `council_mode_selections.inputs_json` records it.
@@ -435,14 +525,17 @@ impl RecoveryReport {
 /// `Connection` again while its transaction is open.
 fn append_event_in(tx: &rusqlite::Transaction<'_>, new: &NewEvent) -> Result<()> {
     let scope = ChainScope::of(new.project_id.as_deref(), new.session_id.as_deref())?;
-    let prev_hash = chain_tail(tx, &scope)?;
+    let (last_sequence, prev_hash) = chain_tail(tx, &scope)?;
+    // One past the last positioned event. Reading the tail's sequence and its hash in the same query is not an
+    // optimisation: a position computed from a different read than the link would let the two disagree.
+    let sequence = last_sequence + 1;
     let event_hash = chain::event_hash(&EventHashFields {
         prev_hash: &prev_hash,
         event_id: &new.event_id,
         project_id: new.project_id.as_deref(),
         session_id: new.session_id.as_deref(),
         event_type: &new.event_type,
-        sequence: Some(new.sequence),
+        sequence: Some(sequence),
         correlation_id: new.correlation_id.as_deref(),
         causation_id: new.causation_id.as_deref(),
         epoch: new.epoch,
@@ -459,7 +552,7 @@ fn append_event_in(tx: &rusqlite::Transaction<'_>, new: &NewEvent) -> Result<()>
             new.project_id,
             new.session_id,
             new.event_type,
-            new.sequence,
+            sequence,
             new.correlation_id,
             new.causation_id,
             new.epoch,
@@ -473,29 +566,311 @@ fn append_event_in(tx: &rusqlite::Transaction<'_>, new: &NewEvent) -> Result<()>
     Ok(())
 }
 
-/// The `event_hash` of the last positioned event in `scope`'s chain, or the genesis hash when it is empty.
+/// The last positioned link in `scope`'s chain: its `sequence` and its `event_hash`.
+///
+/// An empty chain reports sequence 0 and the genesis hash, so the first appended event is sequence 1 - the same
+/// position `create_project` gives a project's genesis event.
 ///
 /// `sequence IS NOT NULL` matches the walk in `chain::verify`: an event with no sequence has no position in an
 /// ordered chain, so it cannot be a predecessor. Ordering by `sequence` with `rowid` as the tiebreaker is the
 /// same order DEC-034 defines, so the link this returns is the one verification will expect.
-fn chain_tail(tx: &rusqlite::Transaction<'_>, scope: &ChainScope) -> Result<String> {
+fn chain_tail(tx: &rusqlite::Transaction<'_>, scope: &ChainScope) -> Result<(i64, String)> {
     let sql = match scope {
         ChainScope::Project(_) => {
-            "SELECT event_hash FROM events WHERE project_id = ?1 AND sequence IS NOT NULL
+            "SELECT sequence, event_hash FROM events WHERE project_id = ?1 AND sequence IS NOT NULL
              ORDER BY sequence DESC, rowid DESC LIMIT 1"
         }
         // `project_id IS NULL` is not redundant with the scope: without it, a session chain would inherit the
         // tail of a project chain whenever the two identifiers happened to be spelled the same.
         ChainScope::Session(_) => {
-            "SELECT event_hash FROM events WHERE project_id IS NULL AND session_id = ?1
+            "SELECT sequence, event_hash FROM events WHERE project_id IS NULL AND session_id = ?1
              AND sequence IS NOT NULL ORDER BY sequence DESC, rowid DESC LIMIT 1"
         }
     };
-    let tail: Option<String> = tx
-        .query_row(sql, rusqlite::params![scope.value()], |r| r.get(0))
+    let tail: Option<(i64, String)> = tx
+        .query_row(sql, rusqlite::params![scope.value()], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .optional()
         .map_err(StorageError::Db)?;
-    Ok(tail.unwrap_or_else(|| GENESIS_PREV_HASH.to_string()))
+    Ok(tail.unwrap_or_else(|| (0, GENESIS_PREV_HASH.to_string())))
+}
+
+/// The payload of a project's genesis event.
+///
+/// Canonicalized rather than interpolated, and that is a defect fix rather than a style preference: `local_path`
+/// is a Windows path, so it contains backslashes, and a backslash interpolated into a JSON string is an invalid
+/// escape. Every project this crate created before this change stored a `payload_json` that no JSON parser would
+/// accept - and because DEC-034 hashes that text, the malformed document was on its way into the event chain as
+/// a permanent, unverifiable-against-anything-else link.
+fn project_created_payload(new: &NewProject) -> Result<String> {
+    Ok(canonical::jcs_object(&[
+        ("brief_id", canonical::JcsValue::Str(&new.brief_id)),
+        ("epoch", canonical::JcsValue::Int(0)),
+        ("local_path", canonical::JcsValue::Str(&new.local_path)),
+    ])?)
+}
+
+/// The `outbox` row for a message.
+///
+/// `outbox.message_id` is `UNIQUE`, so the relation is one to one and the id is derived from the message rather
+/// than minted. A second identifier source would be a second thing that can disagree with the relation the
+/// schema already declares, and there would be nothing to reconcile it against.
+fn outbox_id_for(message_id: &str) -> String {
+    format!("obx_{message_id}")
+}
+
+/// The `events.event_id` of the lifecycle event a delivery transition records.
+///
+/// Derived from the message for the same reason the outbox id is: the pair `(message, transition)` is the
+/// event's identity, and deriving it makes that identity checkable by reading the id.
+fn transition_event_id(message_id: &str, event_type: &str) -> String {
+    format!("evt_{message_id}_{}", event_type.to_ascii_lowercase())
+}
+
+/// The payload of a delivery-transition event.
+///
+/// Built with the canonicalizer rather than with `format!`, because a JSON document assembled by string
+/// interpolation stops being JSON the moment a value contains a quote or a backslash - and a message id is
+/// only `format`-annotated in the contract, which JSON Schema treats as annotation rather than validation. The
+/// payload is also one of the fields DEC-034 hashes, so an unescaped value would be baked into the chain.
+fn transition_payload(new: &NewOutboundMessage) -> Result<String> {
+    Ok(canonical::jcs_object(&[
+        ("channel", canonical::JcsValue::Str(&new.channel)),
+        ("message_id", canonical::JcsValue::Str(&new.message_id)),
+        ("message_type", canonical::JcsValue::Str(&new.message_type)),
+        ("sequence", canonical::JcsValue::Int(new.sequence)),
+    ])?)
+}
+
+/// Persist, queue and record an outbound message inside `tx`.
+///
+/// The order of the checks is the order of the identity they test, strongest first: an enqueue that matches an
+/// existing message is a duplicate of that message whatever else is true; failing that, one that matches a
+/// project operation is a retry of that operation; failing both, the position it claims must be free.
+fn enqueue_message_in(
+    tx: &rusqlite::Transaction<'_>,
+    new: &NewOutboundMessage,
+) -> Result<EnqueuedMessage> {
+    if !project_exists(tx, &new.project_id)? {
+        return Err(StorageError::UnknownProject {
+            project_id: new.project_id.clone(),
+        });
+    }
+    if !is_json(tx, &new.envelope_json)? {
+        return Err(StorageError::MalformedJson {
+            column: "messages.envelope_json".to_string(),
+        });
+    }
+
+    if let Some(existing) = find_enqueued_message(tx, &new.message_id)? {
+        return Ok(EnqueuedMessage {
+            deduplicated: true,
+            ..existing
+        });
+    }
+    if let Some(operation_id) = new.operation_id.as_deref() {
+        if let Some(existing) = find_outbound_by_operation_in(tx, &new.project_id, operation_id)? {
+            return Ok(EnqueuedMessage {
+                deduplicated: true,
+                ..existing
+            });
+        }
+    }
+
+    // Refused before the insert rather than after it, so the caller gets a sentence naming the position instead
+    // of a raw `UNIQUE constraint failed: messages.session_id, messages.channel, messages.sequence`. The
+    // constraint remains the enforcement; this is the report.
+    if find_message_at_position(tx, &new.session_id, &new.channel, new.sequence)?.is_some() {
+        return Err(StorageError::SequenceConflict {
+            session_id: new.session_id.clone(),
+            channel: new.channel.clone(),
+            sequence: new.sequence,
+        });
+    }
+
+    // CREATED -> PERSISTED. The row is inserted already carrying the state this transition produced, so a row
+    // can never be observed in CREATED: that state describes a message that exists only in memory.
+    tx.execute(
+        "INSERT INTO messages (message_id, event_id, project_id, session_id, message_type, channel, sequence,
+                               correlation_id, causation_id, idempotency_key, delivery_state, envelope_json,
+                               created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'PERSISTED', ?11, ?12)",
+        rusqlite::params![
+            new.message_id,
+            new.event_id,
+            new.project_id,
+            new.session_id,
+            new.message_type,
+            new.channel,
+            new.sequence,
+            new.correlation_id,
+            new.causation_id,
+            new.idempotency_key,
+            new.envelope_json,
+            new.created_at,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+
+    let payload = transition_payload(new)?;
+    append_event_in(
+        tx,
+        &NewEvent {
+            event_id: transition_event_id(&new.message_id, "MESSAGE_PERSISTED"),
+            project_id: Some(new.project_id.clone()),
+            session_id: Some(new.session_id.clone()),
+            event_type: "MESSAGE_PERSISTED".to_string(),
+            correlation_id: Some(new.correlation_id.clone()),
+            // The sender's declared cause, propagated rather than replaced: both lifecycle events of one
+            // enqueue have the same upstream cause, because they are two steps of one act (AGENTS.md section 10).
+            causation_id: new.causation_id.clone(),
+            epoch: Some(new.project_epoch),
+            payload_json: payload.clone(),
+            created_at: new.created_at.clone(),
+        },
+    )?;
+
+    // PERSISTED -> QUEUED. The outbox row is what makes the message dispatchable, and `next_attempt_at` starts
+    // at the queueing time so "is it due?" is one comparison for a first attempt and a retry alike.
+    let outbox_id = outbox_id_for(&new.message_id);
+    tx.execute(
+        "INSERT INTO outbox (outbox_id, message_id, project_id, queued_at, dispatch_state, next_attempt_at,
+                             attempts)
+         VALUES (?1, ?2, ?3, ?4, 'PENDING', ?4, 0)",
+        rusqlite::params![
+            outbox_id,
+            new.message_id,
+            new.project_id,
+            new.created_at,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE messages SET delivery_state = 'QUEUED' WHERE message_id = ?1",
+        rusqlite::params![new.message_id],
+    )
+    .map_err(StorageError::Db)?;
+    append_event_in(
+        tx,
+        &NewEvent {
+            event_id: transition_event_id(&new.message_id, "MESSAGE_QUEUED"),
+            project_id: Some(new.project_id.clone()),
+            session_id: Some(new.session_id.clone()),
+            event_type: "MESSAGE_QUEUED".to_string(),
+            correlation_id: Some(new.correlation_id.clone()),
+            causation_id: new.causation_id.clone(),
+            epoch: Some(new.project_epoch),
+            payload_json: payload,
+            created_at: new.created_at.clone(),
+        },
+    )?;
+
+    Ok(EnqueuedMessage {
+        message_id: new.message_id.clone(),
+        outbox_id,
+        deduplicated: false,
+        stored_envelope_json: None,
+        stored_payload_json: None,
+    })
+}
+
+fn project_exists(conn: &Connection, project_id: &str) -> Result<bool> {
+    conn.query_row(
+        "SELECT 1 FROM projects WHERE project_id = ?1",
+        rusqlite::params![project_id],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|found| found.is_some())
+    .map_err(StorageError::Db)
+}
+
+/// Whether `text` is JSON, decided by SQLite's own parser.
+///
+/// `json_valid` rather than a Rust parser because this crate has no JSON dependency and should not gain one to
+/// answer a question the database it is already talking to can answer exactly.
+fn is_json(conn: &Connection, text: &str) -> Result<bool> {
+    conn.query_row("SELECT json_valid(?1)", rusqlite::params![text], |r| {
+        r.get(0)
+    })
+    .map_err(StorageError::Db)
+}
+
+/// The queue entry for a message, if it was enqueued.
+///
+/// A `messages` row with no `outbox` row is reported rather than treated as either a duplicate or a new
+/// message. Nothing this crate writes can produce one - both rows go in together - so its presence means the
+/// table was written outside this crate, and guessing which of the two it is would be guessing about history.
+fn find_enqueued_message(conn: &Connection, message_id: &str) -> Result<Option<EnqueuedMessage>> {
+    let row: Option<(Option<String>, String, Option<String>)> = conn
+        .query_row(
+            "SELECT o.outbox_id, m.envelope_json, json_extract(m.envelope_json, '$.payload')
+             FROM messages m LEFT JOIN outbox o ON o.message_id = m.message_id
+             WHERE m.message_id = ?1",
+            rusqlite::params![message_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(StorageError::Db)?;
+
+    match row {
+        None => Ok(None),
+        Some((Some(outbox_id), envelope_json, payload_json)) => Ok(Some(EnqueuedMessage {
+            message_id: message_id.to_string(),
+            outbox_id,
+            deduplicated: false,
+            stored_envelope_json: Some(envelope_json),
+            stored_payload_json: payload_json,
+        })),
+        Some((None, _, _)) => Err(StorageError::Malformed {
+            column: "outbox.message_id".to_string(),
+            detail: format!(
+                "message `{message_id}` exists with no outbox row, so it was never queued; re-queueing it \
+                 would rewrite the record of what happened"
+            ),
+        }),
+    }
+}
+
+fn find_outbound_by_operation_in(
+    conn: &Connection,
+    project_id: &str,
+    operation_id: &str,
+) -> Result<Option<EnqueuedMessage>> {
+    conn.query_row(
+        "SELECT m.message_id, o.outbox_id, m.envelope_json, json_extract(m.envelope_json, '$.payload')
+         FROM messages m JOIN outbox o ON o.message_id = m.message_id
+         WHERE m.project_id = ?1 AND json_extract(m.envelope_json, '$.operation_id') = ?2
+         ORDER BY m.rowid LIMIT 1",
+        rusqlite::params![project_id, operation_id],
+        |r| {
+            Ok(EnqueuedMessage {
+                message_id: r.get(0)?,
+                outbox_id: r.get(1)?,
+                deduplicated: false,
+                stored_envelope_json: Some(r.get(2)?),
+                stored_payload_json: r.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(StorageError::Db)
+}
+
+fn find_message_at_position(
+    conn: &Connection,
+    session_id: &str,
+    channel: &str,
+    sequence: i64,
+) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT message_id FROM messages WHERE session_id = ?1 AND channel = ?2 AND sequence = ?3",
+        rusqlite::params![session_id, channel, sequence],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(StorageError::Db)
 }
 
 impl Storage {
@@ -585,14 +960,10 @@ impl Storage {
                 project_id: Some(new.project_id.clone()),
                 session_id: None,
                 event_type: "PROJECT_CREATED".to_string(),
-                sequence: 1,
                 correlation_id: None,
                 causation_id: None,
                 epoch: Some(0),
-                payload_json: format!(
-                    r#"{{"brief_id":"{}","epoch":0,"local_path":"{}"}}"#,
-                    new.brief_id, new.local_path
-                ),
+                payload_json: project_created_payload(new)?,
                 created_at: new.created_at.clone(),
             },
         )?;
@@ -656,6 +1027,39 @@ impl Storage {
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(StorageError::Db)?;
         chain::verify(&events)
+    }
+
+    /// Persist an outbound message, queue it, and record both delivery transitions.
+    ///
+    /// One transaction covers the whole thing, because the implementation design requires a domain transaction
+    /// to write its state mutation, its immutable event and its outbound record together. A message row whose
+    /// queue entry is missing is a message nothing will ever send; an event that outlived a rolled-back state
+    /// change is a record of something that did not happen.
+    ///
+    /// The two transitions are the `message_delivery` machine's own first two spine steps. `CREATED ->
+    /// PERSISTED` writes the `messages` row; `PERSISTED -> QUEUED` writes the `outbox` row and advances the
+    /// message. Both are declared transitions with their own canonical event, so both are recorded: collapsing
+    /// them into one event would drop a declared transition out of the immutable history that is supposed to
+    /// hold all of them. They are not separately observable, because they commit together.
+    pub fn enqueue_message(&mut self, new: &NewOutboundMessage) -> Result<EnqueuedMessage> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let enqueued = enqueue_message_in(&tx, new)?;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(enqueued)
+    }
+
+    /// The queued outbound message for a project operation, if one exists.
+    ///
+    /// The idempotency scope is `project_id + operation_id` (DEC-027, and the implementation design's
+    /// "Idempotency scope"). `operation_id` is an optional envelope field with no column of its own, so it is
+    /// read out of `envelope_json`; that is why the index this crate creates covers the extracted value rather
+    /// than a column.
+    pub fn find_outbound_by_operation(
+        &self,
+        project_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<EnqueuedMessage>> {
+        find_outbound_by_operation_in(&self.conn, project_id, operation_id)
     }
 
     /// Authoritative project readback, including the current brief.

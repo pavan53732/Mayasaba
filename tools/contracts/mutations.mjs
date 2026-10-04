@@ -53,6 +53,7 @@ const BRIDGE_TS = "apps/desktop/src/intake/bridge.ts";
 const APP_TSX = "apps/desktop/src/App.tsx";
 const REGISTRY = "schemas/error-v1/registry.json";
 const VALIDATION_RS = "crates/workspace/src/validation.rs";
+const BUS_ERROR_RS = "crates/bus/src/error.rs";
 const GENERATED_RS = "apps/desktop/src-tauri/src/generated/bridge.rs";
 const GENERATED_TS = "apps/desktop/src/generated/bridge.ts";
 const PAYLOAD_TYPES = "schemas/tauri-bridge-v1/payload-types.json";
@@ -207,6 +208,20 @@ const MUTATIONS = [
     check: GATE,
     edits: [{ file: VALIDATION_RS, find: "pub fn code(self)", replace: "pub fn rejection_code(self)" }],
     expect: ["could not find the error-code mapping this check scans"],
+  },
+  {
+    id: "dec055-g",
+    what: "crates/bus: the second error-code mapping this check scans is renamed away",
+    check: GATE,
+    edits: [{ file: BUS_ERROR_RS, find: "pub fn code(&self)", replace: "pub fn registry_code(&self)" }],
+    expect: ["could not find the error-code mapping this check scans"],
+  },
+  {
+    id: "dec055-h",
+    what: "crates/bus: the mapping produces a code the registry does not declare",
+    check: GATE,
+    edits: [{ file: BUS_ERROR_RS, find: '=> "DUPLICATE_CONFLICT"', replace: '=> "SEQUENCE_COLLISION"' }],
+    expect: ["which schemas/error-v1/registry.json does not register"],
   },
 
   // --- DEC-056: the wire SHAPE. Five of these must COMPILE, so that a non-zero exit is the conformance test

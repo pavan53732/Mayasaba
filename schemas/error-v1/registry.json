@@ -17,7 +17,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_PROJECT_MISMATCH",
       "tauri_code": "MAYASABA_PROJECT_MISMATCH",
-      "meaning": "The project named by the message is not the project the message was delivered for.",
+      "meaning": "The project a message names is not the project it may be delivered for: on the inbound side, not the project the message was delivered for; on the outbound side, not a project that exists.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "UNAUTHORIZED": {
@@ -101,13 +101,22 @@
       "meaning": "A message arrived out of sequence, so at least one message between them may be missing.",
       "remediation": "See affected subsystem remediation metadata."
     },
+    "DUPLICATE_CONFLICT": {
+      "category": "SEQUENCE",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": "MCF_DUPLICATE_CONFLICT",
+      "tauri_code": "MAYASABA_DUPLICATE_CONFLICT",
+      "meaning": "A message claimed a sequence position that a different message already occupies for the same session and channel, so the two cannot both be ordered at that position. This is not SEQUENCE_GAP: nothing is missing, two distinct messages claim one place.",
+      "remediation": "The sender must renumber. The position belongs to the message already stored, and history is not rewritten to make room; retrying the same request cannot succeed."
+    },
     "IDEMPOTENCY_CONFLICT": {
       "category": "IDEMPOTENCY",
       "retryability": "NEVER",
       "severity": "ERROR",
       "mcf_code": "MCF_IDEMPOTENCY_CONFLICT",
       "tauri_code": "MAYASABA_IDEMPOTENCY_CONFLICT",
-      "meaning": "A retry reused an idempotency key with a different request body, so the two cannot both be applied.",
+      "meaning": "A retry reused an idempotency identity with a different request body, so the two cannot both be applied. The identity is the scope the owning subsystem declares for the operation; for MCF messages it is project_id with the envelope's operation_id.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "TIMEOUT": {

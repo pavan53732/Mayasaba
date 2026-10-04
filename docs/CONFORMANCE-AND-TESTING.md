@@ -86,6 +86,47 @@ Must prove:
   itself clean;
 - a failed append leaves the chain exactly as it was.
 
+## Durable bus tests (M2)
+
+The bus is where a message stops being text and becomes durable, so these tests read the tables and the returned
+error rather than trusting that the call returned `Ok`. `crates/bus/tests/enqueue.rs` runs the outbound path
+through a real bus over a real database; `crates/storage/tests/outbox.rs` runs the same writes one layer down.
+
+Must prove:
+
+- a legal envelope is persisted and queued, and the stored `delivery_state` is `QUEUED` rather than the
+  `PERSISTED` the row was first written at;
+- the enqueue appends **two** lifecycle events, `MESSAGE_PERSISTED` and `MESSAGE_QUEUED`, because the machine
+  declares two transitions and collapsing them would drop one; both extend the project's existing chain rather
+  than starting a second one;
+- the event position is derived from the chain, so the two events continue the genesis event's position instead
+  of restarting at one;
+- the stored envelope is the canonical re-encoding, not the caller's bytes: a pretty-printed envelope with its
+  keys in a different order is stored compact and key-sorted, because the retry comparison reads that text;
+- a lifecycle event's `payload_json` is a canonical document even when a value needs escaping, and a project's
+  genesis payload is JSON even though a Windows `local_path` is full of backslashes;
+- the envelope gate is the protocol crate's validator: a missing required field, a value outside a closed
+  vocabulary, an undefined field and text that is not JSON are each refused as `SCHEMA_INVALID` with nothing
+  written — and the bus does not re-check the two fields its transitions declare `required_fields`, so a test
+  pins that the envelope contract requires both;
+- a retry is absorbed rather than repeated, by message id and by `(project_id, operation_id)`, returning the
+  original message and appending no second history, which is what every `message_delivery` record's own
+  `idempotency_behavior` requires;
+- the same operation with a **different body** is refused as `IDEMPOTENCY_CONFLICT`, and the body compared is
+  the envelope's `payload` alone, so a retry that legitimately carries a new `message_id`, `sequence` and
+  `created_at` is not mistaken for a conflict;
+- two distinct messages claiming one `(session_id, channel, sequence)` position are refused as
+  `DUPLICATE_CONFLICT` — not `SEQUENCE_GAP`, because nothing is missing — while the same position in a different
+  session is free;
+- a message naming a project that does not exist is refused as `PROJECT_MISMATCH`, not as an internal failure;
+- text that is not JSON in `messages.envelope_json` is refused the same way whether or not the message names an
+  `operation_id`, because without the explicit check the idempotency lookup's `json_extract` would make the same
+  invalid input behave differently depending on an unrelated field;
+- the four writes are one transaction: a fault injected before the outbox insert leaves no message row, no queue
+  entry and no lifecycle event, and the chain still verifies;
+- the expression index the idempotency lookup depends on exists, because an index that silently failed to apply
+  would leave the query correct and slow and nothing else would notice.
+
 ## Project intent and user-contribution tests
 
 Must prove:
@@ -278,6 +319,17 @@ Controls run in the opposite direction and must stay **green**, because a check 
 It is safe to run because it refuses to start when a tracked file is modified — untracked files are permitted, since `git checkout` cannot touch them — and restores every file it touches with `git checkout -- <file>`. It restores on SIGINT and on an uncaught exception as well as normally, and it verifies at the end that the tree is clean and HEAD is unchanged. If it is interrupted in a way that defeats all of that, the recovery is `git checkout -- .`, which is the right command here precisely because the harness refused to start with a modified tracked file.
 
 It is deliberately **not** part of `npm run verify:contracts` and **not** wired to the pre-commit hook: it mutates the tree, and the Rust mutations each pay a recompile. It is a tool to run when a check changes, not on every commit. `--filter <substring>` runs a subset by mutation id.
+
+### Bus error-mapping proofs (DEC-058)
+
+Adding `crates/bus/src/error.rs` to the gate's declared `mappingSites` is a new instance of a check that already had proofs, and DEC-057 requires a new check to carry one. Two mutations cover it, and the second is the one that matters: the first proves the gate can still find the mapping it scans, and the second proves it reads the codes out of it.
+
+| # | Mutation | Expected and observed failure |
+|---|---|---|
+| `dec055-g` | `crates/bus`: the second error-code mapping this check scans is renamed away | The gate cannot locate the mapping site, which is a failure rather than a skip: `could not find the error-code mapping this check scans` |
+| `dec055-h` | `crates/bus`: the mapping produces a code the registry does not declare | `SEQUENCE_COLLISION` is named by the bus and registered nowhere: `which schemas/error-v1/registry.json does not register` |
+
+The same pair exists for `crates/workspace/src/validation.rs` as `dec055-f` and `dec055-e`; the point of adding the bus site is that a mapping the gate cannot see is a mapping nothing checks, so a second mapping site without a proof would have quietly reduced the coverage the first one provides.
 
 ## Bridge two-way gate mutation proofs (DEC-053)
 
