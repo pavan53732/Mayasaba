@@ -7,12 +7,29 @@
   "required":["commands","queries","events"],
   "properties":{
     "commands":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"}},
-    "queries":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"}},
+    "queries":{"type":"object","additionalProperties":{"$ref":"#/$defs/query_operation"}},
     "events":{"type":"object","additionalProperties":{"$ref":"#/$defs/event"}}
   },
   "$defs":{
-    "operation":{"type":"object","additionalProperties":false,"required":["request","response","errors","cancellable"],"properties":{
-      "request":{"type":"object"},"response":{"type":"object"},"errors":{"type":"array","items":{"type":"string"}},"cancellable":{"type":"boolean"}
+    "operation":{"type":"object","additionalProperties":false,"required":["owner","request","response","cancellable"],"properties":{
+      "owner":{"type":"string","description":"Owning application service, resolved against workspace.manifest.json application_services by the gate"},
+      "request":{"type":"string","description":"Name of the request payload type"},
+      "response":{"type":"string","description":"Name of the response payload type"},
+      "errors":{"type":"array","items":{"type":"string"}},"cancellable":{"type":"boolean"},
+      "request_fields":{"type":"array","items":{"$ref":"#/$defs/request_field"}},
+      "atomicity":{"type":"string","description":"Domain transaction boundary this operation commits as one unit"}
+    }},
+    "query_operation":{"type":"object","additionalProperties":false,"required":["owner","request","response"],"properties":{
+      "owner":{"type":"string","description":"Owning application service, resolved against workspace.manifest.json application_services by the gate"},
+      "request":{"type":"string","description":"Name of the request payload type"},
+      "response":{"type":"string","description":"Name of the response payload type"},
+      "errors":{"type":"array","items":{"type":"string"}},
+      "cancellable":{"type":"boolean"},
+      "request_fields":{"type":"array","items":{"$ref":"#/$defs/request_field"}}
+    }},
+    "request_field":{"type":"object","additionalProperties":false,"required":["name","type","required"],"properties":{
+      "name":{"type":"string"},"type":{"type":"string"},"required":{"type":"boolean"},
+      "description":{"type":"string"}
     }},
     "event":{"type":"object","additionalProperties":false,"required":["channel","payload"],"properties":{
       "channel":{"type":"string"},"payload":{"type":"object"},"cursor":{"type":["integer","null"],"minimum":0}
