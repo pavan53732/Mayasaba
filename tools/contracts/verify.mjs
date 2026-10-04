@@ -781,6 +781,51 @@ for(const [section,defName] of [["commands","operation"],["queries","query_opera
 }
 if(opProblems.length) fail(opProblems.length+" payload registry conformance problem(s):\n  - "+opProblems.join("\n  - "));
 
+// Request payload types must resolve. payloads.json named a type per operation - 116 request and response
+// names - but none of them had a definition anywhere, so the entire input surface of the Control Room was
+// structurally unvalidated and an implementation agent could satisfy create_project with
+// {"initial_brief":" "}. Only types actually referenced by a declared request field are required to resolve:
+// inventing payload types for all 116 names would be a declaration nothing consumes.
+const payloadTypes=read("schemas/tauri-bridge-v1/payload-types.json").types ?? {};
+const scalarTypes=new Set(["string","integer","number","boolean","object","array","null"]);
+const baseType=(t)=>String(t).replace(/\[\]$/,"");
+const unresolvedTypes=[];
+const referencedTypes=new Set();
+for(const section of ["commands","queries"]){
+  for(const [name,op] of Object.entries(payloadRegistry[section] ?? {})){
+    for(const f of op.request_fields ?? []){
+      if(!f.type) continue;
+      referencedTypes.add(baseType(f.type));
+      if(scalarTypes.has(baseType(f.type))) continue;
+      if(!(baseType(f.type) in payloadTypes)) unresolvedTypes.push(`${section}.${name} field "${f.name}" references type "${baseType(f.type)}", which payload-types.json does not define`);
+    }
+  }
+}
+if(unresolvedTypes.length) fail(`Tauri request field type(s) do not resolve:\n  - ${unresolvedTypes.join("\n  - ")}\nDefine the type in schemas/tauri-bridge-v1/payload-types.json. A type name that resolves to nothing leaves the operation's input unvalidated.`);
+
+// The declared request field list must agree with the payload type it points at, or the two drift apart and an
+// implementation agent cannot tell which is authoritative.
+const typeDrift=[];
+for(const section of ["commands","queries"]){
+  for(const [name,op] of Object.entries(payloadRegistry[section] ?? {})){
+    const schema=payloadTypes[op.request];
+    if(!schema) continue;
+    const required=new Set(schema.required ?? []);
+    const declared=new Map((op.request_fields ?? []).map(f=>[f.name,f]));
+    for(const [fieldName,field] of declared){
+      if(!(fieldName in (schema.properties ?? {}))){
+        typeDrift.push(`${section}.${name} declares field "${fieldName}" which ${op.request} does not define`);
+        continue;
+      }
+      if(Boolean(field.required)!==required.has(fieldName)){
+        typeDrift.push(`${section}.${name} marks "${fieldName}" required=${Boolean(field.required)} but ${op.request} treats it as ${required.has(fieldName)?"required":"optional"}`);
+      }
+    }
+    for(const r of required) if(!declared.has(r)) typeDrift.push(`${section}.${name} does not declare required field "${r}" of ${op.request}`);
+  }
+}
+if(typeDrift.length) fail(`Tauri request_fields disagree with the payload type they reference:\n  - ${typeDrift.join("\n  - ")}`);
+
 // --- Initial project creation must carry its intent anchor. DEC-030 makes the ProjectBrief the canonical
 // representation of user intent; CONTROL-ROOM-DESIGN.md states the Initial Intake Composer persists the
 // stated intent as the first brief version. If create_project stops declaring a required initial brief, a

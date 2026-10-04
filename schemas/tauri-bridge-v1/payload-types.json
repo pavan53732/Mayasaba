@@ -1,0 +1,67 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/tauri-bridge-v1/payload-types.json",
+  "title":"Mayasaba Tauri request and response payload type definitions",
+  "authority":"schemas/tauri-bridge-v1/payload-types.json",
+  "rule":"Every type name referenced by payloads.json request_fields must resolve here. Types are declared as operations gain declared request fields, not speculatively: an operation that does not declare request_fields has no payload type yet, and inventing one would be a declaration nothing consumes.",
+  "types":{
+    "ProjectBriefDraft":{
+      "title":"The user's stated project intent, submitted at project creation",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["body"],
+      "properties":{
+        "body":{
+          "type":"string",
+          "minLength":1,
+          "pattern":"\\S",
+          "description":"Non-empty project intent. pattern \\S rejects whitespace-only input, which is the structural half of the rule; whether the text constitutes meaningful intent is a domain judgement owned by the intake router, not a schema concern."
+        },
+        "source":{
+          "type":"string",
+          "description":"How the intent was captured. Defaults to INITIAL_INTAKE_COMPOSER."
+        }
+      }
+    },
+    "ProjectPathDraft":{
+      "title":"A task-scoped path allowed within the project's authorized workspace",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["path","purpose"],
+      "properties":{
+        "path":{"type":"string","minLength":1,"pattern":"\\S","description":"Workspace-relative or absolute path inside the authorized workspace. Workspace/task-path scope is authoritative; a path outside the authorized scope is refused by policy, not by this schema."},
+        "purpose":{"type":"string","enum":["WORKSPACE_ROOT","TASK_SCOPE"],"description":"Why the path is in scope."}
+      }
+    },
+    "create_projectRequest":{
+      "title":"Create a project together with its first ProjectBrief, atomically",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["name","local_path","initial_brief"],
+      "properties":{
+        "name":{"type":"string","minLength":1,"pattern":"\\S","description":"Human-readable project name."},
+        "local_path":{"type":"string","minLength":1,"pattern":"\\S","description":"Authorized local workspace path. Mayasaba is local-only; a non-local or remote path is refused by policy (DEC-004)."},
+        "initial_brief":{"$ref":"#/$defs/ProjectBriefDraft","description":"Persisted as ProjectBrief version 1 in the same transaction as the project row, the initial epoch and the PROJECT_CREATED event."},
+        "project_paths":{"type":"array","items":{"$ref":"#/$defs/ProjectPathDraft"},"description":"Optional additional in-scope paths. Defaults to the workspace root only."}
+      }
+    },
+    "create_projectResponse":{
+      "title":"The authoritative state that exists after project creation committed",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","brief_id","epoch","phase","status"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "brief_id":{"type":"string","minLength":1,"description":"ProjectBrief version 1. The project cannot exist without it."},
+        "epoch":{"type":"integer","minimum":0,"description":"Initial project epoch, always 0 at creation."},
+        "phase":{"type":"string","description":"Lifecycle phase after creation; DISCOVERY at intake."},
+        "status":{"type":"string"},
+        "created_at":{"type":"string","description":"RFC3339 UTC."}
+      }
+    }
+  },
+  "$defs":{
+    "ProjectBriefDraft":{"$ref":"#/types/ProjectBriefDraft"},
+    "ProjectPathDraft":{"$ref":"#/types/ProjectPathDraft"}
+  }
+}
