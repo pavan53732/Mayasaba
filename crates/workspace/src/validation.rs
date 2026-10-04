@@ -2,6 +2,7 @@
 //!
 //! Kept separate from the crate boundary so the boundary stays a thin declaration of what this crate owns.
 
+use mayasaba_storage::derive_project_display_name;
 use std::path::Path;
 
 /// Stable error code the Control Room can branch on without parsing prose.
@@ -63,39 +64,6 @@ pub struct WorkspaceValidation {
     pub derived_project_name: String,
 }
 
-/// Display name used when a workspace has no usable leaf name.
-///
-/// A filesystem root such as `C:\` has no folder name of its own. Rather than inventing something that
-/// pretends to be the folder's name, or persisting an empty name, a workspace root gets an explicit label.
-pub const ROOT_WORKSPACE_NAME: &str = "Local Workspace";
-
-/// Derive the initial display name from a canonical workspace path.
-///
-/// The display name is metadata, not identity: `project_id` is generated independently and is never derived
-/// from a path. Two projects may therefore begin with the same display name without colliding, and a later
-/// rename of the folder does not silently change project identity (DEC-050).
-pub fn derive_project_display_name(canonical_path: &str) -> String {
-    let path = Path::new(canonical_path);
-
-    // `C:\` canonicalizes with a trailing separator, and `Path::file_name` returns None for a root. Check the
-    // components so a path like `C:\Users` yields `Users` while a bare root yields the explicit fallback.
-    let leaf = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .or_else(|| {
-            path.components()
-                .filter_map(|c| match c {
-                    std::path::Component::Normal(n) => Some(n.to_string_lossy().into_owned()),
-                    _ => None,
-                })
-                .next_back()
-        });
-
-    match leaf {
-        Some(name) if !name.trim().is_empty() => name,
-        _ => ROOT_WORKSPACE_NAME.to_string(),
-    }
-}
 
 /// Validate a user-selected folder as a candidate workspace root.
 ///

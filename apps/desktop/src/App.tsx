@@ -128,8 +128,7 @@ function Composer(props: {
     <section aria-label="Initial Intake Composer">
       <h2>New project</h2>
       <p style={{ color: "#6b7280", marginTop: -4 }}>
-        Choose the local workspace Mayasaba is authorized to work in, then describe what you want
-        accomplished.
+        Choose the folder where Mayasaba will work, then describe what you want it to accomplish.
       </p>
 
       <div style={field}>
@@ -203,7 +202,7 @@ function WorkspaceStatus({ workspace }: { workspace: WorkspaceState }) {
     case "authorized":
       return (
         <p style={{ ...hint, marginTop: 6, marginBottom: 0, color: "#166534" }}>
-          Local folder verified: <code>{workspace.canonicalPath}</code>
+          &checkmark; Workspace verified: <code>{workspace.canonicalPath}</code>
         </p>
       );
     case "candidate":

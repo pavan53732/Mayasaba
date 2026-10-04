@@ -119,9 +119,6 @@ impl ProjectService {
 
         let new = NewProject {
             project_id: format!("prj_{}", Self::digest(&format!("project:{nonce}"))),
-            // Derived by the owning service from the canonical workspace folder name. The caller supplies no
-            // name, so the UI cannot invent identity metadata that disagrees with the filesystem.
-            name: workspace.derived_project_name.clone(),
             local_path: workspace.canonical_path,
             brief_id: format!("brf_{}", Self::digest(&format!("brief:{nonce}"))),
             brief_body: req.initial_brief_body.trim().to_string(),

@@ -39,11 +39,58 @@ impl std::error::Error for StorageError {}
 
 pub type Result<T> = std::result::Result<T, StorageError>;
 
+/// Display name used when a workspace has no usable leaf name.
+///
+/// A filesystem root such as `C:\` has no folder name of its own. Rather than inventing something that
+/// pretends to be the folder's name, or persisting an empty name, a workspace root gets an explicit label.
+pub const ROOT_WORKSPACE_NAME: &str = "Local Workspace";
+
+/// Derive a project's initial display name from its canonical workspace path.
+///
+/// This lives here, at the lowest layer both the workspace crate and this crate can see, for a reason that
+/// is about enforcement rather than convenience. The name is a pure function of the canonical path, so if
+/// the workspace crate derived it *and* this crate accepted a caller-supplied name, there would be two
+/// derivations and an injection surface: any crate depending on `mayasaba-storage` could persist a project
+/// whose name disagreed with its folder, bypassing the owning service entirely.
+///
+/// Deriving it once, here, and using it in both places removes the surface structurally rather than by
+/// convention. `projects.name` therefore cannot be set to anything other than the workspace folder's leaf
+/// name through this crate (DEC-050).
+///
+/// The display name is metadata, not identity: `project_id` is generated independently and is never derived
+/// from a path. Two projects may therefore begin with the same display name without colliding.
+pub fn derive_project_display_name(canonical_path: &str) -> String {
+    use std::path::{Component, Path};
+
+    let path = Path::new(canonical_path);
+
+    // `C:\` canonicalizes with a trailing separator and `Path::file_name` returns None for a root, so fall
+    // back to the last normal component. `C:\Users` still yields `Users`.
+    let leaf = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .or_else(|| {
+            path.components()
+                .filter_map(|c| match c {
+                    Component::Normal(n) => Some(n.to_string_lossy().into_owned()),
+                    _ => None,
+                })
+                .next_back()
+        });
+
+    match leaf {
+        Some(name) if !name.trim().is_empty() => name,
+        _ => ROOT_WORKSPACE_NAME.to_string(),
+    }
+}
+
 /// A project creation request, already validated by the owning service.
+///
+/// There is deliberately no `name` field. The display name is derived from `local_path` below, so no caller
+/// can inject one. `local_path` must already be the canonical form the owning service validated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewProject {
     pub project_id: String,
-    pub name: String,
     pub local_path: String,
     pub brief_id: String,
     pub brief_body: String,
@@ -129,7 +176,14 @@ impl Storage {
         tx.execute(
             "INSERT INTO projects (project_id, name, local_path, phase, status, current_epoch, created_at, updated_at)
              VALUES (?1, ?2, ?3, 'DISCOVERY', 'ACTIVE', 0, ?4, ?4)",
-            rusqlite::params![new.project_id, new.name, new.local_path, new.created_at],
+            rusqlite::params![
+                new.project_id,
+                // Derived here from the canonical workspace path, not accepted from the caller. See
+                // derive_project_display_name for why this lives at this layer.
+                derive_project_display_name(&new.local_path),
+                new.local_path,
+                new.created_at,
+            ],
         )
         .map_err(StorageError::Db)?;
 

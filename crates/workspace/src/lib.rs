@@ -11,9 +11,9 @@
 
 pub mod validation;
 
+pub use mayasaba_storage::{derive_project_display_name, ROOT_WORKSPACE_NAME};
 pub use validation::{
-    derive_project_display_name, validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation,
-    ROOT_WORKSPACE_NAME,
+    validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation,
 };
 
 /// Crate identity, retained for the workspace manifest check.
