@@ -4,7 +4,7 @@
 //! become an authorized workspace, and an authorized workspace must be the canonical path rather than whatever
 //! spelling the UI sent.
 
-use mayasaba_workspace::{validate_workspace_candidate, WorkspaceRejection};
+use mayasaba_workspace::{derive_project_display_name, validate_workspace_candidate, WorkspaceRejection, ROOT_WORKSPACE_NAME};
 
 /// A real directory that exists for the duration of the test.
 fn existing_dir(tag: &str) -> std::path::PathBuf {
@@ -117,4 +117,47 @@ fn every_rejection_has_a_human_message() {
     ] {
         assert!(!rejection.to_string().is_empty(), "{rejection:?} needs a user-facing message");
     }
+}
+#[test]
+fn the_display_name_is_derived_from_the_folder_leaf() {
+    // Nested under the temp dir so the leaf really is `InvoiceAI` and not the helper's own prefixed name.
+    let parent = existing_dir("derived");
+    let dir = parent.join("InvoiceAI");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let result = validate_workspace_candidate(&dir.to_string_lossy()).expect("valid candidate");
+    assert_eq!(
+        result.derived_project_name, "InvoiceAI",
+        "the display name is the folder's own leaf name"
+    );
+    let _ = std::fs::remove_dir_all(&parent);
+}
+
+#[test]
+fn a_filesystem_root_falls_back_rather_than_inventing_a_name() {
+    // `C:\` has no folder name of its own. The rule is a small explicit fallback, not a naming subsystem,
+    // and it must not pretend the fallback is the folder's name.
+    assert_eq!(derive_project_display_name(r"C:\\"), ROOT_WORKSPACE_NAME);
+    assert_eq!(derive_project_display_name("C:\\"), ROOT_WORKSPACE_NAME);
+    // A folder one level below the root still has a real name.
+    assert_eq!(derive_project_display_name(r"C:\Users"), "Users");
+    assert_eq!(derive_project_display_name(r"C:\Users\Pavan\Projects\InvoiceAI"), "InvoiceAI");
+}
+
+#[test]
+fn the_display_name_is_metadata_and_never_an_identity_key() {
+    // Two projects in differently-located folders that share a leaf name must both be creatable and must
+    // remain distinguishable by project_id. This is why no UNIQUE constraint on name or local_path is added.
+    let one = existing_dir("alpha").join("Shared");
+    let two = existing_dir("beta").join("Shared");
+    std::fs::create_dir_all(&one).unwrap();
+    std::fs::create_dir_all(&two).unwrap();
+
+    let a = validate_workspace_candidate(&one.to_string_lossy()).expect("first candidate");
+    let b = validate_workspace_candidate(&two.to_string_lossy()).expect("second candidate");
+    assert_eq!(a.derived_project_name, b.derived_project_name, "the same leaf name is allowed twice");
+    assert_ne!(a.canonical_path, b.canonical_path, "the workspaces are genuinely different folders");
+
+    let _ = std::fs::remove_dir_all(&one);
+    let _ = std::fs::remove_dir_all(&two);
 }

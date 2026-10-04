@@ -11,7 +11,10 @@
 
 pub mod validation;
 
-pub use validation::{validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation};
+pub use validation::{
+    derive_project_display_name, validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation,
+    ROOT_WORKSPACE_NAME,
+};
 
 /// Crate identity, retained for the workspace manifest check.
 pub const CRATE_NAME: &str = "mayasaba-workspace";

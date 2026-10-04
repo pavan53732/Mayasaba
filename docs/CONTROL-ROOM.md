@@ -33,7 +33,7 @@ Show the user-selected local workspace and task-scoped allowed paths. Do not tre
 
 ## Project creation and intake
 
-Project creation begins in the Initial Intake Composer. The user enters a project name, selects a Windows-local workspace folder, and describes the project intent. They may additionally attach local files or folders as supporting context.
+Project creation begins in the Initial Intake Composer. The user selects a Windows-local workspace folder and describes the project intent. The workspace leaf folder name initializes the project’s display name; the project receives an independently generated opaque \project_id\ that is never derived from a path (DEC-050). They may additionally attach local files or folders as supporting context.
 
 The selected workspace is the project's initial filesystem boundary. A typed path is not treated as authorized merely because it is syntactically valid: path existence, locality and policy authorization are separate checks, and the native folder-selection flow is the primary interaction rather than manual entry.
 

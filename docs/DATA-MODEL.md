@@ -51,6 +51,16 @@ UserContribution
 Barrier
 ProjectStatus
 
+### Project
+
+Core identity and display metadata:
+
+- `project_id` — immutable opaque project identity, independently generated and never derived from a path or folder name.
+- `name` — human-readable display name, initialized from the canonical workspace folder's leaf name at creation and independently mutable through an explicit project-settings operation. Display metadata, not identity (DEC-050). A filesystem root has no leaf name and takes the explicit fallback label `Local Workspace`.
+- `local_path` — canonical project workspace root, the initial filesystem and authorization boundary.
+
+The `name` column is retained deliberately: removing it would couple display metadata to filesystem naming forever and eliminate the ability to rename a project without renaming its directory.
+
 ### ProjectContextAttachment — concept only, NOT YET DURABLE
 
 A user-selected local file or directory associated with an intake request or a later project contribution, retained as supporting context and evidence.

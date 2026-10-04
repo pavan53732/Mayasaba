@@ -30,7 +30,6 @@ export function resetTransport(): void {
 
 /** The request shape declared by create_projectRequest. Whitespace is preserved on the way out. */
 export interface CreateProjectRequest {
-  name: string;
   local_path: string;
   initial_brief: string;
 }
@@ -42,6 +41,8 @@ export interface WorkspaceCheck {
   requestedPath: string;
   code: string | null;
   message: string | null;
+  /** Derived by Rust from the canonical folder leaf (DEC-050). The UI displays it; it never computes it. */
+  derivedProjectName: string | null;
 }
 
 /**
@@ -78,7 +79,6 @@ export async function createProject(
 ): Promise<ProjectView | CommandError> {
   try {
     const result = await transport("create_project", {
-      name: request.name,
       localPath: request.local_path,
       initialBrief: request.initial_brief,
     });

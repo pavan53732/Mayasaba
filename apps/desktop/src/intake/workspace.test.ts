@@ -31,11 +31,25 @@ describe("workspace selection is not authorization", () => {
     const authorized = workspaceReducer(selected, {
       type: "authorized",
       canonicalPath: "C:\\work\\proj",
+      derivedProjectName: "proj",
     });
     assert.equal(authorized.kind, "authorized");
     assert.ok(isAuthorized(authorized));
-    // The canonical path is what gets persisted, and it is Rust's value, not the UI's spelling.
+    // The canonical path and the derived name are both Rust's values, not the UI's spelling or its own
+    // basename computation.
     assert.equal(authorized.kind === "authorized" ? authorized.canonicalPath : "", "C:\\work\\proj");
+    assert.equal(authorized.kind === "authorized" ? authorized.derivedProjectName : "", "proj");
+  });
+
+  test("the display name comes from Rust, never from a client-side basename", () => {
+    // The UI is not permitted to compute the project name. Rust derives it, so the preview and the persisted
+    // value cannot drift apart (DEC-050).
+    const authorized = workspaceReducer(
+      workspaceReducer(emptyWorkspace, { type: "edit", requestedPath: "C:\\clients\\spelling\\differs" }),
+      { type: "authorized", canonicalPath: "C:\\canonical\\InvoiceAI", derivedProjectName: "InvoiceAI" },
+    );
+    assert.equal(authorized.kind === "authorized" ? authorized.derivedProjectName : "", "InvoiceAI");
+    assert.notEqual(authorized.kind === "authorized" ? authorized.derivedProjectName : "", "differs");
   });
 
   test("a rejection is invalid, never authorized", () => {
@@ -52,7 +66,7 @@ describe("workspace selection is not authorization", () => {
   test("canonicalization from Rust replaces the candidate spelling", () => {
     // The UI sent "C:\\work\\..\\work\\proj"; Rust answered with the canonical root. That value is authoritative.
     const candidate = workspaceReducer(emptyWorkspace, { type: "edit", requestedPath: "C:\\work\\..\\work\\proj" });
-    const authorized = workspaceReducer(candidate, { type: "authorized", canonicalPath: "C:\\work\\proj" });
+    const authorized = workspaceReducer(candidate, { type: "authorized", canonicalPath: "C:\\work\\proj", derivedProjectName: "proj" });
     assert.equal(authorized.kind === "authorized" ? authorized.requestedPath : "", "C:\\work\\..\\work\\proj");
     assert.equal(authorized.kind === "authorized" ? authorized.canonicalPath : "", "C:\\work\\proj");
   });
@@ -76,7 +90,7 @@ describe("workspace picker lifecycle", () => {
 
   test("cancelling a later browse keeps an already authorized workspace", () => {
     // An abandoned browse must not discard a workspace the user already chose.
-    const authorized = workspaceReducer(selected, { type: "authorized", canonicalPath: "C:\\work\\proj" });
+    const authorized = workspaceReducer(selected, { type: "authorized", canonicalPath: "C:\\work\\proj", derivedProjectName: "proj" });
     const afterCancel = workspaceReducer(
       workspaceReducer(authorized, { type: "browse" }),
       { type: "cancelled" },
@@ -93,7 +107,7 @@ describe("workspace picker lifecycle", () => {
   test("every non-authorized state fails the create requirement", () => {
     const states: WorkspaceState[] = [
       emptyWorkspace,
-      { kind: "selecting", retain: null },
+      { kind: "selecting", retain: emptyWorkspace },
       selected,
       { kind: "invalid", requestedPath: "x", code: "WORKSPACE_EMPTY", message: "no" },
     ];

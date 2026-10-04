@@ -3,7 +3,7 @@
 ## Functional requirements
 
 ### FR-001 Project creation and workspace selection
-The user can create a project by providing a project name, selecting a Windows-local workspace, and describing the initial project intent. The project, `ProjectBrief` version 1, the initial epoch and the `PROJECT_CREATED` event are persisted atomically, so a project can never exist without its intent anchor.
+The user can create a project by selecting a Windows-local workspace and describing the initial project intent. The system derives the initial human-readable project display name from the selected workspace folder name and generates an independent opaque \project_id\. The user is not required to enter a project name separately during creation. The project, `ProjectBrief` version 1, the initial epoch and the `PROJECT_CREATED` event are persisted atomically, so a project can never exist without its intent anchor.
 
 The selected workspace is the project's initial filesystem boundary. Native Windows folder selection is the primary interaction; manual path entry passes identical validation before authorization. Blank project names and whitespace-only project intent are rejected before anything is persisted. Successful creation returns the authoritative persisted projection, which the Control Room renders in place of the submitted draft.
 

@@ -58,6 +58,43 @@ pub struct WorkspaceValidation {
     pub canonical_path: String,
     /// The path the user actually selected, before normalization.
     pub requested_path: String,
+    /// Initial human-readable project display name, derived from the canonical folder's leaf name
+    /// (DEC-050). The Control Room displays this; it does not derive its own.
+    pub derived_project_name: String,
+}
+
+/// Display name used when a workspace has no usable leaf name.
+///
+/// A filesystem root such as `C:\` has no folder name of its own. Rather than inventing something that
+/// pretends to be the folder's name, or persisting an empty name, a workspace root gets an explicit label.
+pub const ROOT_WORKSPACE_NAME: &str = "Local Workspace";
+
+/// Derive the initial display name from a canonical workspace path.
+///
+/// The display name is metadata, not identity: `project_id` is generated independently and is never derived
+/// from a path. Two projects may therefore begin with the same display name without colliding, and a later
+/// rename of the folder does not silently change project identity (DEC-050).
+pub fn derive_project_display_name(canonical_path: &str) -> String {
+    let path = Path::new(canonical_path);
+
+    // `C:\` canonicalizes with a trailing separator, and `Path::file_name` returns None for a root. Check the
+    // components so a path like `C:\Users` yields `Users` while a bare root yields the explicit fallback.
+    let leaf = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .or_else(|| {
+            path.components()
+                .filter_map(|c| match c {
+                    std::path::Component::Normal(n) => Some(n.to_string_lossy().into_owned()),
+                    _ => None,
+                })
+                .next_back()
+        });
+
+    match leaf {
+        Some(name) if !name.trim().is_empty() => name,
+        _ => ROOT_WORKSPACE_NAME.to_string(),
+    }
 }
 
 /// Validate a user-selected folder as a candidate workspace root.
@@ -92,9 +129,11 @@ pub fn validate_workspace_candidate(candidate: &str) -> Result<WorkspaceValidati
     // Canonicalize resolves `..`, relative segments and short names, so the persisted root is unambiguous and a
     // later comparison against it cannot be fooled by a different spelling of the same folder.
     let canonical = path.canonicalize().map_err(|_| WorkspaceRejection::NotAccessible)?;
+    let canonical_path = canonical.to_string_lossy().into_owned();
 
     Ok(WorkspaceValidation {
-        canonical_path: canonical.to_string_lossy().into_owned(),
+        derived_project_name: derive_project_display_name(&canonical_path),
+        canonical_path,
         requested_path: trimmed.to_string(),
     })
 }

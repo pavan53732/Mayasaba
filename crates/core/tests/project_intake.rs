@@ -11,8 +11,14 @@ use mayasaba_core::project_service::{
 
 /// A real local directory, because `create_project` now validates the workspace and refuses fabricated paths.
 /// Tests that pass a path which does not exist are asserting the rejection path, not creation.
+///
+/// Unique per call: the test binary runs these in parallel threads within one process, so a shared directory
+/// would be removed and recreated underneath a concurrent test and surface as a spurious access failure.
 fn workspace_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("mayasaba-intake-{}-{}", std::process::id(), tag));
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("mayasaba-intake-{}-{}-{}", std::process::id(), tag, n));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create workspace dir");
     dir
@@ -20,7 +26,6 @@ fn workspace_dir(tag: &str) -> std::path::PathBuf {
 
 fn request() -> CreateProjectRequest {
     CreateProjectRequest {
-        name: "Mayasaba".to_string(),
         local_path: workspace_dir("default").to_string_lossy().into_owned(),
         initial_brief_body: "Build a local-first control plane for coordinating CLI coding agents.".to_string(),
         brief_source: None,
@@ -40,7 +45,7 @@ fn creates_project_brief_epoch_and_event_atomically() {
     let project = created_project(service.create_project(&request()).expect("creation should succeed"));
 
     // Authoritative readback: the record carries the brief, so the anchor exists.
-    assert_eq!(project.name, "Mayasaba");
+    // The display name is DERIVED from the workspace folder leaf, not supplied by the caller (DEC-050).
     assert_eq!(project.phase, "DISCOVERY");
     assert_eq!(project.status, "ACTIVE");
     assert_eq!(project.current_epoch, 0, "a new project starts at epoch 0");
@@ -49,6 +54,16 @@ fn creates_project_brief_epoch_and_event_atomically() {
     assert_eq!(
         project.brief_body.as_deref(),
         Some("Build a local-first control plane for coordinating CLI coding agents.")
+    );
+
+    let expected_name = std::path::Path::new(&project.local_path)
+        .file_name()
+        .expect("the workspace root has a leaf name")
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(
+        project.name, expected_name,
+        "the persisted display name must be the canonical workspace folder's leaf name"
     );
 
     // All four writes are present, and only one of each.
@@ -100,15 +115,8 @@ fn a_blank_initial_brief_is_rejected_before_anything_is_persisted() {
 }
 
 #[test]
-fn empty_name_and_path_are_rejected() {
+fn an_empty_workspace_path_is_rejected() {
     let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000000");
-
-    let mut no_name = request();
-    no_name.name = "  ".to_string();
-    assert!(matches!(
-        service.create_project(&no_name),
-        Err(CreateProjectError::Validation(ProjectValidationError::EmptyField("name")))
-    ));
 
     let mut no_path = request();
     no_path.local_path = "".to_string();
@@ -144,7 +152,6 @@ fn two_projects_may_share_a_local_path_because_the_contract_does_not_forbid_it()
     service.create_project(&first).expect("first project");
 
     let mut second = request();
-    second.name = "Second".to_string();
     second.local_path = shared.to_string_lossy().into_owned();
     service.create_project(&second).expect("second project on the same path is currently permitted");
 

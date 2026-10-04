@@ -67,11 +67,10 @@ Submitting an answer calls the existing `answer_user_question` command. Show the
 
 ### Initial Intake Composer
 
-The Initial Intake Composer is the project-creation surface. It has three distinct inputs, and conflating them is the failure mode to avoid:
+The Initial Intake Composer is the project-creation surface. It has two required user inputs, and conflating them with project identity is the failure mode to avoid:
 
-1. **Project name** — the human-readable project identifier.
-2. **Local workspace** — a user-selected Windows folder that becomes the project's initial authorized workspace root. This is an authorization boundary, not descriptive metadata.
-3. **Project intent** — free-text description of what the user wants Mayasaba to accomplish.
+1. **Local workspace** — a user-selected Windows folder that becomes the project's initial authorized workspace root and initializes its display name. This is an authorization boundary, not descriptive metadata.
+2. **Project intent** — free-text description of what the user wants Mayasaba to accomplish.
 
 The workspace control uses native Windows folder selection as the primary interaction. Manual path entry may be offered, but a typed path is a *candidate*, not evidence that the path exists, is local, or is authorized: those are separate checks performed before persistence. No placeholder, hint or prefilled value may render in a way that resembles an authorized workspace.
 

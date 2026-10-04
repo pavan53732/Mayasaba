@@ -26,13 +26,18 @@ export interface CommandError {
   message: string;
 }
 
+/**
+ * What the user actually supplies at intake.
+ *
+ * There is deliberately no `name`: the display name is derived by Rust from the authorized workspace folder
+ * (DEC-050), so the draft must not contain a second, competing name. The draft is only user input.
+ */
 export interface Draft {
-  name: string;
   localPath: string;
   initialBrief: string;
 }
 
-export const EMPTY_DRAFT: Draft = { name: "", localPath: "", initialBrief: "" };
+export const EMPTY_DRAFT: Draft = { localPath: "", initialBrief: "" };
 
 /**
  * Workspace selection state.
@@ -44,20 +49,48 @@ export const EMPTY_DRAFT: Draft = { name: "", localPath: "", initialBrief: "" };
  * The same reasoning as the project-truth boundary applies one level down: the UI may represent a candidate,
  * but only Rust establishes the workspace.
  */
+/**
+ * A picker is open. `retain` is the state cancelling restores, so an abandoned browse cannot discard a
+ * workspace the user already chose. Declared as an interface because a type alias cannot reference itself.
+ */
+export interface SelectingWorkspace {
+  kind: "selecting";
+  retain: WorkspaceState;
+}
+
+export interface CandidateWorkspace {
+  kind: "candidate";
+  requestedPath: string;
+}
+
+export interface InvalidWorkspace {
+  kind: "invalid";
+  requestedPath: string;
+  code: string;
+  message: string;
+}
+
+export interface AuthorizedWorkspace {
+  kind: "authorized";
+  requestedPath: string;
+  canonicalPath: string;
+  /** Derived by Rust from the canonical folder leaf. The UI displays it; it never computes it. */
+  derivedProjectName: string;
+}
+
 export type WorkspaceState =
   | { kind: "empty" }
-  /** A picker is open. `retain` is what cancelling restores, so an abandoned browse cannot discard a workspace the user already chose. */
-  | { kind: "selecting"; retain: string | null }
-  | { kind: "candidate"; requestedPath: string }
-  | { kind: "invalid"; requestedPath: string; code: string; message: string }
-  | { kind: "authorized"; requestedPath: string; canonicalPath: string };
+  | SelectingWorkspace
+  | CandidateWorkspace
+  | InvalidWorkspace
+  | AuthorizedWorkspace;
 
 export type WorkspaceAction =
   | { type: "browse" }
   | { type: "selected"; path: string }
   | { type: "cancelled" }
   | { type: "checking" }
-  | { type: "authorized"; canonicalPath: string }
+  | { type: "authorized"; canonicalPath: string; derivedProjectName: string }
   | { type: "rejected"; code: string; message: string }
   | { type: "edit"; requestedPath: string };
 
@@ -68,22 +101,16 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case "browse":
       // Guard a second dialog while one is already open.
       if (state.kind === "selecting") return state;
-      return {
-        kind: "selecting",
-        retain: state.kind === "authorized" ? state.canonicalPath : null,
-      };
+      return { kind: "selecting", retain: state };
 
     case "selected":
       // A selection is only a candidate until Rust validates it.
       return { kind: "candidate", requestedPath: action.path };
 
     case "cancelled":
-      // Cancelling the picker changes nothing. A previously authorized workspace is not discarded by an
-      // abandoned browse.
+      // Cancelling the picker changes nothing: the state the browse started from is restored exactly.
       if (state.kind !== "selecting") return state;
-      return state.retain === null
-        ? emptyWorkspace
-        : { kind: "authorized", requestedPath: state.retain, canonicalPath: state.retain };
+      return state.retain;
 
     case "checking":
       if (state.kind !== "candidate") return state;
@@ -94,6 +121,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         kind: "authorized",
         requestedPath: state.kind === "candidate" ? state.requestedPath : action.canonicalPath,
         canonicalPath: action.canonicalPath,
+        derivedProjectName: action.derivedProjectName,
       };
 
     case "rejected":
@@ -113,7 +141,9 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 }
 
 /** Only an authorized workspace may be submitted. */
-export function isAuthorized(state: WorkspaceState): state is { kind: "authorized"; requestedPath: string; canonicalPath: string } {
+export function isAuthorized(
+  state: WorkspaceState,
+): state is { kind: "authorized"; requestedPath: string; canonicalPath: string; derivedProjectName: string } {
   return state.kind === "authorized";
 }
 

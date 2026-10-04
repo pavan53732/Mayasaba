@@ -68,6 +68,9 @@ struct WorkspaceCheck {
     status: &'static str,
     canonical_path: Option<String>,
     requested_path: String,
+    /// Derived here so the Control Room displays the same value that `create_project` will persist. If React
+    /// computed the name itself, the preview and the stored value would be two derivations that can drift.
+    derived_project_name: Option<String>,
     code: Option<String>,
     message: Option<String>,
 }
@@ -80,6 +83,7 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
         Ok(ok) => WorkspaceCheck {
             status: "AUTHORIZED",
             canonical_path: Some(ok.canonical_path),
+            derived_project_name: Some(ok.derived_project_name),
             requested_path: ok.requested_path,
             code: None,
             message: None,
@@ -87,6 +91,7 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
         Err(rejection) => WorkspaceCheck {
             status: "INVALID",
             canonical_path: None,
+            derived_project_name: None,
             requested_path: path,
             code: Some(rejection.code().to_string()),
             message: Some(rejection.to_string()),
@@ -97,12 +102,13 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
 #[tauri::command]
 fn create_project(
     service: State<'_, Mutex<ProjectService>>,
-    name: String,
     local_path: String,
     initial_brief: String,
 ) -> Result<ProjectView, CommandError> {
+    // No `name` argument. The display name is derived from the validated canonical workspace path by the
+    // owning service, so the caller cannot supply identity metadata that disagrees with the filesystem
+    // (DEC-050).
     let request = CreateProjectRequest {
-        name,
         local_path,
         initial_brief_body: initial_brief,
         brief_source: None,

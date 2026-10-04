@@ -66,7 +66,8 @@ PROJECT_CREATED is entered from the Control Room intake surface, where the user 
 
 The intake request carries four things, which must not be collapsed:
 
-- **project name** — identity;
+- **\project_id\** — independently generated immutable project identity, never derived from a path;
+- **project display name** — derived by the owning service from the canonical workspace folder leaf name, and independently mutable only through a later project-settings operation (DEC-050). The UI does not compute it.
 - **selected local workspace** — the initial filesystem scope, subject to PolicyService validation. A typed path is a candidate, not an authorization (DEC-048);
 - **`ProjectBriefDraft`** — which becomes `ProjectBrief` version 1 only when `create_project` commits;
 - **optional local context attachments** — supporting references that remain context until an owning service explicitly consumes them (DEC-049).

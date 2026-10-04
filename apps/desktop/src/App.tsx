@@ -45,8 +45,12 @@ export default function App() {
     dispatchWorkspace({ type: "selected", path: picked });
     // Selection is not authorization. Rust decides whether the folder is usable.
     const check = await validateWorkspace(picked);
-    if (check.status === "AUTHORIZED" && check.canonicalPath) {
-      dispatchWorkspace({ type: "authorized", canonicalPath: check.canonicalPath });
+    if (check.status === "AUTHORIZED" && check.canonicalPath && check.derivedProjectName) {
+      dispatchWorkspace({
+        type: "authorized",
+        canonicalPath: check.canonicalPath,
+        derivedProjectName: check.derivedProjectName,
+      });
     } else {
       dispatchWorkspace({
         type: "rejected",
@@ -59,7 +63,6 @@ export default function App() {
   const onSubmit = useCallback(async () => {
     dispatch({ type: "submit" });
     const result = await createProject({
-      name: draft.name,
       local_path: authorized ? workspace.canonicalPath : draft.localPath,
       initial_brief: draft.initialBrief,
     });
@@ -76,10 +79,7 @@ export default function App() {
   // string the UI merely holds can never become a project workspace root.
   const canSubmit = useMemo(
     () =>
-      !pending &&
-      authorized &&
-      draft.name.trim() !== "" &&
-      draft.initialBrief.trim() !== "",
+      !pending && authorized && draft.initialBrief.trim() !== "",
     [pending, authorized, draft],
   );
 
@@ -132,16 +132,6 @@ function Composer(props: {
         accomplished.
       </p>
 
-      <label style={field}>
-        Project name
-        <input
-          value={draft.name}
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, name: e.target.value })}
-          style={input}
-        />
-      </label>
-
       <div style={field}>
         <span>Local workspace</span>
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -156,6 +146,16 @@ function Composer(props: {
           </button>
         </div>
         <WorkspaceStatus workspace={workspace} />
+
+        {authorized ? (
+          <div style={{ ...derivedBox }}>
+            <span style={derivedLabel}>Project</span>
+            <strong style={{ display: "block", marginTop: 2 }}>{workspace.derivedProjectName}</strong>
+            <span style={{ ...hint, display: "block", marginTop: 2 }}>
+              Taken from the selected folder. Mayasaba names the project after its workspace.
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <label style={field}>
@@ -303,6 +303,20 @@ const notice: React.CSSProperties = {
   fontSize: 13,
 };
 const hint: React.CSSProperties = { color: "#6b7280", fontSize: 12, lineHeight: 1.5 };
+const derivedBox: React.CSSProperties = {
+  marginTop: 10,
+  padding: "8px 10px",
+  border: "1px solid #e5e7eb",
+  borderRadius: 6,
+  background: "#f9fafb",
+  fontSize: 14,
+};
+const derivedLabel: React.CSSProperties = {
+  color: "#6b7280",
+  fontSize: 12,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+};
 const browseButton: React.CSSProperties = {
   padding: "8px 14px",
   borderRadius: 6,

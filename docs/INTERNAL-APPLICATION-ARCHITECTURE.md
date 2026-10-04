@@ -31,7 +31,8 @@ MCF-v2 remains the only canonical communication contract between Mayasaba and ag
 
 The Initial Intake Composer carries three classes of user-provided data that must not be conflated:
 
-- **Project identity** — the project name.
+- **Project identity** — immutable opaque \project_id\, never derived from a path or folder name.
+- **Project display name** — initialized from the selected workspace folder name, independently editable only through a later project-settings operation.
 - **Workspace authorization input** — a user-selected local Windows folder. This is a candidate authorization input, not an authorization; existence, locality and policy are separate checks (DEC-048).
 - **Project intent** — free-text content persisted as `ProjectBrief` version 1.
 

@@ -1,9 +1,11 @@
 // Tests for the intake state machine and the authority boundary.
 //
-// Run with: node --experimental-strip-types --test apps/desktop/src/intake/state.test.ts
+// Run with: npm test
 //
-// The load-bearing test is `accepted state displays committed values rather than the submitted draft`.
-// Everything else supports it.
+// The load-bearing test is in `authority boundary`: after success the UI must display what the service
+// committed, never the submitted draft. The draft has no name field at all, because the display name is
+// derived by Rust from the workspace folder (DEC-050) - so the authority property is proven on the brief
+// body, which the service does normalize.
 
 import assert from "node:assert/strict";
 import { test, describe } from "node:test";
@@ -23,16 +25,15 @@ import {
 import { createProject, resetTransport, setTransport } from "./bridge.ts";
 
 const draft: Draft = {
-  name: "  My Project  ",
   localPath: "  C:\\work\\proj  ",
   initialBrief: "  Build something real.  ",
 };
 
-// What the service actually committed. Every field differs from the draft on purpose: whitespace is
-// trimmed, and this is the only thing the UI is allowed to show after success.
+// What the service actually committed. The brief is trimmed and the display name is derived from the
+// workspace folder - neither value came from the submitted draft.
 const committed: ProjectView = {
   projectId: "prj_abc123",
-  name: "My Project",
+  name: "proj",
   localPath: "C:\\work\\proj",
   phase: "DISCOVERY",
   status: "ACTIVE",
@@ -46,13 +47,23 @@ function submit(): IntakeState {
   return intakeReducer(intakeReducer(initialState, { type: "edit", draft }), { type: "submit" });
 }
 
+function createdProject(outcome: { kind: "created"; project: ProjectView } | never): ProjectView {
+  return outcome.kind === "created" ? outcome.project : (() => { throw new Error("expected created"); })();
+}
+
 describe("intake state machine", () => {
   test("draft state holds unpersisted input and nothing authoritative", () => {
     const state = intakeReducer(initialState, { type: "edit", draft });
     assert.equal(state.kind, "editing");
-    assert.equal(draftOf(state).name, "  My Project  ");
+    assert.equal(draftOf(state).initialBrief, draft.initialBrief);
     assert.ok(!("project" in state), "an editing state must carry no authoritative projection");
     assert.ok(hasDraft(state));
+  });
+
+  test("the draft carries no project name, because Rust derives it", () => {
+    // A name in the draft would be a second source of identity metadata that could disagree with the
+    // persisted value (DEC-050).
+    assert.deepEqual(Object.keys(EMPTY_DRAFT).sort(), ["initialBrief", "localPath"]);
   });
 
   test("submitting retains the draft and carries no authoritative field", () => {
@@ -65,8 +76,7 @@ describe("intake state machine", () => {
 
   test("submit is ignored while already submitting, because create_project is not idempotent", () => {
     const once = submit();
-    const twice = intakeReducer(once, { type: "submit" });
-    assert.equal(twice, once, "a second submit must be a no-op, not a second in-flight request");
+    assert.equal(intakeReducer(once, { type: "submit" }), once, "a second submit must be a no-op");
   });
 
   test("submit is ignored after acceptance", () => {
@@ -78,18 +88,15 @@ describe("intake state machine", () => {
     const error: CommandError = { code: "BLANK_INITIAL_BRIEF", message: "initial_brief.body must contain project intent" };
     const state = intakeReducer(submit(), { type: "rejected", error });
     assert.equal(state.kind, "rejected");
-    assert.equal(draftOf(state).name, draft.name, "a refused request must not force the user to retype");
+    assert.equal(draftOf(state).initialBrief, draft.initialBrief, "a refused request must not force the user to retype");
     assert.equal(state.kind === "rejected" ? state.error.code : "", "BLANK_INITIAL_BRIEF");
   });
 
   test("editing after a rejection returns to editing with the draft intact", () => {
-    const rejected = intakeReducer(submit(), {
-      type: "rejected",
-      error: { code: "STORAGE_FAILURE", message: "disk" },
-    });
+    const rejected = intakeReducer(submit(), { type: "rejected", error: { code: "STORAGE_FAILURE", message: "disk" } });
     const edited = intakeReducer(rejected, { type: "edit", draft });
     assert.equal(edited.kind, "editing");
-    assert.equal(draftOf(edited).name, draft.name);
+    assert.equal(draftOf(edited).initialBrief, draft.initialBrief);
   });
 });
 
@@ -98,30 +105,26 @@ describe("authority boundary", () => {
   // If the reducer leaked any draft field into the accepted state, this fails.
   test("accepted state displays committed values rather than the submitted draft", () => {
     const state = intakeReducer(submit(), { type: "accepted", project: committed });
-
     assert.equal(state.kind, "created");
     assert.ok(!hasDraft(state), "an accepted state must not carry a draft");
 
     const project = state.kind === "created" ? state.project : undefined;
     assert.ok(project);
-    assert.equal(project!.name, "My Project", "display the stored name, not '  My Project  '");
-    assert.equal(project!.name, project!.name.trim(), "no field may retain submitted whitespace");
+    assert.equal(project!.briefBody, "Build something real.", "display the stored brief, not '  Build something real.  '");
+    assert.equal(project!.briefBody, project!.briefBody.trim(), "no field may retain submitted whitespace");
     assert.equal(project!.localPath, "C:\\work\\proj");
-    assert.equal(project!.briefBody, "Build something real.");
+    assert.equal(project!.name, "proj", "the display name comes from the workspace folder, not the draft");
     assert.equal(project!.briefVersion, 1);
     assert.equal(project!.currentEpoch, 0);
   });
 
   test("the accepted state is built from the projection alone, even when it contradicts the draft", () => {
-    // The audit's suggested mutation: the service returns a name that is not what was submitted. The UI must
-    // show the returned name. This is what proves the UI is consuming authority rather than reconstructing
-    // its own project object from the form.
-    const stored = { ...committed, name: "My Project (stored)", phase: "DISCOVERY" };
+    // The audit's suggested mutation: the service returns a name that is not what was submitted anywhere. The
+    // UI must show the returned value, proving it consumes authority rather than reconstructing from the form.
+    const stored = { ...committed, name: "proj (stored)", phase: "DISCOVERY" };
     const state = intakeReducer(submit(), { type: "accepted", project: stored });
-
     const project = state.kind === "created" ? state.project : undefined;
-    assert.equal(project!.name, "My Project (stored)");
-    assert.notEqual(project!.name, draft.name.trim(), "the submitted value must not resurface");
+    assert.equal(project!.name, "proj (stored)");
   });
 
   test("draftOf reports no draft once the service has committed", () => {
@@ -134,7 +137,7 @@ describe("transport boundary", () => {
   test("createProject returns the projection the service sent", async () => {
     resetTransport();
     setTransport(async () => committed);
-    const result = await createProject({ name: "x", local_path: "y", initial_brief: "z" });
+    const result = await createProject({ local_path: "y", initial_brief: "z" });
     assert.deepEqual(result, committed);
     resetTransport();
   });
@@ -144,37 +147,36 @@ describe("transport boundary", () => {
     setTransport(async () => {
       throw { code: "BLANK_INITIAL_BRIEF", message: "initial_brief.body must contain project intent" };
     });
-    const result = await createProject({ name: "x", local_path: "y", initial_brief: " " });
+    const result = await createProject({ local_path: "y", initial_brief: " " });
     assert.ok(!isProjectView(result));
     assert.equal((result as CommandError).code, "BLANK_INITIAL_BRIEF");
     resetTransport();
   });
 
   test("a non-contract rejection never becomes an optimistic success", async () => {
-    // If Rust ever throws something that is not a CommandError, the UI must not treat it as a created
-    // project. Inventing a success here is how a UI ends up displaying authority it never received.
     resetTransport();
     setTransport(async () => {
       throw new Error("ipc channel closed");
     });
-    const result = await createProject({ name: "x", local_path: "y", initial_brief: "z" });
+    const result = await createProject({ local_path: "y", initial_brief: "z" });
     assert.ok(!isProjectView(result));
     assert.equal((result as CommandError).code, "TRANSPORT_FAILURE");
     resetTransport();
   });
 
-  test("the request reaches the command with the argument names Rust expects", async () => {
-    // Rust takes camelCase Tauri arguments; the declared payload is snake_case. A mismatch here would be a
-    // silent field-name bug, so the mapping is asserted rather than assumed.
+  test("the request sends no name, because the service derives the display name", async () => {
+    // Rust takes camelCase Tauri arguments. If a name were sent it would either be ignored or reintroduce
+    // caller-supplied identity metadata, which DEC-050 removed from the contract.
     resetTransport();
     let seen: { command: string; args: Record<string, unknown> } | null = null;
     setTransport(async (command, args) => {
       seen = { command, args };
       return committed;
     });
-    await createProject({ name: "n", local_path: "p", initial_brief: "b" });
+    await createProject({ local_path: "p", initial_brief: "b" });
     assert.equal(seen!.command, "create_project");
-    assert.deepEqual(seen!.args, { name: "n", localPath: "p", initialBrief: "b" });
+    assert.deepEqual(seen!.args, { localPath: "p", initialBrief: "b" });
+    assert.ok(!("name" in seen!.args), "create_project must not carry a name argument");
     resetTransport();
   });
 });

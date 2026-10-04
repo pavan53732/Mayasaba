@@ -9,10 +9,9 @@
       "cancellable": true,
       "atomicity": "one domain transaction: project row, ProjectBrief version 1, PROJECT_CREATED event, and the initial epoch are committed together. A project must never exist without its intent anchor, so brief v1 is not a follow-up call - it is part of create_project.",
       "request_fields": [
-        {"name":"name","type":"string","required":true,"description":"Human-readable project name"},
-        {"name":"local_path","type":"string","required":true,"description":"Authorized local workspace path"},
+        {"name":"local_path","type":"string","required":true,"description":"Candidate local workspace folder. Validated and canonicalized by ProjectService."},
         {"name":"initial_brief","type":"ProjectBriefDraft","required":true,"description":"The user's stated project intent. Persisted as ProjectBrief version 1 and, once DISCOVERY closes, becomes the immutable analysis anchor for that lineage (DEC-030)."},
-        {"name":"project_paths","type":"ProjectPathDraft[]","required":false,"description":"Task-scoped allowed paths; defaults to the workspace root only"}
+        {"name":"project_paths","type":"ProjectPathDraft[]","required":false,"description":"Task-scoped allowed paths; defaults to the workspace root only. The project display name is derived by ProjectService from the canonical workspace folder name and is not caller-supplied at creation (DEC-050)."}
       ]
     },
     "open_project": {

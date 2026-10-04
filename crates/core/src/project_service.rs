@@ -26,9 +26,11 @@ pub fn validate_workspace(candidate: &str) -> Result<WorkspaceValidation, Worksp
 }
 
 /// Request as declared by `create_projectRequest` in `schemas/tauri-bridge-v1/payload-types.json`.
+///
+/// There is no `name` field. The display name is derived by the owning service from the validated canonical
+/// workspace path, so the UI cannot supply identity metadata that disagrees with the filesystem (DEC-050).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateProjectRequest {
-    pub name: String,
     pub local_path: String,
     pub initial_brief_body: String,
     pub brief_source: Option<String>,
@@ -117,7 +119,9 @@ impl ProjectService {
 
         let new = NewProject {
             project_id: format!("prj_{}", Self::digest(&format!("project:{nonce}"))),
-            name: req.name.trim().to_string(),
+            // Derived by the owning service from the canonical workspace folder name. The caller supplies no
+            // name, so the UI cannot invent identity metadata that disagrees with the filesystem.
+            name: workspace.derived_project_name.clone(),
             local_path: workspace.canonical_path,
             brief_id: format!("brf_{}", Self::digest(&format!("brief:{nonce}"))),
             brief_body: req.initial_brief_body.trim().to_string(),
@@ -133,9 +137,6 @@ impl ProjectService {
 
     /// The structural half of the contract. A request that fails here never reaches persistence.
     pub fn validate(req: &CreateProjectRequest) -> Result<(), ProjectValidationError> {
-        if req.name.trim().is_empty() {
-            return Err(ProjectValidationError::EmptyField("name"));
-        }
         if req.local_path.trim().is_empty() {
             return Err(ProjectValidationError::EmptyField("local_path"));
         }

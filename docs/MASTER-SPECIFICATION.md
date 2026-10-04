@@ -12,6 +12,8 @@ Mayasaba is not a fifth AI brain. The three agents retain their own intelligence
 
 Project creation begins by selecting a Windows-local workspace folder that Mayasaba is authorized to operate within. The workspace is a filesystem and authorization boundary, not descriptive metadata. The initial project intent is entered separately and persisted as `ProjectBrief` version 1.
 
+The selected folder's leaf name initializes the project's human-readable display name. The project also receives an independently generated opaque `project_id`; a folder name or path is never used as a durable identity key, so two projects may begin with the same display name without colliding. A future project-settings flow may change the display name independently of the workspace folder; such a rename changes display metadata only and never `project_id` or workspace identity (DEC-050).
+
 The Control Room may allow manual entry of a local path, but native Windows folder selection is the primary interaction. A typed path is a candidate rather than an authorization: path existence, locality and policy authorization are separate checks performed before anything is persisted. A successful selection is normalized to the canonical local path representation.
 
 The initial intent may reference attached local files or folders. Attachments are supporting project context with explicit source provenance; they do not replace or mutate the `ProjectBrief` and do not become project truth merely by being attached.

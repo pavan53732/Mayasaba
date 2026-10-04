@@ -53,6 +53,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-047 | `create_project` is not specified as idempotent; a client-supplied retry key, its uniqueness scope, replay behaviour and response semantics require a separate decision before retry safety can be claimed | SOFT_DECISION |
 | DEC-048 | A workspace is an authorization boundary; native Windows folder selection is the primary intake interaction, and a manually typed path is a candidate requiring the same validation | HARD_LOCK |
 | DEC-049 | Initial-intake attachments are supporting context and evidence with source provenance, never project truth by attachment alone | HARD_LOCK |
+| DEC-050 | The Initial Intake Composer takes no project-name field; the display name is derived by the owning service from the validated canonical workspace folder leaf, and `project_id` is never derived from a path | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -316,7 +317,30 @@ Nothing in the architecture or in `schema.sql` makes `local_path` unique, so the
 rule — two projects on one path are permitted — rather than quietly adding a constraint in a test. That
 question needs its own decision.
 
-## DEC-048 and DEC-049 records
+## DEC-048, DEC-049 and DEC-050 records
+
+### DEC-050 the workspace folder names the project
+
+Classification: REFINEMENT. The intake surface loses an input; the machine contract loses a field.
+
+| Field | Value |
+|---|---|
+| Previous behavior | `create_projectRequest` required `name`. The Control Room asked for a project name and a workspace path as two separate user inputs, and the service trimmed and stored the name independently. |
+| New behavior | `create_projectRequest` has no `name`. `ProjectService` derives the display name from the validated canonical workspace path's leaf folder name. `project_id` remains an independently generated opaque identity and is never derived from a path or folder name. |
+| Reason | The two inputs duplicated one fact and could disagree: a project called `InvoiceAI` rooted at `C:\Work\Billing` is a contradiction the user has to resolve without knowing which one wins. Deriving removes the contradiction at the source. It also strengthens the authority model rather than weakening it — the UI cannot supply identity metadata that disagrees with the filesystem, which is the same rule the intake authority boundary already enforces for project truth. |
+| Compatibility impact | Breaking wire change. `create_projectRequest.required` drops `name`, and `create_project` no longer accepts a `name` argument. The `projects.name` column is retained deliberately: deleting it would couple display metadata to filesystem naming forever and remove the ability to rename a project without renaming a directory. |
+| Ownership | `crates/workspace` derives the name, because WorkspaceService owns the workspace concept and the name is a function of the workspace. `create_project` uses the same derivation, so the Control Room preview and the persisted value come from one implementation. The UI is not permitted to compute a basename. |
+| Root folders | A filesystem root has no leaf folder name. `C:\` yields the explicit label `Local Workspace` rather than an empty name or an invented one. `C:\Users` still yields `Users`. This is a small rule with a test, not a naming subsystem. |
+| Duplicate names | Two projects in different folders may share a leaf name. No uniqueness constraint is added on `name` or `local_path`, because the display name is metadata and `local_path` uniqueness remains separately undecided under DEC-047. |
+| Future rename | Changing the display name is a separate project-settings operation. It changes display metadata only and never `project_id` or workspace identity. No implicit synchronization between folder rename and project name is permitted in either direction. |
+
+Two defects found by implementing rather than specifying
+1. The three intake tests failed the moment the workspace became a real validated directory, because parallel
+   tests in one process shared a temp path and raced on remove-and-recreate. The helper now allocates a
+   unique directory per call.
+2. `WorkspaceState` needed `retain` to hold the prior state so cancelling a browse could restore it. Making
+   that field a `WorkspaceState` is circular inside a type alias, so the states are now declared as
+   interfaces. `tsc` caught both the recursion and a test literal that had not been updated.
 
 ### DEC-048 workspace selection is an authorization act, not a string field
 
