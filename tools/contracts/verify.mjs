@@ -1063,6 +1063,123 @@ validateAgainst("schemas/service-contracts-v1/registry.json","schemas/service-co
 // against it was a wrong pairing, not a finding.
 validateAgainst("schemas/tauri-bridge-v1/payloads.json","schemas/tauri-bridge-v1/payloads.schema.json");
 
+// --- The canonical error vocabulary must be complete, and it must agree with the protocol and with the code.
+//
+// `schemas/error-v1/registry.json` is where every explicit error code is declared, and
+// `schemas/mcf-v2/error.schema.json` closes the MCF code, category, severity and retryability enums. Nothing
+// compared the two, so the registry could name an MCF code the protocol does not define, and eleven codes the
+// implementation actually produces were absent from the registry altogether (DEC-055). Both directions are
+// closed below: what the registry claims must resolve in the protocol, and what the implementation produces
+// must be registered.
+const errorRegistry=read("schemas/error-v1/registry.json");
+const errorCodes=errorRegistry.codes ?? {};
+const mcfError=read("schemas/mcf-v2/error.schema.json");
+const mcfEnum=(name)=>{
+  const e=mcfError.properties?.[name]?.enum;
+  if(!Array.isArray(e)) fail(
+    `schemas/mcf-v2/error.schema.json declares no ${name} enum, so the error registry's ${name} values cannot be `+
+    `resolved against the protocol. The registry draws its vocabulary from this schema, so a missing enum is a `+
+    `failure rather than a skip.`
+  );
+  return new Set(e);
+};
+const mcfCodeEnum=mcfEnum("code");
+const mcfCategoryEnum=mcfEnum("category");
+const mcfSeverityEnum=mcfEnum("severity");
+const mcfRetryEnum=mcfEnum("retryability");
+
+const errorProblems=[];
+const seenMcf=new Map();
+const seenTauri=new Map();
+for(const [key,entry] of Object.entries(errorCodes)){
+  // A null mcf_code is the explicit statement that the code has no MCF counterpart - it is raised and consumed
+  // inside the desktop boundary and never crosses the protocol. A non-null one must be a real protocol code,
+  // and two registry codes may not share one: this registry maps one MCF code to one registry code, and a
+  // many-to-one mapping is not modelled anywhere.
+  if(entry.mcf_code!==null){
+    if(!mcfCodeEnum.has(entry.mcf_code)) errorProblems.push(
+      `${key}.mcf_code "${entry.mcf_code}" is not a member of the MCF error code enum in schemas/mcf-v2/error.schema.json`
+    );
+    else if(seenMcf.has(entry.mcf_code)) errorProblems.push(
+      `${key}.mcf_code "${entry.mcf_code}" is already declared by ${seenMcf.get(entry.mcf_code)}; one MCF code maps to one registry code`
+    );
+    else seenMcf.set(entry.mcf_code,key);
+  }
+  if(seenTauri.has(entry.tauri_code)) errorProblems.push(
+    `${key}.tauri_code "${entry.tauri_code}" is already declared by ${seenTauri.get(entry.tauri_code)}`
+  );
+  else seenTauri.set(entry.tauri_code,key);
+  if(!mcfCategoryEnum.has(entry.category)) errorProblems.push(
+    `${key}.category "${entry.category}" is not a member of the MCF error category enum`
+  );
+  if(!mcfSeverityEnum.has(entry.severity)) errorProblems.push(
+    `${key}.severity "${entry.severity}" is not a member of the MCF error severity enum`
+  );
+  if(!mcfRetryEnum.has(entry.retryability)) errorProblems.push(
+    `${key}.retryability "${entry.retryability}" is not a member of the MCF error retryability enum`
+  );
+  if(typeof entry.meaning!=="string"||entry.meaning.trim()==="") errorProblems.push(
+    `${key} declares no meaning, so the code is a name nothing downstream can act on`
+  );
+}
+
+// What the implementation can actually produce. A code literal is collected from two shapes: a `code: "..."`
+// field, which is how both the Rust and the TypeScript sides build an error payload, and the `=> "..."` arms of
+// the mappings that turn a domain rejection into a code. The arm scan is scoped to those two mappings rather
+// than run over every `=>` arm in the repository, because enum-to-string mappings elsewhere (council roles,
+// budget kinds, decision classes, claim grades) use the identical shape for values that are not error codes,
+// and a scan that reported those as unregistered error codes would be wrong on every run.
+// The Rust shell lives in `apps/desktop/src-tauri/src`, not under `apps/desktop/src`, so it has to be named
+// separately. Getting that wrong is silent - the scan simply finds fewer codes - which is why the mapping-site
+// lookup below fails closed when a file it must read was never scanned.
+const scanFiles=walkFiles("crates").concat(walkFiles("apps/desktop/src"),walkFiles("apps/desktop/src-tauri/src"))
+  .filter(f=>/\.(rs|ts|tsx)$/.test(f))
+  .filter(f=>!/\/generated\//.test(f));
+const scannedText=new Map(scanFiles.map(f=>[f,stripCommentsForScan(readText(f))]));
+const emitted=new Map();
+const recordEmitted=(code,file)=>{ if(!emitted.has(code)) emitted.set(code,file); };
+for(const [file,src] of scannedText){
+  for(const m of src.matchAll(/\bcode\s*:\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
+}
+const mappingSites=[
+  ["crates/workspace/src/validation.rs",/pub\s+fn\s+code\s*\([^)]*\)\s*->\s*&'static\s+str\s*\{/],
+  ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<ProjectValidationError>\s+for\s+CommandError\s*\{/],
+];
+for(const [file,openRe] of mappingSites){
+  const src=scannedText.get(file);
+  if(src===undefined) fail(`${file} is one of the error-code mappings this check scans, but the file was not read.`);
+  const open=openRe.exec(src);
+  if(!open) fail(
+    `${file}: could not find the error-code mapping this check scans (${openRe}).\n`+
+    `A mapping the gate cannot locate is unchecked, so this is a failure rather than a skip.`
+  );
+  // Brace-matched body, so the scan covers exactly the mapping and nothing after it.
+  let depth=0,end=-1;
+  for(let i=open.index+open[0].length-1;i<src.length;i++){
+    if(src[i]==="{") depth++;
+    else if(src[i]==="}"&&--depth===0){ end=i; break; }
+  }
+  if(end<0) fail(`${file}: the error-code mapping's braces are unbalanced, so the codes it produces cannot be read.`);
+  for(const m of src.slice(open.index,end).matchAll(/=>\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
+}
+for(const [code,file] of emitted) if(!(code in errorCodes)) errorProblems.push(
+  `${file} produces the error code "${code}", which schemas/error-v1/registry.json does not register`
+);
+if(errorProblems.length) fail(
+  `The canonical error registry disagrees with the protocol or with the implementation (DEC-055):\n  - ${errorProblems.join("\n  - ")}\n`+
+  `Register the code in schemas/error-v1/registry.json, or stop producing it. An error code that is not in the registry has no stated category, retryability, severity or meaning.`
+);
+
+// Reported, not failed. The wire carries the canonical registry key (EMPTY_FIELD); `tauri_code` is the
+// namespaced spelling (MAYASABA_EMPTY_FIELD), and nothing in the repository emits or consumes one. Whether the
+// wire should carry `tauri_code` instead is a second breaking wire change and a decision of its own, so this
+// reports the gap rather than normalizing it (DEC-055).
+const emittedTauriCodes=Object.values(errorCodes)
+  .map(e=>e.tauri_code)
+  .filter(name=>typeof name==="string"&&[...scannedText.values()].some(src=>src.includes(name)))
+  .length;
+const errorRegistryReport={registered:Object.keys(errorCodes).length,emitted:emitted.size,tauriCodesEmitted:emittedTauriCodes};
+
 // Every canonical artifact must at least be readable in its declared form. This is weak but it is not
 // nothing: an unreadable or malformed registry that nothing opens is exactly how the previous divergence
 // survived, and parsing is the cheapest check that would have caught it.
@@ -1402,6 +1519,7 @@ const coverageVerified=new Set([
   "schemas/tauri-bridge-v1/payloads.json",
   "schemas/tauri-bridge-v1/payloads.schema.json",
   "schemas/error-v1/registry.json",
+  "schemas/mcf-v2/error.schema.json",
   "schemas/service-contracts-v1/registry.json",
   "schemas/sqlite-v1/schema.sql",
   "workspace.manifest.json",
@@ -1420,6 +1538,9 @@ gateCoverage={verified:verifiedInCanonical.length,canonical:canonicalList.length
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+// The error vocabulary's own figures, stated every run for the same reason as the bridge figures: a count that
+// lives only in a document drifts away from the thing it counts.
+console.log(`Error registry: ${errorRegistryReport.registered} codes registered; ${errorRegistryReport.emitted} produced by the implementation; ${errorRegistryReport.tauriCodesEmitted} of ${errorRegistryReport.registered} tauri_code values emitted anywhere (the wire carries the canonical registry key; reported, not blocking)`);
 // The reported half of the two-way bridge gate. Stated every run, including when it is large, because a gap
 // that is only visible in a document is a gap that drifts; the README figure and this line are the same fact.
 console.log(`Bridge: ${bridgeImplemented.length} of ${declaredOps.size} declared operations implemented; ${bridgeUnimplemented.length} declared with no handler (reported, not blocking)`);

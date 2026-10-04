@@ -18,7 +18,6 @@ use std::sync::Mutex;
 use mayasaba_core::project_service::{
     CreateProjectRequest, ProjectService, ProjectValidationError,
 };
-use mayasaba_workspace::WorkspaceRejection;
 use serde::Serialize;
 use tauri::State;
 
@@ -213,12 +212,11 @@ fn create_project(
 
     let outcome = service.create_project(&request).map_err(|e| match e {
         mayasaba_core::project_service::CreateProjectError::Validation(v) => v.into(),
-        mayasaba_core::project_service::CreateProjectError::Workspace(
-            WorkspaceRejection::Empty,
-        ) => CommandError {
-            code: "EMPTY_FIELD",
-            message: WorkspaceRejection::Empty.to_string(),
-        },
+        // Every workspace rejection reports its own code, including `Empty`. There is deliberately no special
+        // case for `WorkspaceRejection::Empty` mapping to `EMPTY_FIELD`: `ProjectService::validate` already
+        // refuses a blank `local_path` with `EMPTY_FIELD` before workspace validation runs, so that arm was
+        // unreachable and its only effect was to give one code two meanings - "a required request field was
+        // blank" and "the workspace candidate was blank" - which no caller could tell apart (DEC-055).
         mayasaba_core::project_service::CreateProjectError::Workspace(w) => CommandError {
             code: w.code(),
             message: w.to_string(),

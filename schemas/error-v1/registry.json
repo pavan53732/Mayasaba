@@ -8,6 +8,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_SCHEMA_INVALID",
       "tauri_code": "MAYASABA_SCHEMA_INVALID",
+      "meaning": "A message, payload or document does not conform to the schema declared for it.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "PROJECT_MISMATCH": {
@@ -16,6 +17,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_PROJECT_MISMATCH",
       "tauri_code": "MAYASABA_PROJECT_MISMATCH",
+      "meaning": "The project named by the message is not the project the message was delivered for.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "UNAUTHORIZED": {
@@ -24,6 +26,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_UNAUTHORIZED",
       "tauri_code": "MAYASABA_UNAUTHORIZED",
+      "meaning": "The actor is not authorized to perform the requested action.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "POLICY_DENIED": {
@@ -32,6 +35,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_POLICY_DENIED",
       "tauri_code": "MAYASABA_POLICY_DENIED",
+      "meaning": "A policy rule refused an action the actor was otherwise authorized to attempt.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "CAPABILITY_UNAVAILABLE": {
@@ -40,6 +44,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_CAPABILITY_UNAVAILABLE",
       "tauri_code": "MAYASABA_CAPABILITY_UNAVAILABLE",
+      "meaning": "No available agent or adapter provides a capability the work requires.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "STALE_CONTEXT": {
@@ -48,6 +53,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_STALE_CONTEXT",
       "tauri_code": "MAYASABA_STALE_CONTEXT",
+      "meaning": "The context snapshot the message was built from is no longer current.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "EPOCH_MISMATCH": {
@@ -56,6 +62,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_EPOCH_MISMATCH",
       "tauri_code": "MAYASABA_EPOCH_MISMATCH",
+      "meaning": "The project epoch carried by the message is not the project's current epoch.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "LEASE_INVALID": {
@@ -64,6 +71,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_LEASE_INVALID",
       "tauri_code": "MAYASABA_LEASE_INVALID",
+      "meaning": "The task lease presented is not a valid lease for that task.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "LEASE_EXPIRED": {
@@ -72,6 +80,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_LEASE_EXPIRED",
       "tauri_code": "MAYASABA_LEASE_EXPIRED",
+      "meaning": "The task lease has expired and no longer authorizes execution.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "WORKSPACE_MISMATCH": {
@@ -80,6 +89,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_WORKSPACE_MISMATCH",
       "tauri_code": "MAYASABA_WORKSPACE_MISMATCH",
+      "meaning": "The workspace named by the message is outside the workspace the work is scoped to (DEC-048).",
       "remediation": "See affected subsystem remediation metadata."
     },
     "SEQUENCE_GAP": {
@@ -88,6 +98,7 @@
       "severity": "WARNING",
       "mcf_code": "MCF_SEQUENCE_GAP",
       "tauri_code": "MAYASABA_SEQUENCE_GAP",
+      "meaning": "A message arrived out of sequence, so at least one message between them may be missing.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "IDEMPOTENCY_CONFLICT": {
@@ -96,6 +107,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_IDEMPOTENCY_CONFLICT",
       "tauri_code": "MAYASABA_IDEMPOTENCY_CONFLICT",
+      "meaning": "A retry reused an idempotency key with a different request body, so the two cannot both be applied.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "TIMEOUT": {
@@ -104,6 +116,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_TIMEOUT",
       "tauri_code": "MAYASABA_TIMEOUT",
+      "meaning": "An operation did not complete within its declared time budget.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "CANCELED": {
@@ -112,6 +125,7 @@
       "severity": "INFO",
       "mcf_code": "MCF_CANCELED",
       "tauri_code": "MAYASABA_CANCELED",
+      "meaning": "The operation was cancelled before it completed. This is an outcome, not a failure.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "PROCESS_FAILED": {
@@ -120,6 +134,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_PROCESS_FAILED",
       "tauri_code": "MAYASABA_PROCESS_FAILED",
+      "meaning": "A locally executed process exited non-zero, or could not be started.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "ADAPTER_UNAVAILABLE": {
@@ -128,6 +143,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_ADAPTER_UNAVAILABLE",
       "tauri_code": "MAYASABA_ADAPTER_UNAVAILABLE",
+      "meaning": "The agent CLI an adapter drives is not installed, not running, or not reachable.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "ADAPTER_PROTOCOL_ERROR": {
@@ -136,6 +152,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_ADAPTER_PROTOCOL_ERROR",
       "tauri_code": "MAYASABA_ADAPTER_PROTOCOL_ERROR",
+      "meaning": "An adapter could not translate native CLI output into MCF-v2 (AGENTS.md section 7).",
       "remediation": "See affected subsystem remediation metadata."
     },
     "AUTH_REQUIRED": {
@@ -144,6 +161,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_AUTH_REQUIRED",
       "tauri_code": "MAYASABA_AUTH_REQUIRED",
+      "meaning": "The agent or provider requires credentials that are not present.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "UNSUPPORTED_VERSION": {
@@ -152,6 +170,7 @@
       "severity": "ERROR",
       "mcf_code": "MCF_UNSUPPORTED_VERSION",
       "tauri_code": "MAYASABA_UNSUPPORTED_VERSION",
+      "meaning": "The peer's protocol or adapter version is not one this build supports.",
       "remediation": "See affected subsystem remediation metadata."
     },
     "DEAD_LETTERED": {
@@ -160,7 +179,107 @@
       "severity": "ERROR",
       "mcf_code": "MCF_DEAD_LETTER",
       "tauri_code": "MAYASABA_DEAD_LETTERED",
+      "meaning": "The message exhausted its delivery attempts and was moved to the dead-letter store.",
       "remediation": "See affected subsystem remediation metadata."
+    },
+    "WORKSPACE_EMPTY": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_WORKSPACE_EMPTY",
+      "meaning": "The candidate workspace path is empty or whitespace, so there is nothing to validate.",
+      "remediation": "Ask the user to select or type a folder before the workspace is validated."
+    },
+    "WORKSPACE_DOES_NOT_EXIST": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_WORKSPACE_DOES_NOT_EXIST",
+      "meaning": "The candidate workspace path does not exist on this machine.",
+      "remediation": "Ask the user to select a folder that exists."
+    },
+    "WORKSPACE_NOT_A_DIRECTORY": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_WORKSPACE_NOT_A_DIRECTORY",
+      "meaning": "The candidate workspace path exists but is not a directory, so it cannot root a workspace.",
+      "remediation": "Ask the user to select a folder rather than a file."
+    },
+    "WORKSPACE_NOT_LOCAL": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_WORKSPACE_NOT_LOCAL",
+      "meaning": "The candidate workspace path is a UNC or other network path, which is refused because a workspace must be local to this machine (DEC-004).",
+      "remediation": "Ask the user to select a folder on a local drive. Network paths cannot be workspaces."
+    },
+    "WORKSPACE_NOT_ACCESSIBLE": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_WORKSPACE_NOT_ACCESSIBLE",
+      "meaning": "The candidate workspace path exists but could not be canonicalized or read, so its identity cannot be established.",
+      "remediation": "Check the folder's permissions and that its drive is available, then select it again."
+    },
+    "EMPTY_FIELD": {
+      "category": "SCHEMA",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_EMPTY_FIELD",
+      "meaning": "A field the request declares as required was empty or whitespace, so the request was refused before anything was persisted.",
+      "remediation": "Correct the named field and resubmit. The message states which field was empty."
+    },
+    "BLANK_INITIAL_BRIEF": {
+      "category": "SCHEMA",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_BLANK_INITIAL_BRIEF",
+      "meaning": "The initial brief body was whitespace only, so the project would have had no stated intent to anchor (DEC-030).",
+      "remediation": "Describe the project's intent in the brief before creating the project."
+    },
+    "INTAKE_NOT_IMPLEMENTED": {
+      "category": "CAPABILITY",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_INTAKE_NOT_IMPLEMENTED",
+      "meaning": "The intake judgement that a brief states real project intent has not been implemented. The structural rule passed; no semantic judgement was made, and this code reports the absence of that judgement rather than a rejection of the brief.",
+      "remediation": "No retry succeeds until the intake judgement exists. This is a named gap, not a user error, and it must not be surfaced as a refusal of the user's brief."
+    },
+    "STORAGE_FAILURE": {
+      "category": "INTERNAL",
+      "retryability": "BACKOFF",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_STORAGE_FAILURE",
+      "meaning": "A SQLite operation failed, so the durable local source of truth could not be read or written.",
+      "remediation": "Retry after a short backoff. If it persists, report the database path and the underlying SQLite error; the database is the durable source of truth, so a failure here must not be reported as a domain rejection."
+    },
+    "SERVICE_POISONED": {
+      "category": "INTERNAL",
+      "retryability": "NEVER",
+      "severity": "CRITICAL",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_SERVICE_POISONED",
+      "meaning": "A lock protecting an application service was poisoned by a panic in another thread, so the service cannot be used again in this process.",
+      "remediation": "Restart the application. The in-process state cannot be recovered, and retrying in the same process cannot succeed."
+    },
+    "TRANSPORT_FAILURE": {
+      "category": "INTERNAL",
+      "retryability": "BACKOFF",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_TRANSPORT_FAILURE",
+      "meaning": "A Tauri invocation did not complete, or Rust rejected it with something that is not a registered error payload. It is raised on the frontend side of the boundary, which is why it has no MCF counterpart.",
+      "remediation": "Retry the operation. If it persists, check that the command is registered in generate_handler![...] and that the shell is running; a rejection that is not a registered error payload is a contract violation and should be reported as one."
     }
   }
 }

@@ -246,13 +246,16 @@ git config core.hooksPath .githooks
 
 ## Current status
 
-Verified on 2026-10-05 as part of the DEC-053 bridge reconciliation; the decision record states the exact
-validation performed and the open items it left. The machine-readable contract is packaged and gated: `npm run
-verify:contracts` checks the MCF registries and enums, the Tauri bridge identifiers against their declared
-owners in `workspace.manifest.json`, the agent-adapter set and its declared controls, the declared manifests,
-and each crate's declared dependencies. It reports 59 MCF message types, 121 events, 12 state machines, 32
-Tauri commands, 27 queries and 30 UI events, and it invariant-checks 27 of the 68 canonical artifacts; the
-other 41 are parsed but have no invariant enforced against them.
+Verified on 2026-10-05 as part of the DEC-053 bridge reconciliation and the DEC-054, DEC-055 and DEC-056
+follow-ups; each decision record states the exact validation performed and the open items it left. The
+machine-readable contract is packaged and gated: `npm run verify:contracts` checks the MCF registries and enums,
+the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, the agent-adapter set
+and its declared controls, the declared manifests, each crate's declared dependencies, the canonical error
+registry against the protocol's own error enums and against the codes the implementation produces, and both
+sides of the Tauri bridge. It reports 59 MCF message types, 121 events, 12 state machines, 32 Tauri commands, 27
+queries, 30 UI events and 31 registered error codes, of which 11 are produced by the implementation. It
+invariant-checks 28 of the 68 canonical artifacts; the other 40 are parsed but have no invariant enforced
+against them.
 
 What is implemented:
 
@@ -265,7 +268,13 @@ What is implemented:
   queries have no handler. The gate reads both sides: it parses the `#[tauri::command]` functions and the
   `generate_handler![...]` list out of `main.rs`, and the `transport(...)` call sites out of the frontend, so a
   handler or a call that names an undeclared operation fails the gate, while a declared operation that nothing
-  implements is reported with its count rather than failed. DEC-053 records the drift this closed.
+  implements is reported with its count rather than failed. DEC-053 records the drift this closed. Every field
+  these handlers carry crosses the boundary in the contract's own snake_case spelling — the wire structs
+  serialize with `#[serde(rename_all = "snake_case")]` and the commands take their arguments with
+  `#[tauri::command(rename_all = "snake_case")]`, so the frontend renames nothing and no translation layer has
+  to be kept in step with Rust by hand (DEC-054). Every error code they can return is registered with its
+  category, retryability, severity, MCF spelling and meaning, and the gate fails if the implementation produces
+  a code the registry does not declare (DEC-055).
 - MCF-v2 envelope validation in `crates/protocol`, with the envelope's vocabulary and per-field JSON types
   generated from the contract rather than hand-copied (DEC-051), plus startup recovery and durable-state
   inconsistency reporting in `crates/storage`.
