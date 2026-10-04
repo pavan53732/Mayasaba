@@ -1,5 +1,10 @@
-// GENERATED FILE — DO NOT EDIT.
-// Source: schemas/tauri-bridge-v1/bridge.schema.json + payloads.json + workspace.manifest.json
+// GENERATED FILE - DO NOT EDIT.
+// Source: schemas/tauri-bridge-v1/bridge.schema.json
+// Regenerate: npm run codegen:bridge
+//
+// Commands, queries and events are the machine-readable Tauri surface the Control Room calls, and each
+// operation's owning service comes from payloads.json so the UI can route a call to its authority.
+
 export const COMMANDS = [
   "create_project",
   "open_project",
@@ -94,6 +99,73 @@ export const EVENTS = [
   "RECOVERY_STARTED",
   "RECOVERY_COMPLETED"
 ] as const;
+
 export type CommandName = typeof COMMANDS[number];
 export type QueryName = typeof QUERIES[number];
 export type EventName = typeof EVENTS[number];
+
+/** Owning application service per command, from payloads.json. */
+export const COMMAND_OWNERS = {
+  "create_project": "ProjectService",
+  "open_project": "ProjectService",
+  "pause_project": "LifecycleService",
+  "resume_project": "LifecycleService",
+  "stop_project": "LifecycleService",
+  "answer_user_question": "CouncilService",
+  "reopen_decision": "DecisionService",
+  "approve_action": "PolicyService",
+  "retry_task": "TaskService",
+  "reassign_task": "TaskService",
+  "retry_repair": "RepairService",
+  "launch_agent": "AgentService",
+  "stop_agent": "AgentService",
+  "request_sync": "ContextService",
+  "request_preview": "WorkspaceService",
+  "replay_event": "RecoveryService",
+  "replay_dead_letter": "RecoveryService",
+  "abandon_project": "LifecycleService",
+  "pause_agent": "AgentService",
+  "resume_agent": "AgentService",
+  "request_event_resync": "DiagnosticsService",
+  "rollback_workspace": "WorkspaceService",
+  "start_recovery": "RecoveryService",
+  "resolve_recovery": "RecoveryService",
+  "upsert_requirement": "RequirementService",
+  "upsert_decision": "DecisionService",
+  "upsert_architecture": "ArchitectureService",
+  "update_configuration": "ConfigurationService",
+  "validate_configuration": "ConfigurationService",
+  "start_simulation": "SimulationService",
+  "stop_simulation": "SimulationService",
+  "create_trace_link": "DiagnosticsService",
+} as const;
+
+/** Owning application service per query, from payloads.json. */
+export const QUERY_OWNERS = {
+  "get_project": "ProjectService",
+  "list_projects": "ProjectService",
+  "get_project_status": "LifecycleService",
+  "get_agent_status": "AgentService",
+  "get_council_round": "CouncilService",
+  "list_requirements": "RequirementService",
+  "list_decisions": "DecisionService",
+  "get_architecture": "ArchitectureService",
+  "get_context_status": "ContextService",
+  "get_task_graph": "TaskService",
+  "get_workspace_status": "WorkspaceService",
+  "get_build_status": "BuildService",
+  "get_test_runs": "TestService",
+  "get_failures": "RepairService",
+  "get_repairs": "RepairService",
+  "get_reviews": "ReviewService",
+  "get_evidence": "EvidenceService",
+  "get_logs": "DiagnosticsService",
+  "get_communication_health": "DiagnosticsService",
+  "get_validation_status": "ValidationService",
+  "get_recovery_status": "RecoveryService",
+  "get_doctor_report": "DiagnosticsService",
+  "get_configuration": "ConfigurationService",
+  "get_simulation_status": "SimulationService",
+  "get_event_cursor": "DiagnosticsService",
+  "get_action_admissibility": "PolicyService",
+} as const;

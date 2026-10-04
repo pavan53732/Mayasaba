@@ -15,7 +15,7 @@ SQLite is the durable source of truth. This document defines relational implemen
 
 ## Core table groups
 ### Identity/project
-projects, project_paths, project_epochs, project_status
+projects, project_paths, project_briefs, project_epochs, project_status
 
 ### Agents
 agents, agent_sessions, agent_capabilities
@@ -30,7 +30,7 @@ trace_links, trace_link_versions, trace_coverage
 messages, message_attempts, message_receipts, inbox, outbox, dead_letters
 
 ### Events
-events, event_cursors
+events, event_cursors, context_snapshots
 
 ### Product/design
 requirements, requirement_acceptance, decisions, decision_versions, architecture_artifacts, contracts
@@ -51,7 +51,7 @@ failures, diagnoses, repairs, reviews, validation_runs
 artifacts, evidence, evidence_links
 
 ### User interaction
-user_questions, user_answers
+user_questions, user_answers, user_contributions
 
 ## Council persistence invariants
 

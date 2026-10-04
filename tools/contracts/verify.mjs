@@ -742,6 +742,14 @@ for(const m of sqlText.matchAll(/REFERENCES\s+(\w+)\s*\(/g)){
 }
 if(danglingFk.length) fail(`schema.sql declares foreign keys to non-existent table(s): ${[...new Set(danglingFk)].join(", ")}`);
 
+// SQLITE-DATA-ARCHITECTURE.md groups the tables by concern, and that grouping drifted the moment
+// project_briefs and user_contributions were added: the tables existed in schema.sql and in DATA-MODEL.md
+// while the architecture document still listed neither. Nothing compared the two, so an external audit found
+// it. The grouping is prose, so it is checked by requiring every real table to appear somewhere in it.
+const sqliteDoc=readText("docs/SQLITE-DATA-ARCHITECTURE.md");
+const undocumented=[...sqlTables].filter(t=>!new RegExp(`\\b${t}\\b`).test(sqliteDoc));
+if(undocumented.length) fail(`Table(s) in schema.sql are absent from docs/SQLITE-DATA-ARCHITECTURE.md, so the documented table grouping is stale:\n  - ${undocumented.join("\n  - ")}\nAdd each to its concern group in that document.`);
+
 // --- Registry conformance against its own schema. payloads.json required `errors` on every operation while
 // every operation carried an undeclared `owner`, so the file did not satisfy payloads.schema.json on any of
 // its 58 operations and nothing detected it. The gate validated that the file existed, never its contents.
@@ -855,6 +863,20 @@ if(serviceDrift.length) fail(`Service registry and workspace manifest disagree o
 
 if(conformanceProblems.length) fail(conformanceProblems.length+" registry/schema conformance problem(s):\n  - "+conformanceProblems.join("\n  - "));
 
+// Canonical schema sources are an allowlist, not a description. Without this, a future agent could create
+// schemas/foo-v1/ and treat it as authoritative simply by not mentioning it anywhere the gate looks:
+// DESIGN-GOVERNANCE forbids introducing a second authority, and an unregistered authority is exactly how one
+// gets introduced quietly. Every schema directory under schemas/ must either appear in schema_sources or be
+// declared here as deliberately non-canonical, with a reason.
+const declaredNonCanonical=new Map([
+  ["schemas/mcf-v2/conformance","conformance fixtures and expectations, not a contract surface"],
+  ["schemas/mcf-v2/fixtures","test fixtures, not a contract surface"],
+]);
+const canonicalDirs=read("workspace.manifest.json").schema_sources ?? [];
+const unregistered=[...new Set(fs.readdirSync(path.join(root,"schemas"),{withFileTypes:true}).filter(d=>d.isDirectory()).map(d=>`schemas/${d.name}`))]
+  .filter(dir=>!canonicalDirs.some(f=>f.startsWith(`${dir}/`))&&!declaredNonCanonical.has(dir));
+if(unregistered.length) fail(`Schema director(y|ies) exist that are absent from workspace.manifest.json:schema_sources:\n  - ${unregistered.join("\n  - ")}\nRegister every canonical file in schema_sources, or declare the directory non-canonical in verify.mjs with a reason. An unregistered schema directory is an authority nobody reviews.`);
+
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
 // crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -
@@ -866,6 +888,13 @@ if(conformanceProblems.length) fail(conformanceProblems.length+" registry/schema
 // implies. Whether that Rust compiles is unverified and is stated as such rather than implied.
 const genCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-protocol.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
 if(genCheck.startsWith("FAILED")) fail("crates/protocol generated code is stale or missing.\n"+genCheck+"\nRun: npm run codegen:protocol");
+
+// The Tauri bridge surface gets the same treatment. The Control Room calls these commands, queries and
+// events, and the TypeScript surface previously had no byte-level drift protection at all: verify.mjs checked
+// that every bridge name had payload metadata, never that the generated file was current. Protocol and bridge
+// generation are now at parity.
+const bridgeGenCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-bridge.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
+if(bridgeGenCheck.startsWith("FAILED")) fail("apps/desktop/src/generated/bridge.ts is stale or missing.\n"+bridgeGenCheck+"\nRun: npm run codegen:bridge");
 
 // --- Gate coverage self-report.
 // This gate was strengthened across DEC-036..DEC-043 and each fix found real defects, which is also how it
