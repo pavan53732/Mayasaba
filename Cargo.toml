@@ -25,3 +25,7 @@ license = "MIT"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# SQLite driver for crates/storage. `bundled` compiles SQLite from the vendored amalgamation so the MSI
+# carries no external database dependency and the local-first constraint (DEC-004, DEC-020) holds: SQLite
+# app data is the sole durable source of truth and nothing is installed system-wide.
+rusqlite = { version = "0.37", features = ["bundled"] }

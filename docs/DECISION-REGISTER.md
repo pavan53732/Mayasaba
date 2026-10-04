@@ -50,6 +50,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-044 | Brief versioning and epoch increment are independent; a brief version bump is not a material truth change by itself | HARD_LOCK |
 | DEC-045 | Only the transaction performing the `DISCOVERY → INDEPENDENT_ANALYSIS` transition establishes the analysis anchor, and it establishes it from the brief current in that same transaction | HARD_LOCK |
 | DEC-046 | For one analysis lineage every agent receives the same tuple of (brief version id, project epoch, context snapshot id, state digest) | HARD_LOCK |
+| DEC-047 | `create_project` is not specified as idempotent; a client-supplied retry key, its uniqueness scope, replay behaviour and response semantics require a separate decision before retry safety can be claimed | SOFT_DECISION |
 
 ## DEC-029 supersession record
 
@@ -289,6 +290,29 @@ Classification: REPLACEMENT for the spine requirement and the `?? states` fallba
 | Tests affected | Mutation-tested in six directions: A remove a machine's `spine` -> fails; B add an undeclared off-spine edge -> fails naming that edge; C declare a branch with no record -> fails naming that branch; E move a specific-command-driven edge into `unreviewed_branches` -> fails naming it; F an `unreviewed_branches` entry with no record -> fails. **D — re-add an illegal edge and declare it — passes**, and is the mechanism's ceiling (below). |
 | Known limitations | (1) **The declaration gate does not prove correctness.** Mutation D passes: re-adding `barrier.SATISFIED->BLOCKED` and declaring it in `branches` verifies green. The gate proves the 36 edges were *declared*, never that they are *right*; their correctness rests entirely on human review of the declaration in a diff. A reader who misses this will over-trust the green. (2) **The 9 `unreviewed_branches` entries are legal but unblessed, not unknown-invalid.** They are tolerated rather than defective, and the list exists so that they are not guessed at; moving one into `branches` requires a ruling, not a discovery. (3) DEC-038's limitation (2) still holds: no gate enforces that a state's entry event is its own, so the class DEC-041 removed three instances of remains open. It shares a cause with (4): `transitions[]` is 141 records of 16 fields each - one distinct `authorization`, one `idempotency_behavior`, one `transaction_boundary` - wrapping a four-field fact (source, target, event, command). That is 235 KB of the file's 310 KB, and the format makes each edge expensive to write and cheap to get wrong, which is why both this gap and the ten illegal edges survived in it unnoticed. `state_events` would collapse those 141 records to roughly 12 short maps and let a generator read intent rather than ledger; it is recorded here as the diagnosis of why the gaps were hard to see, not as a proposal to build it now. (4) **Blessing an edge is not the same as making it triggerable.** Eight of the nine edges blessed by this record are driven by `ADVANCE_<machine>` because no specific command was ever written for them — `DENY_EXECUTION`, `FAIL_TASK`, `INVALIDATE_TASK` and `EXPIRE_LEASE` are the obvious missing ones. The edges are legal and now declared, but without their own commands those transitions can be reached only by generic advance, never by intent. This is the inverse of the defect this series has been fixing — a missing command rather than a wrong event — and it is recorded so the area is not mistaken for settled. Seen from the generator's side this is the same gap: `branches` carries 45 edges with no owner, no command and no event - enough structure for adjacency checking, not enough for code generation. The missing commands are needed either way. **Closed in the same series:** the six commands now exist (`FAIL_AGENT`, `START_TASK_REPAIR`, `MARK_TASK_LEASE_EXPIRED`, `INVALIDATE_TASK`, `DENY_EXECUTION`, `CLEANUP_EXECUTION`), nine redundant `ADVANCE_*` duplicate records were removed, and the `ADVANCE_<machine>` requirement is now derived from the declared spine - required when `spine.length >= 2`, forbidden when it is not - so a machine with no spine edge cannot hold a dangling advance command. ADVANCE-touched off-spine edges went 15 -> 0, records 141 -> 132, commands 58 -> 63. |
 | Related decision | Applies DEC-017 (one canonical owner per concept) and DEC-021 (machine-readable canonical registries). Completes the rule DEC-038 identified as missing; complements DEC-040 (event emitters) and DEC-041 (missing state-entry events). |
+
+### DEC-047 create_project retry semantics are unspecified
+
+An external audit proposed that the first vertical slice test idempotency by replaying one request. That was
+declined, and this records why rather than leaving it as an omission.
+
+DEC-027 keys material-action idempotency by `project_id + operation_id`. Neither exists at project creation:
+`project_id` is the value being minted, and no `operation_id` is carried by `create_projectRequest`. The
+locked rule is therefore unconstructible for this operation, so adding an `idempotency_key` field would have
+introduced a second, conflicting keying scheme rather than implementing the existing one.
+
+| Field | Value |
+|---|---|
+| Previous behavior | Undefined. An audit checklist implied retry safety should be tested; nothing in the contract provided it. |
+| New behavior | `create_project` makes no idempotency or retry guarantee. A client that retries after an ambiguous transport failure may create a second project. |
+| Reason | Claiming atomicity is not claiming retry safety. SQLite rollback proves that a failed transaction writes nothing; it says nothing about a client that never learned whether the first attempt committed. Conflating the two would be the more dangerous error. |
+| Compatibility impact | None. No schema, payload or bridge change. `create_projectRequest` is unchanged. |
+| Tests affected | The slice tests atomicity, not idempotency. A future retry-safety test requires this decision to be superseded by one that defines the client-supplied key, its uniqueness scope, replay behaviour and response semantics. |
+
+Whether two projects may target the same `local_path` is a separate and still-undecided product question.
+Nothing in the architecture or in `schema.sql` makes `local_path` unique, so the slice asserts the current
+rule — two projects on one path are permitted — rather than quietly adding a constraint in a test. That
+question needs its own decision.
 
 ## DEC-043 to DEC-046 records
 

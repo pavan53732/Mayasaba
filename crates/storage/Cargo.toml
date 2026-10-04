@@ -4,3 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+mayasaba-protocol = { path = "../protocol" }
+rusqlite.workspace = true
