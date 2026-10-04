@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{envelope_at, storage_with_project, ScriptedTransport};
+use common::{envelope_at, envelope_with_priority, storage_with_project, ScriptedTransport};
 use mayasaba_bus::{
     decide, BackoffPolicy, Bus, DispatchDecision, DispatchOutcome, DispatchPolicy, FixedClock,
     TransportError,
@@ -568,4 +568,67 @@ fn the_shipped_defaults_are_the_ones_the_policy_file_declares() {
     assert_eq!(backoff.base_seconds, 2);
     assert_eq!(backoff.multiplier, 2);
     assert_eq!(backoff.cap_seconds, 300);
+}
+
+#[test]
+fn a_pass_serves_the_control_lane_before_the_bulk_lane() {
+    // The design requires that "emergency control and recovery traffic must not be blocked by bulk model
+    // output". All four messages are due at the same instant, so only the lane can decide the order, and the
+    // batch is deliberately smaller than the backlog so the assertion is about order and not about capacity.
+    let (storage, _dir) = storage_with_project("lane_order");
+    let policy = DispatchPolicy {
+        max_attempts: 3,
+        batch_size: 3,
+    };
+    let mut bus = Bus::with_policy(storage, policy, BackoffPolicy::default());
+    let lanes = [
+        ("msg_bulk", 1, "BULK"),
+        ("msg_heartbeat", 2, "PROGRESS_HEARTBEAT"),
+        ("msg_control", 3, "EMERGENCY_CONTROL"),
+        ("msg_recovery", 4, "FAILURE_RECOVERY"),
+    ];
+    for (message_id, sequence, lane) in lanes {
+        bus.enqueue(&envelope_with_priority(
+            message_id,
+            "prj_lane_order",
+            sequence,
+            Some(message_id),
+            r#"{"task":"a"}"#,
+            "2026-10-04T00:00:05Z",
+            lane,
+        ))
+        .expect("enqueue");
+    }
+    let mut transport = ScriptedTransport::always_ok();
+
+    let report = bus
+        .dispatch_due(&at("2026-10-04T00:00:06Z"), &mut transport)
+        .expect("dispatch");
+
+    assert_eq!(report.dispatched(), 3, "the batch is three of four");
+    // EMERGENCY_CONTROL, FAILURE_RECOVERY, PROGRESS_HEARTBEAT - the declared lane order, not insertion order
+    // and not the alphabet.
+    let order: Vec<String> = transport
+        .sent
+        .iter()
+        .map(|text| {
+            let envelope =
+                mayasaba_protocol::envelope::parse_envelope(text).expect("sent envelope");
+            format!("{}:{}", envelope.priority(), envelope.message_id())
+        })
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            "EMERGENCY_CONTROL:msg_control",
+            "FAILURE_RECOVERY:msg_recovery",
+            "PROGRESS_HEARTBEAT:msg_heartbeat",
+        ],
+        "bulk traffic must not be served ahead of control or recovery traffic"
+    );
+    assert_eq!(
+        state_of(&bus, "msg_bulk"),
+        "QUEUED",
+        "the bulk message waits for the next pass"
+    );
 }

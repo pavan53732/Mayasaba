@@ -1567,6 +1567,25 @@ for(const [constant,expected,where] of busDefaults){
 }
 if(busPolicyProblems.length) fail(busPolicyProblems.length+" bus policy problem(s):\n  - "+busPolicyProblems.join("\n  - "));
 
+// --- The dispatcher's lane order against the contract's declared lane order (DEC-060).
+// The due query ranks lanes with a `CASE`, so the order lives in SQL where no type system can see it. If the
+// contract's lane order changes and the SQL does not, the bus silently serves the wrong traffic first - and the
+// requirement it would break is the one that says emergency control and recovery traffic must not be blocked by
+// bulk output. The lane names are read out of the SQL in order and compared with `registry.priority_lanes`.
+const declaredLanes=read("schemas/mcf-v2/registry.json").priority_lanes;
+const laneProblems=[];
+const laneSource=fs.readFileSync(path.join(root,"crates/storage/src/lib.rs"),"utf8");
+const laneBlock=/ORDER BY CASE json_extract\(m\.envelope_json, '\$\.priority'\)([\s\S]*?)ELSE \d+\s*\n\s*END/.exec(laneSource);
+if(!laneBlock){
+  laneProblems.push("crates/storage/src/lib.rs declares no `ORDER BY CASE json_extract(m.envelope_json, '$.priority')` lane ranking for the due query, so the dispatcher has no lane order to check");
+} else {
+  const sqlLanes=[...laneBlock[1].matchAll(/WHEN '([A-Z_]+)' THEN \d+/g)].map(m=>m[1]);
+  if(JSON.stringify(sqlLanes)!==JSON.stringify(declaredLanes)){
+    laneProblems.push(`the due query ranks lanes ${JSON.stringify(sqlLanes)} but schemas/mcf-v2/registry.json declares ${JSON.stringify(declaredLanes)}; a dispatcher that serves them in a different order serves the wrong traffic first`);
+  }
+}
+if(laneProblems.length) fail(laneProblems.length+" dispatch lane-order problem(s):\n  - "+laneProblems.join("\n  - "));
+
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
 // crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -

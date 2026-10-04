@@ -237,6 +237,19 @@ const MUTATIONS = [
   // --- DEC-058: the bus's retry/dispatch policy, against the machine it terminates through and against the
   // crate's shipped defaults.
   {
+    id: "dec060-a",
+    what: "crates/storage: the due query serves the lanes in an order the contract does not declare",
+    check: GATE,
+    edits: [
+      {
+        file: "crates/storage/src/lib.rs",
+        find: "WHEN 'EMERGENCY_CONTROL' THEN 0\n                        WHEN 'SYNCHRONIZATION' THEN 1",
+        replace: "WHEN 'SYNCHRONIZATION' THEN 0\n                        WHEN 'EMERGENCY_CONTROL' THEN 1",
+      },
+    ],
+    expect: ["ranks lanes", "serves the wrong traffic first"],
+  },
+  {
     id: "dec059-a",
     what: "crates/bus: the inbound duplicate arm produces a code the registry does not declare",
     check: GATE,

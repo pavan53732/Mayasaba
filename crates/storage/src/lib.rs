@@ -930,7 +930,18 @@ fn due_outbound_in(conn: &Connection, now: &str, limit: i64) -> Result<Vec<DueMe
              WHERE o.dispatch_state IN ('PENDING', 'FAILED')
                AND o.next_attempt_at <= ?1
                AND m.delivery_state = 'QUEUED'
-             ORDER BY o.next_attempt_at, o.rowid
+             ORDER BY CASE json_extract(m.envelope_json, '$.priority')
+                        WHEN 'EMERGENCY_CONTROL' THEN 0
+                        WHEN 'SYNCHRONIZATION' THEN 1
+                        WHEN 'TASK_CONTROL' THEN 2
+                        WHEN 'FAILURE_RECOVERY' THEN 3
+                        WHEN 'COUNCIL' THEN 4
+                        WHEN 'PROGRESS_HEARTBEAT' THEN 5
+                        WHEN 'BULK' THEN 6
+                        ELSE 7
+                      END,
+                      o.next_attempt_at,
+                      o.rowid
              LIMIT ?2",
         )
         .map_err(StorageError::Db)?;

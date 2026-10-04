@@ -40,6 +40,27 @@ pub fn envelope_at(
     payload: &str,
     created_at: &str,
 ) -> String {
+    envelope_with_priority(
+        message_id,
+        project_id,
+        sequence,
+        operation_id,
+        payload,
+        created_at,
+        "TASK_CONTROL",
+    )
+}
+
+/// The same, in a named priority lane, so a test can ask which lane a dispatcher serves first.
+pub fn envelope_with_priority(
+    message_id: &str,
+    project_id: &str,
+    sequence: i64,
+    operation_id: Option<&str>,
+    payload: &str,
+    created_at: &str,
+    priority: &str,
+) -> String {
     let operation = match operation_id {
         Some(id) => format!(r#""{id}""#),
         None => "null".to_string(),
@@ -52,7 +73,7 @@ pub fn envelope_at(
         r#""recipients":[{"actor_type":"AGENT","actor_id":"hermes-1"}],"#.to_string(),
         r#""channel":"task","message_type":"TASK","phase":"IMPLEMENTATION","#.to_string(),
         format!(r#""correlation_id":"corr_1","sequence":{sequence},"project_epoch":0,"#),
-        r#""priority":"TASK_CONTROL","#.to_string(),
+        format!(r#""priority":"{priority}","#),
         format!(r#""created_at":"{created_at}","#),
         r#""requires_ack":true,"requires_response":false,"blocking":false,"#.to_string(),
         format!(r#""payload":{payload},"#),

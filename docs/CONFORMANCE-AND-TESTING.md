@@ -194,6 +194,21 @@ Must prove:
   nothing written;
 - a refused transition **names the state it found** rather than reporting that zero rows changed.
 
+## Dispatch lane-order proof (DEC-060)
+
+The lane order lives in a `CASE` inside the due query, where no type system can see it and a reviewer can read
+past it. `crates/storage/src/lib.rs`'s ranking is therefore read back out of the SQL, in order, and required to
+equal `schemas/mcf-v2/registry.json`'s `priority_lanes`.
+
+| # | Mutation | Expected and observed failure |
+|---|---|---|
+| `dec060-a` | `crates/storage`: the due query serves the lanes in an order the contract does not declare | The dispatcher would serve the wrong traffic first: `ranks lanes`, `serves the wrong traffic first` |
+
+`crates/bus/tests/dispatch.rs::a_pass_serves_the_control_lane_before_the_bulk_lane` proves the order is real
+rather than merely declared: four messages due at the same instant in four lanes, a batch of three, and an
+assertion that the emergency-control and failure-recovery messages were handed over before the heartbeat and
+that the bulk message is still `QUEUED`.
+
 ## Project intent and user-contribution tests
 
 Must prove:

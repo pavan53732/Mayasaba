@@ -168,8 +168,10 @@ Integration checkpoints and workspace mutations are recorded transactionally wit
 Indexes must cover:
 project_id, status, phase, epoch, session_id, task_id, lease expiry, message delivery state, retry time, the
 idempotency scope (`project_id` with the envelope's `operation_id`, which has no column of its own and is reached
-through `json_extract`), event sequence, correlation_id, artifact hash, validation status and failure
-fingerprint, council round/phase, barrier status, trace source/target and coverage status.
+through `json_extract`), the priority lane (also reached through `json_extract`, because the priority belongs to
+the envelope and a second copy in a column could disagree with it), event sequence, correlation_id, artifact
+hash, validation status and failure fingerprint, council round/phase, barrier status, trace source/target and
+coverage status.
 
 ## Recovery queries
 The database must support deterministic scans for:

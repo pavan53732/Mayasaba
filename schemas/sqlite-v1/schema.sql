@@ -648,6 +648,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_operation ON messages(project_id, json_e
 -- `dispatch_state` first because it is the equality predicate and `next_attempt_at` second because it is both
 -- the range predicate and the sort, so one index serves the filter and the order.
 CREATE INDEX IF NOT EXISTS idx_outbox_due ON outbox(dispatch_state, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_messages_priority ON messages(json_extract(envelope_json, '$.priority'));
 -- Every delivery attempt is recorded, and the observability requirement is that a message's attempts can be
 -- read back with their outcomes, timestamps and retry count.
 CREATE INDEX IF NOT EXISTS idx_attempts_message ON message_attempts(message_id, attempt_no);
