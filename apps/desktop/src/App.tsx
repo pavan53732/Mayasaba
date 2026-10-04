@@ -70,11 +70,11 @@ export default function App() {
     dispatchWorkspace({ type: "selected", path: picked });
     // Selection is not authorization. Rust decides whether the folder is usable.
     const check = await validateWorkspace(picked);
-    if (check.status === "AUTHORIZED" && check.canonicalPath && check.derivedProjectName) {
+    if (check.status === "AUTHORIZED" && check.canonical_path && check.derived_project_name) {
       dispatchWorkspace({
         type: "authorized",
-        canonicalPath: check.canonicalPath,
-        derivedProjectName: check.derivedProjectName,
+        canonicalPath: check.canonical_path,
+        derivedProjectName: check.derived_project_name,
       });
     } else {
       dispatchWorkspace({
@@ -87,6 +87,10 @@ export default function App() {
 
   const onSubmit = useCallback(async () => {
     dispatch({ type: "submit" });
+    // The one place the UI's draft vocabulary becomes the wire request: `Draft` is camelCase interaction state
+    // and `CreateProjectRequest` mirrors `create_projectRequest` field for field (DEC-054). Naming the two
+    // fields here is deliberate - it is the boundary, not a translation layer that has to be kept in step with
+    // Rust by hand.
     const result = await createProject({
       local_path: authorized ? workspace.canonicalPath : draft.localPath,
       initial_brief: draft.initialBrief,
@@ -121,7 +125,7 @@ export default function App() {
       {created ? (
         <>
           <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatchWorkspace({ type: "edit", requestedPath: "" }); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
-          <ProjectList projects={projects.filter((p) => p.projectId !== created.projectId)} loading={loading} />
+          <ProjectList projects={projects.filter((p) => p.project_id !== created.project_id)} loading={loading} />
         </>
       ) : (
         <Composer
@@ -270,17 +274,17 @@ function ProjectPanel(props: { project: ProjectView; onStartAnother: () => void 
       <h2 style={{ margin: "4px 0 16px" }}>{project.name}</h2>
 
       <dl style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: "8px 12px", margin: 0 }}>
-        <Term>Project ID</Term><Value>{project.projectId}</Value>
-        <Term>Workspace</Term><Value>{project.localPath}</Value>
+        <Term>Project ID</Term><Value>{project.project_id}</Value>
+        <Term>Workspace</Term><Value>{project.local_path}</Value>
         <Term>Phase</Term><Value>{project.phase}</Value>
         <Term>Status</Term><Value>{project.status}</Value>
-        <Term>Epoch</Term><Value>{project.currentEpoch}</Value>
-        <Term>Brief ID</Term><Value>{project.briefId ?? "—"}</Value>
-        <Term>Brief version</Term><Value>{project.briefVersion ?? "—"}</Value>
+        <Term>Epoch</Term><Value>{project.current_epoch}</Value>
+        <Term>Brief ID</Term><Value>{project.brief_id ?? "—"}</Value>
+        <Term>Brief version</Term><Value>{project.brief_version ?? "—"}</Value>
       </dl>
 
-      <h3 style={{ marginBottom: 4 }}>Project brief v{project.briefVersion ?? 1}</h3>
-      <p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{project.briefBody ?? "—"}</p>
+      <h3 style={{ marginBottom: 4 }}>Project brief v{project.brief_version ?? 1}</h3>
+      <p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{project.brief_body ?? "—"}</p>
 
       <button onClick={onStartAnother} style={{ ...button, marginTop: 8, background: "#fff", color: "#111827" }}>
         New project
@@ -346,18 +350,18 @@ function ProjectList({ projects, loading }: { projects: ProjectView[]; loading: 
       <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
         {projects.map((p) => (
           <li
-            key={p.projectId}
+            key={p.project_id}
             style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <strong>{p.name}</strong>
               <span style={hint}>
-                {p.phase} · {p.status} · epoch {p.currentEpoch}
+                {p.phase} · {p.status} · epoch {p.current_epoch}
               </span>
             </div>
-            <div style={{ ...hint, marginTop: 4, fontFamily: "ui-monospace, monospace" }}>{p.localPath}</div>
-            {p.briefBody ? (
-              <div style={{ ...hint, marginTop: 4 }}>Brief v{p.briefVersion ?? 1}: {p.briefBody}</div>
+            <div style={{ ...hint, marginTop: 4, fontFamily: "ui-monospace, monospace" }}>{p.local_path}</div>
+            {p.brief_body ? (
+              <div style={{ ...hint, marginTop: 4 }}>Brief v{p.brief_version ?? 1}: {p.brief_body}</div>
             ) : null}
           </li>
         ))}
@@ -374,7 +378,7 @@ const Value = ({ children }: { children: React.ReactNode }) => (
 );
 
 function isProjectView(value: ProjectView | CommandError): value is ProjectView {
-  return typeof (value as ProjectView).projectId === "string";
+  return typeof (value as ProjectView).project_id === "string";
 }
 
 const field: React.CSSProperties = { display: "block", marginBottom: 14, fontSize: 14, fontWeight: 500 };

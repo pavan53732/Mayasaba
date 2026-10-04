@@ -8,7 +8,7 @@
 // The transport is injectable so tests can drive the UI without a Tauri runtime. The default resolves
 // `@tauri-apps/api` lazily, so importing this module in a plain Node test does not require Tauri.
 
-import type { CommandError, ProjectView } from "./state";
+import type { CommandError, ProjectView, RecoveryReport } from "./state";
 
 export type Transport = (command: string, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -48,17 +48,6 @@ export async function listProjects(): Promise<ProjectView[] | CommandError> {
   }
 }
 
-export interface RecoveryIssue {
-  kind: string;
-  detail: string;
-}
-
-export interface RecoveryReport {
-  clean: boolean;
-  integrityOk: boolean;
-  issues: RecoveryIssue[];
-}
-
 /** The startup recovery scan result. Recovery reports; it never repairs. */
 export async function getRecoveryStatus(): Promise<RecoveryReport | CommandError> {
   try {
@@ -72,20 +61,27 @@ export async function getRecoveryStatus(): Promise<RecoveryReport | CommandError
   }
 }
 
-export interface CreateProjectRequest {
+/**
+ * The request shape declared by `create_projectRequest`. Whitespace is preserved on the way out.
+ *
+ * A `type` rather than an `interface` for one concrete reason: a type alias gets an implicit index signature,
+ * so it is directly assignable to the transport's `Record<string, unknown>`. An interface is not, and the
+ * workaround would be a cast at the one call site this file exists to keep honest.
+ */
+export type CreateProjectRequest = {
   local_path: string;
   initial_brief: string;
-}
+};
 
-/** Mirrors WorkspaceCheck in the Tauri command. */
+/** Mirrors WorkspaceCheck in the Tauri command. Wire names, snake_case (DEC-054). */
 export interface WorkspaceCheck {
   status: "AUTHORIZED" | "INVALID";
-  canonicalPath: string | null;
-  requestedPath: string;
+  canonical_path: string | null;
+  requested_path: string;
   code: string | null;
   message: string | null;
   /** Derived by Rust from the canonical folder leaf (DEC-050). The UI displays it; it never computes it. */
-  derivedProjectName: string | null;
+  derived_project_name: string | null;
 }
 
 /**
@@ -121,10 +117,10 @@ export async function createProject(
   request: CreateProjectRequest,
 ): Promise<ProjectView | CommandError> {
   try {
-    const result = await transport("create_project", {
-      localPath: request.local_path,
-      initialBrief: request.initial_brief,
-    });
+    // The request is already the wire shape, field for field, so it is sent as it stands. There is no name
+    // translation here any more: the translation this replaced (`local_path` -> `localPath`) was where a second
+    // spelling of every field was introduced, and keeping it in step with Rust by hand is what failed (DEC-054).
+    const result = await transport("create_project", request);
     return result as ProjectView;
   } catch (thrown) {
     const candidate = thrown as Partial<CommandError>;

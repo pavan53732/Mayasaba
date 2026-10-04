@@ -32,16 +32,16 @@ const draft: Draft = {
 // What the service actually committed. The brief is trimmed and the display name is derived from the
 // workspace folder - neither value came from the submitted draft.
 const committed: ProjectView = {
-  projectId: "prj_abc123",
+  project_id: "prj_abc123",
   name: "proj",
-  localPath: "C:\\work\\proj",
+  local_path: "C:\\work\\proj",
   phase: "DISCOVERY",
   status: "ACTIVE",
-  currentEpoch: 0,
-  briefId: "brf_def456",
-  briefVersion: 1,
-  briefBody: "Build something real.",
-  createdAt: "1700000000",
+  current_epoch: 0,
+  brief_id: "brf_def456",
+  brief_version: 1,
+  brief_body: "Build something real.",
+  created_at: "1700000000",
 };
 
 function submit(): IntakeState {
@@ -111,12 +111,12 @@ describe("authority boundary", () => {
 
     const project = state.kind === "created" ? state.project : undefined;
     assert.ok(project);
-    assert.equal(project!.briefBody, "Build something real.", "display the stored brief, not '  Build something real.  '");
-    assert.equal(project!.briefBody, project!.briefBody.trim(), "no field may retain submitted whitespace");
-    assert.equal(project!.localPath, "C:\\work\\proj");
+    assert.equal(project!.brief_body, "Build something real.", "display the stored brief, not '  Build something real.  '");
+    assert.equal(project!.brief_body, project!.brief_body.trim(), "no field may retain submitted whitespace");
+    assert.equal(project!.local_path, "C:\\work\\proj");
     assert.equal(project!.name, "proj", "the display name comes from the workspace folder, not the draft");
-    assert.equal(project!.briefVersion, 1);
-    assert.equal(project!.currentEpoch, 0);
+    assert.equal(project!.brief_version, 1);
+    assert.equal(project!.current_epoch, 0);
   });
 
   test("the accepted state is built from the projection alone, even when it contradicts the draft", () => {
@@ -166,8 +166,9 @@ describe("transport boundary", () => {
   });
 
   test("the request sends no name, because the service derives the display name", async () => {
-    // Rust takes camelCase Tauri arguments. If a name were sent it would either be ignored or reintroduce
-    // caller-supplied identity metadata, which DEC-050 removed from the contract.
+    // Rust takes snake_case Tauri arguments, matching the contract's own spelling (DEC-054). If a name were
+    // sent it would either be ignored or reintroduce caller-supplied identity metadata, which DEC-050 removed
+    // from the contract.
     resetTransport();
     let seen: { command: string; args: Record<string, unknown> } | null = null;
     setTransport(async (command, args) => {
@@ -176,12 +177,13 @@ describe("transport boundary", () => {
     });
     await createProject({ local_path: "p", initial_brief: "b" });
     assert.equal(seen!.command, "create_project");
-    assert.deepEqual(seen!.args, { localPath: "p", initialBrief: "b" });
+    // The request crosses the boundary unrenamed: these are the contract's field names, not a UI spelling.
+    assert.deepEqual(seen!.args, { local_path: "p", initial_brief: "b" });
     assert.ok(!("name" in seen!.args), "create_project must not carry a name argument");
     resetTransport();
   });
 });
 
 function isProjectView(value: unknown): value is ProjectView {
-  return typeof (value as ProjectView)?.projectId === "string";
+  return typeof (value as ProjectView)?.project_id === "string";
 }

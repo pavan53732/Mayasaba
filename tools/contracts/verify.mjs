@@ -359,16 +359,24 @@ for(const n of registered) if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) fail(
 );
 // Fail closed on an attribute whose function name cannot be read: such a function would be registered or not
 // with nothing noticing, which is the state this check exists to end.
-const commandAttrs=(rustCode.match(/#\[tauri::command\]/g)??[]).length;
-const commandFns=[...rustCode.matchAll(/#\[tauri::command\]\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/g)].map(m=>m[1]);
-if(commandFns.length!==commandAttrs) fail(
-  `${BRIDGE_RUST}: ${commandAttrs} #[tauri::command] attribute(s) but only ${commandFns.length} resolved to a function name.\n`+
+//
+// The attribute may carry arguments - `#[tauri::command(rename_all = "snake_case")]` - so its argument list is
+// captured rather than assumed absent, and a bare `#[tauri::command]` is still matched with an empty one. An
+// earlier version of this check hard-coded the bare form and would have reported every correctly-annotated
+// command as missing, which is a check that fails on the shape of the annotation rather than on the bridge.
+const commandAttrCount=(rustCode.match(/#\[tauri::command\s*(?:\([^)]*\))?\s*\]/g)??[]).length;
+const commandFns=[...rustCode.matchAll(
+  /#\[tauri::command\s*(?:\(([^)]*)\))?\s*\]\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/g
+)].map(m=>({name:m[2],args:m[1]??""}));
+if(commandFns.length!==commandAttrCount) fail(
+  `${BRIDGE_RUST}: ${commandAttrCount} #[tauri::command] attribute(s) but only ${commandFns.length} resolved to a function name.\n`+
   `An attribute whose function name cannot be read is unchecked, so this is a failure rather than a skip.`
 );
-for(const n of registered) if(!commandFns.includes(n)) bridgeProblems.push(
+const commandNames=commandFns.map(c=>c.name);
+for(const n of registered) if(!commandNames.includes(n)) bridgeProblems.push(
   `${BRIDGE_RUST} registers ${n} in generate_handler![...] but defines no #[tauri::command] fn ${n}`
 );
-for(const n of commandFns) if(!registered.includes(n)) bridgeProblems.push(
+for(const n of commandNames) if(!registered.includes(n)) bridgeProblems.push(
   `${BRIDGE_RUST} defines #[tauri::command] fn ${n} but never registers it in generate_handler![...], so it is unreachable from the frontend`
 );
 for(const n of registered) if(!declaredOps.has(n)) bridgeProblems.push(

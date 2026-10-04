@@ -8,17 +8,23 @@
 // That is the difference between documenting the rule and enforcing it.
 
 // Mirrors ProjectView in apps/desktop/src-tauri/src/main.rs. Rust owns this shape; the UI consumes it.
+//
+// The field names are the WIRE names - snake_case, exactly as `schemas/tauri-bridge-v1/payload-types.json`
+// declares them (DEC-054). A wire DTO is not renamed on the way in: renaming it here would create a second
+// spelling of one field, and the two spellings are what drifted apart before this. UI state that is not the
+// wire keeps its own camelCase vocabulary - see `Draft` below - and the one place the two meet is the call
+// site that names the wire fields.
 export interface ProjectView {
-  projectId: string;
+  project_id: string;
   name: string;
-  localPath: string;
+  local_path: string;
   phase: string;
   status: string;
-  currentEpoch: number;
-  briefId: string | null;
-  briefVersion: number | null;
-  briefBody: string | null;
-  createdAt: string;
+  current_epoch: number;
+  brief_id: string | null;
+  brief_version: number | null;
+  brief_body: string | null;
+  created_at: string;
 }
 
 // Mirrors CommandError in the Tauri command. A machine-readable code plus a human message.
@@ -29,6 +35,11 @@ export interface CommandError {
 
 /**
  * What the user actually supplies at intake.
+ *
+ * This is the UI's own draft vocabulary and deliberately not a wire type: the draft is interaction state that
+ * React owns (AGENTS.md section 11), it is never serialized, and it is camelCase because TypeScript is. The
+ * request type it becomes is `CreateProjectRequest` in `bridge.ts`, which mirrors `create_projectRequest` field
+ * for field; naming the two wire fields happens once, at the call site.
  *
  * There is deliberately no `name`: the display name is derived by Rust from the authorized workspace folder
  * (DEC-050), so the draft must not contain a second, competing name. The draft is only user input.
@@ -148,15 +159,16 @@ export function isAuthorized(
   return state.kind === "authorized";
 }
 
-/** The startup recovery scan result. Recovery reports; it never repairs. */
+/** One finding from the startup recovery scan. Wire names, as returned by get_recovery_status (DEC-054). */
 export interface RecoveryIssue {
   kind: string;
   detail: string;
 }
 
+/** The startup recovery scan result. Recovery reports; it never repairs. */
 export interface RecoveryReport {
   clean: boolean;
-  integrityOk: boolean;
+  integrity_ok: boolean;
   issues: RecoveryIssue[];
 }
 

@@ -5,6 +5,13 @@
 //! The shell is transport, not domain logic. It exposes typed Tauri commands that delegate to an owning
 //! application service and return authoritative state; it never decides anything itself (AGENTS.md
 //! section 11, DEC-026). `create_project` is the first command wired end to end.
+//!
+//! The wire format is **snake_case**, spelling every field exactly as `schemas/tauri-bridge-v1/payload-types.json`
+//! declares it - `local_path`, `canonical_path`, `integrity_ok` - so the contract and the bytes on the wire are
+//! the same names and the frontend has nothing to translate (DEC-054). Both halves are stated explicitly rather
+//! than left to a default: `#[serde(rename_all = "snake_case")]` on every wire struct and
+//! `#[tauri::command(rename_all = "snake_case")]` on every command, because Tauri's default for command
+//! arguments is camelCase and an implicit default is how the two sides drifted apart in the first place.
 
 use std::sync::Mutex;
 
@@ -28,7 +35,7 @@ fn database_path() -> std::path::PathBuf {
 /// The authoritative project, as the Control Room must display it. This is a projection of stored state,
 /// never UI-side draft state.
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct ProjectView {
     project_id: String,
     name: String,
@@ -63,7 +70,7 @@ impl From<mayasaba_storage::ProjectRecord> for ProjectView {
 /// A rejection carrying a machine-readable reason, so the Control Room can distinguish a validation
 /// failure from a storage failure without parsing prose.
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct CommandError {
     code: &'static str,
     message: String,
@@ -89,7 +96,7 @@ impl From<ProjectValidationError> for CommandError {
 /// mean every operation inside it is permitted: task-scoped paths, policy and leases remain narrower
 /// (DEC-048).
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct WorkspaceCheck {
     status: &'static str,
     canonical_path: Option<String>,
@@ -101,7 +108,7 @@ struct WorkspaceCheck {
     message: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn validate_workspace(path: String) -> WorkspaceCheck {
     // Selection is not authorization, so this is a real check rather than an echo. A path that does not exist
     // must never come back AUTHORIZED, and nothing is created to make it pass.
@@ -127,7 +134,7 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
 
 /// The result of the startup recovery scan, surfaced so a damaged database is visible rather than silent.
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct RecoveryView {
     clean: bool,
     integrity_ok: bool,
@@ -135,13 +142,13 @@ struct RecoveryView {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct RecoveryIssueView {
     kind: String,
     detail: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn get_recovery_status(
     service: State<'_, Mutex<ProjectService>>,
 ) -> Result<RecoveryView, CommandError> {
@@ -167,7 +174,7 @@ fn get_recovery_status(
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn list_projects(
     service: State<'_, Mutex<ProjectService>>,
 ) -> Result<Vec<ProjectView>, CommandError> {
@@ -184,7 +191,7 @@ fn list_projects(
     Ok(projects.into_iter().map(ProjectView::from).collect())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn create_project(
     service: State<'_, Mutex<ProjectService>>,
     local_path: String,

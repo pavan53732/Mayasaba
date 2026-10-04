@@ -100,7 +100,7 @@
     },
     "validate_workspaceResponse":{
       "title":"The authoritative outcome of validating a workspace candidate",
-      "description":"AUTHORIZED means the folder exists, is local, is a directory and could be canonicalized; it does not authorize every operation inside it, because task-scoped paths, policy and leases remain narrower (DEC-048). On INVALID, code carries the machine-readable WorkspaceRejection and the path fields are null. Field names follow the contract's snake_case convention, the same one create_projectRequest and create_projectResponse use.",
+      "description":"AUTHORIZED means the folder exists, is local, is a directory and could be canonicalized; it does not authorize every operation inside it, because task-scoped paths, policy and leases remain narrower (DEC-048). On INVALID, code carries the machine-readable WorkspaceRejection and the path fields are null. Field names are snake_case, and they are the names that actually cross the Tauri boundary: the Rust struct serializes with #[serde(rename_all = \"snake_case\")] and the command takes its arguments with #[tauri::command(rename_all = \"snake_case\")], so the contract, the wire and the frontend all spell a field the same way and nothing renames it in transit (DEC-054).",
       "type":"object",
       "additionalProperties":false,
       "required":["status","requested_path"],
