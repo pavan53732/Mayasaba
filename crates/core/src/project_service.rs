@@ -132,6 +132,16 @@ impl ProjectService {
         Ok(CreateProjectOutcome::Created { project: record })
     }
 
+    /// Authoritative readback for one project.
+    pub fn get_project(&self, project_id: &str) -> Result<ProjectRecord, CreateProjectError> {
+        Ok(self.storage.get_project(project_id)?)
+    }
+
+    /// Authoritative list of every project, newest first.
+    pub fn list_projects(&self) -> Result<Vec<ProjectRecord>, CreateProjectError> {
+        Ok(self.storage.list_projects()?)
+    }
+
     /// The structural half of the contract. A request that fails here never reaches persistence.
     pub fn validate(req: &CreateProjectRequest) -> Result<(), ProjectValidationError> {
         if req.local_path.trim().is_empty() {

@@ -121,6 +121,7 @@ pub struct ProjectRecord {
     pub brief_id: Option<String>,
     pub brief_version: Option<i64>,
     pub brief_body: Option<String>,
+    pub created_at: String,
 }
 
 pub struct Storage {
@@ -239,7 +240,8 @@ impl Storage {
                 "SELECT p.project_id, p.name, p.local_path, p.phase, p.status, p.current_epoch,
                         (SELECT b.brief_id      FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
                         (SELECT b.version       FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
-                        (SELECT b.body          FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1)
+                        (SELECT b.body          FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
+                        p.created_at
                  FROM projects p WHERE p.project_id = ?1",
             )
             .map_err(StorageError::Db)?;
@@ -256,6 +258,7 @@ impl Storage {
                     brief_id: r.get(6)?,
                     brief_version: r.get(7)?,
                     brief_body: r.get(8)?,
+                    created_at: r.get(9)?,
                 })
             })
             .map_err(|e| match e {
@@ -264,6 +267,45 @@ impl Storage {
             })?;
 
         Ok(row)
+    }
+
+    /// Every project, newest first.
+    ///
+    /// Ordering is explicit rather than left to the engine: the Control Room's list must not depend on row
+    /// insertion order or on a planner's whim. Each row carries the current brief, so the list is a single
+    /// projection an implementation can render directly.
+    pub fn list_projects(&self) -> Result<Vec<ProjectRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT p.project_id, p.name, p.local_path, p.phase, p.status, p.current_epoch,
+                        (SELECT b.brief_id      FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
+                        (SELECT b.version       FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
+                        (SELECT b.body          FROM project_briefs b WHERE b.project_id = p.project_id ORDER BY b.version DESC LIMIT 1),
+                        p.created_at
+                 FROM projects p
+                 ORDER BY p.created_at DESC, p.project_id ASC",
+            )
+            .map_err(StorageError::Db)?;
+
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(ProjectRecord {
+                    project_id: r.get(0)?,
+                    name: r.get(1)?,
+                    local_path: r.get(2)?,
+                    phase: r.get(3)?,
+                    status: r.get(4)?,
+                    current_epoch: r.get(5)?,
+                    brief_id: r.get(6)?,
+                    brief_version: r.get(7)?,
+                    brief_body: r.get(8)?,
+                    created_at: r.get(9)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(StorageError::Db)
     }
 
     /// Count rows in a table. Used by tests to assert that a failed transaction wrote nothing.

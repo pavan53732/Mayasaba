@@ -41,6 +41,7 @@ const committed: ProjectView = {
   briefId: "brf_def456",
   briefVersion: 1,
   briefBody: "Build something real.",
+  createdAt: "1700000000",
 };
 
 function submit(): IntakeState {

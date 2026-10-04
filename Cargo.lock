@@ -1845,6 +1845,7 @@ version = "0.1.0"
 dependencies = [
  "mayasaba-core",
  "mayasaba-protocol",
+ "mayasaba-storage",
  "mayasaba-workspace",
  "serde",
  "serde_json",

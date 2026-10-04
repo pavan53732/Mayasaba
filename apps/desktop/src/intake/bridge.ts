@@ -29,6 +29,25 @@ export function resetTransport(): void {
 }
 
 /** The request shape declared by create_projectRequest. Whitespace is preserved on the way out. */
+/**
+ * List every persisted project, newest first.
+ *
+ * This is the rehydration path: on launch the Control Room renders what Rust returns rather than anything it
+ * retained from a previous session.
+ */
+export async function listProjects(): Promise<ProjectView[] | CommandError> {
+  try {
+    const result = await transport("list_projects", {});
+    return result as ProjectView[];
+  } catch (thrown) {
+    const candidate = thrown as Partial<CommandError>;
+    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
+      return candidate as CommandError;
+    }
+    return { code: "TRANSPORT_FAILURE", message: thrown instanceof Error ? thrown.message : String(thrown) };
+  }
+}
+
 export interface CreateProjectRequest {
   local_path: string;
   initial_brief: string;

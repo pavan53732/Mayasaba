@@ -18,6 +18,7 @@ export interface ProjectView {
   briefId: string | null;
   briefVersion: number | null;
   briefBody: string | null;
+  createdAt: string;
 }
 
 // Mirrors CommandError in the Tauri command. A machine-readable code plus a human message.

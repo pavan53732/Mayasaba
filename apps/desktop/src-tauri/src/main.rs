@@ -32,9 +32,28 @@ struct ProjectView {
     phase: String,
     status: String,
     current_epoch: i64,
-    brief_id: Option<String>,
-    brief_version: Option<i64>,
-    brief_body: Option<String>,
+brief_id: Option<String>,
+  brief_version: Option<i64>,
+  brief_body: Option<String>,
+  created_at: String,
+}
+
+impl From<mayasaba_storage::ProjectRecord> for ProjectView {
+  /// One conversion, so a listed project and a created project cannot drift apart in shape.
+  fn from(p: mayasaba_storage::ProjectRecord) -> Self {
+    ProjectView {
+      project_id: p.project_id,
+      name: p.name,
+      local_path: p.local_path,
+      phase: p.phase,
+      status: p.status,
+      current_epoch: p.current_epoch,
+      brief_id: p.brief_id,
+      brief_version: p.brief_version,
+      brief_body: p.brief_body,
+      created_at: p.created_at,
+    }
+  }
 }
 
 /// A rejection carrying a machine-readable reason, so the Control Room can distinguish a validation
@@ -100,6 +119,20 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
 }
 
 #[tauri::command]
+fn list_projects(service: State<'_, Mutex<ProjectService>>) -> Result<Vec<ProjectView>, CommandError> {
+    // The rehydration path. Everything the Control Room shows for an existing project comes from here, so it
+    // is the same authoritative projection creation returns rather than a UI-side reconstruction.
+    let service = service
+        .lock()
+        .map_err(|_| CommandError { code: "SERVICE_POISONED", message: "ProjectService lock was poisoned by a prior panic".to_string() })?;
+    let projects = service.list_projects().map_err(|e| CommandError {
+        code: "STORAGE_FAILURE",
+        message: e.to_string(),
+    })?;
+    Ok(projects.into_iter().map(ProjectView::from).collect())
+}
+
+#[tauri::command]
 fn create_project(
     service: State<'_, Mutex<ProjectService>>,
     local_path: String,
@@ -136,17 +169,7 @@ fn create_project(
         mayasaba_core::project_service::CreateProjectOutcome::Created { project } => project,
     };
 
-    Ok(ProjectView {
-        project_id: project.project_id,
-        name: project.name,
-        local_path: project.local_path,
-        phase: project.phase,
-        status: project.status,
-        current_epoch: project.current_epoch,
-        brief_id: project.brief_id,
-        brief_version: project.brief_version,
-        brief_body: project.brief_body,
-    })
+    Ok(ProjectView::from(project))
 }
 
 fn main() {
@@ -158,7 +181,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
-        .invoke_handler(tauri::generate_handler![create_project, validate_workspace])
+        .invoke_handler(tauri::generate_handler![create_project, list_projects, validate_workspace])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
 }

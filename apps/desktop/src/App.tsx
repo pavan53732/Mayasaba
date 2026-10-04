@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 
-import { createProject, pickFolder, validateWorkspace } from "./intake/bridge";
+import { createProject, listProjects, pickFolder, validateWorkspace } from "./intake/bridge";
 import {
   EMPTY_DRAFT,
   initialState,
@@ -29,6 +29,21 @@ export default function App() {
   const [state, dispatch] = useReducer(intakeReducer, initialState);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, emptyWorkspace);
+  const [projects, setProjects] = useState<ProjectView[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Rehydrate on launch. Everything rendered for an existing project comes from Rust, so a restart shows the
+  // same authoritative state rather than an empty form that implies nothing was ever stored.
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const result = await listProjects();
+    setProjects(Array.isArray(result) ? result : []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const pending = isSubmitting(state);
   const created = state.kind === "created" ? state.project : null;
@@ -70,10 +85,13 @@ export default function App() {
     if (isProjectView(result)) {
       // Only the returned projection crosses into state. The draft is not sent along.
       dispatch({ type: "accepted", project: result });
+      // Re-read rather than trusting the local value: the list and the panel come from one authority, so a
+      // stale ordering cannot creep in between them.
+      void refresh();
       return;
     }
     dispatch({ type: "rejected", error: result });
-  }, [draft, authorized, workspace]);
+  }, [draft, authorized, workspace, refresh]);
 
   // Create requires an authorized workspace. A candidate or an invalid path cannot be submitted, so a
   // string the UI merely holds can never become a project workspace root.
@@ -91,7 +109,10 @@ export default function App() {
       </p>
 
       {created ? (
-        <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatchWorkspace({ type: "edit", requestedPath: "" }); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
+        <>
+          <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatchWorkspace({ type: "edit", requestedPath: "" }); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
+          <ProjectList projects={projects.filter((p) => p.projectId !== created.projectId)} loading={loading} />
+        </>
       ) : (
         <Composer
           draft={draft}
@@ -105,6 +126,7 @@ export default function App() {
           error={error}
         />
       )}
+      {!created ? <ProjectList projects={projects} loading={loading} /> : null}
     </main>
   );
 }
@@ -228,12 +250,7 @@ function WorkspaceStatus({ workspace }: { workspace: WorkspaceState }) {
   }
 }
 
-/**
- * Renders stored state only.
- *
- * Every value below comes from the ProjectView the service returned. Nothing here is derived from the
- * submitted form, which is the architectural point the slice exists to demonstrate.
- */
+/** Renders stored state only. */
 function ProjectPanel(props: { project: ProjectView; onStartAnother: () => void }) {
   const { project, onStartAnother } = props;
   return (
@@ -257,6 +274,55 @@ function ProjectPanel(props: { project: ProjectView; onStartAnother: () => void 
       <button onClick={onStartAnother} style={{ ...button, marginTop: 8, background: "#fff", color: "#111827" }}>
         New project
       </button>
+    </section>
+  );
+}
+
+/**
+ * Persisted projects, read back from Rust.
+ *
+ * This is the rehydration surface. Nothing here is reconstructed from anything the UI held; every field comes
+ * from `list_projects`, so a restart shows the same authoritative state the backend persisted.
+ */
+function ProjectList({ projects, loading }: { projects: ProjectView[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <p style={hint} role="status">
+        Loading persisted projects…
+      </p>
+    );
+  }
+  if (projects.length === 0) {
+    return (
+      <p style={hint}>
+        No projects stored yet. Anything you create is written to the local database and will still be here
+        after a restart.
+      </p>
+    );
+  }
+  return (
+    <section aria-label="Projects" style={{ marginTop: 32 }}>
+      <h3 style={{ marginBottom: 4 }}>Stored projects</h3>
+      <p style={{ ...hint, marginTop: 0 }}>Rehydrated from the local database, newest first.</p>
+      <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
+        {projects.map((p) => (
+          <li
+            key={p.projectId}
+            style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <strong>{p.name}</strong>
+              <span style={hint}>
+                {p.phase} · {p.status} · epoch {p.currentEpoch}
+              </span>
+            </div>
+            <div style={{ ...hint, marginTop: 4, fontFamily: "ui-monospace, monospace" }}>{p.localPath}</div>
+            {p.briefBody ? (
+              <div style={{ ...hint, marginTop: 4 }}>Brief v{p.briefVersion ?? 1}: {p.briefBody}</div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
