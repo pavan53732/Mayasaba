@@ -51,7 +51,10 @@ if (process.argv.includes("--check")) {
     console.error("Generated file is missing: apps/desktop/src/generated/bridge.ts");
     process.exit(1);
   }
-  if (fs.readFileSync(target, "utf8") !== ts) {
+  // Line-ending agnostic, for the same reason and with the same reproduction as the protocol generator: git
+// stores this file with LF while `core.autocrlf=true` checks it out with CRLF on Windows, so a raw byte
+// comparison called it stale on a fresh checkout whose content was identical.
+if (fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== ts.replace(/\r\n/g, "\n")) {
     console.error(
       "apps/desktop/src/generated/bridge.ts is stale relative to the contract.\n" +
       "Run: npm run codegen:bridge"

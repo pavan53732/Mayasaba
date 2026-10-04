@@ -335,11 +335,20 @@ const outputs = [
 // what lets contract verification assert the generated crate is in sync, which matters because no Rust
 // toolchain was configured when this was written: the bytes can be proven current even though they cannot be
 // proven to compile at that point.
+//
+// The comparison is line-ending agnostic, and that is load-bearing rather than cosmetic. Git stores these
+// files with LF (`.gitattributes` pins none of them, but the blobs are LF), while `core.autocrlf=true` checks
+// them out with CRLF on Windows. A raw byte comparison therefore reported both files as stale on a fresh
+// checkout, on a machine where their content was identical - so `npm run verify:contracts` failed after every
+// checkout until someone re-ran the generator, and re-running it "fixed" the failure only by rewriting LF,
+// which dirty the tree again. Normalising CRLF before comparing makes the check test content, which is the
+// property it exists to test. Reproduced with `git checkout -- crates/protocol/src/generated` before this fix.
+const normaliseEol = (text) => text.replace(/\r\n/g, "\n");
 if (process.argv.includes("--check")) {
   const stale = [];
   for (const { path: file, content, label } of outputs) {
     if (!fs.existsSync(file)) stale.push(`${label} is missing`);
-    else if (fs.readFileSync(file, "utf8") !== content) stale.push(`${label} is stale`);
+    else if (normaliseEol(fs.readFileSync(file, "utf8")) !== normaliseEol(content)) stale.push(`${label} is stale`);
   }
   if (stale.length) {
     console.error(
