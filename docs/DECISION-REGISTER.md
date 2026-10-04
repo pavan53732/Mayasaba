@@ -55,6 +55,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-049 | Initial-intake attachments are supporting context and evidence with source provenance, never project truth by attachment alone | HARD_LOCK |
 | DEC-050 | The Initial Intake Composer takes no project-name field; the display name is derived by the owning service from the validated canonical workspace folder leaf, and `project_id` is never derived from a path | HARD_LOCK |
 | DEC-051 | `operation_id` is a conditional envelope field, required of material-action messages and optional otherwise; the envelope validator's field sets, nested field sets and per-field JSON types are generated from the contract rather than hand-copied | HARD_LOCK |
+| DEC-052 | Council decision quality is governed by controller-computed facts, never agent claims: modes are selected deterministically from structured inputs, evidence grades are computed by the controller, corroboration counts lineage groups rather than agents, roles are controller-assigned framing without authority, the chair's synthesis is independently reviewed, budgets are explicit with unreported tokens recorded as UNAVAILABLE, and outcome tracking is append-only, controller-derived and informational only | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -472,6 +473,93 @@ Standing process rules, restated because this change used them
 Rust sources are edited with the editor, never by shell string replacement, which has damaged a Rust file three
 times. A file restored after a mutation is re-timed before rebuilding, because `Copy-Item` preserves the source's
 `LastWriteTime` and cargo will otherwise re-run a stale binary built from the mutation.
+
+## Correction to the efb6531 commit record
+
+That commit's body states that 24 files were added to `workspace.manifest.json:schema_sources` — "21 from
+`schemas/mcf-v2/` plus the three above" — and that "Three more sat outside mcf-v2 entirely". The diff adds
+**23** lines: 21 from `schemas/mcf-v2/` plus **two** others (`schemas/error-v1/registry.schema.json` and
+`schemas/service-contracts-v1/registry.schema.json`). The commit's own denominator is correct and the
+arithmetic confirms it: canonical artifacts go 41 → 64, which is 23 additions, not 24, and "three" should read
+"two". Its other counts are accurate. The body also says `recovery-events.json` is "referenced by nothing at
+all"; `tools/contracts/verify.mjs` names it in a comment, which is why the registration check was narrowed — a
+comment is not a consumer, since this file's comments are stripped before its text is used as coverage
+evidence. Commit messages are immutable history and are not rewritten here; this note is the correction, per
+the practice recorded in DEC-033 and DEC-035.
+
+## DEC-052 council decision-quality record
+
+Classification: REFINEMENT of DEC-033 plus ADDITIVE. Date: 2026-10-04. Supersedes none. HARD_LOCK.
+
+The council had a sound deliberation *process* and nothing that ensured or measured the *quality* of what it
+decided. DEC-033 bounded deliberation in time (rounds) and gave termination a vocabulary. It did not make
+depth proportional to risk, did not grade the evidence a convergence rests on, did not distinguish independent
+agreement from two forks of one codebase agreeing, gave the chair's `SYNTHESIS` no independent check, and left
+no record of whether a decision later held up. This record closes those gaps without adding a state, an edge,
+a message type or an event.
+
+| Field | Value |
+|---|---|
+| Previous behavior | Every material decision received the same deliberation depth: a full round or nothing. `outcome_type` was the only quality-relevant record. `COUNCIL-ENGINE.md` required an unsupported claim to be *labelled* an assumption, but nothing computed, stored or enforced a grade, so a round could seal `CONVERGED` on opinion. Corroboration was implicitly per-agent, which counts Kilo and OpenCode — one codebase served by two front ends — as two independent witnesses. `SYNTHESIS` was required to cite every contributing position and to come from the chair, and was then self-certified: no non-chair review existed. Only rounds were bounded; there was no wall-clock, token or spike budget, and `repair-policies.json` — the precedent DEC-033 cited — has no machine-readable consumption rule and no implementation at all. An agent going offline mid-round was recorded as non-participation, but the round had no budget-visible pause. Nothing recorded whether a decision later held, was amended, or was reversed. |
+| New behavior | (1) **Modes.** `SOLO`, `REVIEW` and `FULL` are selected **deterministically by the controller** from structured inputs: decision class, blast radius, prior validation-failure and dispute counts, and an explicit user override. No LLM chooses, and no agent may select or downgrade a mode. A `ModeSelection` record is persisted for **every** material decision point, including `SOLO`, carrying the mode, the inputs, the reason list, the selector version and the override source; `SOLO` creates a record and **no round**. Escalation is upward only and only between rounds — repeated validation failure, or a reviewer `BLOCK` — moving `SOLO → REVIEW → FULL`. There is never a silent downgrade mid-round. (2) **Evidence grades.** The controller computes `ASSUMPTION < CITED < VERIFIED` per claim; an agent-supplied grade is not representable and is ignored. `CITED` requires every evidence reference to resolve to an existing repository fact, document or `evidence` row; `VERIFIED` requires a controller-executed check or spike stored in `evidence`. A claim is load-bearing unless flagged `supporting`, and a position's grade is its weakest load-bearing claim. (3) **Convergence gate.** A round on a material decision may not seal `CONVERGED` while a surviving position carries a load-bearing `ASSUMPTION` claim. It continues while rounds remain, and otherwise ends `ESCALATED` or `CAP_REACHED` under the existing rules. This is a **precondition on sealing**, not a change to the fixpoint predicate, and it adds no `outcome_type`. (4) **Corroboration counts lineage groups, not agents.** Lineage comes from static adapter facts, never agent self-report; Kilo and OpenCode are one group, so their agreement counts as one corroboration and fewer than two groups is recorded as **uncorroborated**. (5) **Roles.** The controller assigns `proposer`, `skeptic` and `verifier` per round by deterministic rotation; the skeptic is drawn from a different lineage group than the leading proposal's author when possible, and `LINEAGE_UNAVOIDABLE` is recorded when it is not. A role is task framing, never authority; failing a duty is recorded as non-participation for that duty. (6) **Synthesis review.** A non-chair participant reviews each `SYNTHESIS` for omitted or distorted positions using the **existing** `CRITIQUE` type targeting the synthesis position id, plus a deterministic coverage check that the synthesis cites every surviving position. The chair can never self-certify. (7) **Budgets.** Per-round and per-council caps for rounds, wall-clock, tokens and spikes, in a policy artifact following `repair-policies.json`. Exhaustion produces an existing outcome and never silent acceptance. Where an adapter does not report token usage, time and round budgets are enforced and tokens are recorded as `UNAVAILABLE` — never invented. Paused time is excluded from wall-clock and recorded. (8) **Outcome tracking.** Append-only tables record whether a decision later held, was amended, reversed or stayed unresolved, derived **only** from controller facts (validation results, the `reopen_decision` command, decision supersession), with `HELD` requiring a validation evidence reference. Supersession appends; there is no update or delete path. (9) **Failure handling.** An offline agent or a provider drop pauses the round through the **existing** `barrier` machine, records non-participation, and surfaces which agents are offline; silence is never agreement and a timeout is never assent. |
+| Reason | The gaps share one cause: the council reasoned about *agreement* rather than about *warrant*. Agreement is cheap to produce and expensive to trust — two forks of one codebase agree by construction, and a round can converge on a confident assumption. The existing architecture already holds the right principle in three places that the council simply did not apply: `DOMAIN-STATE-MACHINES.md` §15 makes unverifiable state incapable of satisfying a positive gate, so an assumption-backed convergence already could not legitimately satisfy one; `COUNCIL-ENGINE.md` §2 states the fork-lineage caveat but nothing enforced it; and DEC-017 requires one canonical owner per concept, which is why grades, modes, roles and outcomes are computed by the controller and stored once rather than accepted from agents. Bounding rounds alone was also insufficient for the same reason it was insufficient for repair: it bounds iterations, not cost, and a single round can consume unbounded wall-clock or tokens. Finally, a decision-quality feature that fed back into routing or thresholds would be a hidden second authority, so outcome tracking is deliberately inert. |
+| Compatibility impact | ADDITIVE at the protocol layer: **no new MCF message type, no new event type, and no envelope or payload-schema field that an agent may set.** `council-round.schema.json` keeps its generic `positions`/`participants` objects; the claim-grade extension is a controller-owned persisted fact, not an agent-supplied transport field, so an agent cannot assert a grade. The `council_round` state machine is **unchanged**: no state, no edge, no `branches` entry, no command and no guard on an existing transition is added or altered, and `outcome_type` keeps exactly its five existing values. REFINEMENT of DEC-033 in three respects: the `CONVERGED` seal gains a precondition, the `SYNTHESIS` gains a mandatory non-chair review, and deliberation is bounded by budget as well as by rounds. ADDITIVE everywhere else: modes and their records, evidence grades, lineage-group corroboration, round roles, the budget ledger, and decision-outcome tracking. Configuration gains council keys; numeric thresholds remain configuration rather than locked constants, consistent with DEC-033's `max_rounds`. |
+| Migration/reconciliation | No data migration is required: no Mayasaba database has been created yet and there are no persisted rounds, positions, roles, grades, budgets or outcomes to reconcile. New SQLite state is added as **new tables only**, never by altering an existing column, because `crates/storage` applies `schema.sql` with `CREATE TABLE IF NOT EXISTS` on open and has no migration runner — an `ALTER` would silently never reach an existing database. |
+| Tests affected | Contract verification (`tools/contracts/verify.mjs`) must pass with every new schema invariant-checked rather than parse-only. New conformance tests are recorded in `CONFORMANCE-AND-TESTING.md` under "Council quality tests": modes are deterministic and reason-listed, an agent-supplied mode is ignored, a user override is recorded, escalation is upward only, `SOLO` persists a record with no round; an unresolvable reference grades `ASSUMPTION`, an agent-claimed grade is ignored, a position grades at its weakest load-bearing claim, `CONVERGED` is blocked by a load-bearing assumption, and Kilo+OpenCode count as one corroboration while Hermes+Kilo count as two; role assignment is deterministic and rotating, a skeptic's lineage differs when possible, `LINEAGE_UNAVOIDABLE` is recorded when not, and a missed duty is non-participation; an omitted position is detected and a non-chair reviewer is required; budget exhaustion yields a documented outcome, unreported tokens are `UNAVAILABLE`, and paused time is excluded from wall-clock; outcome records are append-only, link only to existing decisions, require validation evidence for `HELD`, are produced by `reopen_decision` on reversal, and leave mode selection byte-identical with and without outcome data; and opening a database created from the previous `schema.sql` adds the new tables idempotently while leaving existing data intact. |
+
+REFINEMENT of DEC-033 versus ADDITIVE, stated plainly
+
+**REFINEMENT (DEC-033 already decided the surrounding behaviour):** the `CONVERGED` precondition (F2) narrows
+when an existing outcome may be recorded; the synthesis review (F4) narrows who may close a `SYNTHESIZED`
+round; the budget caps (F5) narrow the loop DEC-033 already bounded by `max_rounds`. In all three, the
+fixpoint predicate, the five `outcome_type` values, the escalation packet's authority-free `recommendation`
+and its `timeout_behavior: PAUSE` are **unchanged**.
+
+**ADDITIVE (no existing concept covered it):** modes and `ModeSelection` (F1); controller-computed claim
+grades and lineage-group corroboration (F2); round roles (F3); the budget ledger (F5); decision-outcome and
+per-agent outcome-link records (F6). F7 is neither: it is **REUSE** — the existing `barrier` machine, already
+owned by CouncilService, models the pause, and the existing `participation_state` records the
+non-participation.
+
+What was deliberately not invented (AGENTS.md §10)
+
+No new MCF message type: the synthesis review uses the existing `CRITIQUE`. No new event type: a mode
+selection is a per-evaluation decision record in the sense of `DOMAIN-STATE-MACHINES.md` §17.1, which records
+that `admissions` deliberately has no state machine for exactly this reason, and its observability comes from
+a read-only query rather than a new event. No new state, edge or command on `council_round`. No pause concept:
+`barriers` already exists. No decision-class vocabulary: `decisions.class` already exists and is reused rather
+than shadowed. No second evidence store: grading resolves against the existing `evidence` table.
+
+Why modes do not skip phases
+
+`council_round` declares `spine` identical to its eight `states`, and every registered transition is between
+adjacent spine states. A `REVIEW` round that went `CRITIQUE → CLOSING` would therefore need a new off-spine
+edge declared in `branches`, which is precisely what F1 forbids. Modes consequently parameterise
+**participants and required phase content** while `REVIEW` and `FULL` both traverse the full spine, and `SOLO`
+runs no round at all and so touches no machine. This is recorded as an interpretation of F1 rather than
+silently assumed, because the alternative reading — phase skipping — is not expressible without a
+transition-registry change.
+
+Implementation status, stated so documentation is not mistaken for a feature
+
+This record, and the canonical documents and machine-readable contracts that follow it, define the decision.
+The deterministic logic in `crates/council`, the storage APIs that persist the new tables, and the conformance
+tests named above are implemented in the phases that follow this record and are not claimed here. Where the
+record describes behaviour, it describes the intended normative semantics.
+
+Known limitations and open items, recorded rather than fixed
+
+1. `council_outcomes.outcome_type` still has no SQLite `CHECK` constraint. DEC-033 deferred it and this record
+   does not change it, because adding it would be an `ALTER` of an existing column. The five-value vocabulary
+   is therefore enforced in code and in the contract but not by the database.
+2. Outcome tracking is informational only. It must not influence routing, thresholds, mode selection or
+   authority; using it that way would be a hidden second authority and requires its own decision. A test
+   asserts mode selection is unaffected by its presence.
+3. `evidence_links` links evidence to artifacts only, so an outcome's supporting evidence is referenced
+   directly rather than through that table. The alternative — modelling an outcome as an artifact — would
+   make a decision record look like a produced artifact.
+4. Two recovery events remain undeclared in both event vocabularies; see the note in the recovery ownership
+   commit. Unrelated to this record and reported by the gate on every run.
 
 ## Change procedure
 
