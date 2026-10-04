@@ -1,0 +1,67 @@
+// The single controlled transport boundary between the Control Room and Rust.
+//
+// The generated bridge surface is identifier-level: it gives COMMANDS, QUERIES and their owners, not typed
+// request and response models. Scattering raw `invoke("create_project", {...})` through components would
+// hand every call site its own idea of the contract, which is the drift this repository keeps removing at
+// other layers. So there is exactly one typed wrapper here, and components call it.
+//
+// The transport is injectable so tests can drive the UI without a Tauri runtime. The default resolves
+// `@tauri-apps/api` lazily, so importing this module in a plain Node test does not require Tauri.
+
+import type { CommandError, ProjectView } from "./state";
+
+export type Transport = (command: string, args: Record<string, unknown>) => Promise<unknown>;
+
+const tauriTransport: Transport = async (command, args) => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke(command, args);
+};
+
+let transport: Transport = tauriTransport;
+
+/** Replace the transport. Tests only. */
+export function setTransport(next: Transport): void {
+  transport = next;
+}
+
+export function resetTransport(): void {
+  transport = tauriTransport;
+}
+
+/** The request shape declared by create_projectRequest. Whitespace is preserved on the way out. */
+export interface CreateProjectRequest {
+  name: string;
+  local_path: string;
+  initial_brief: string;
+}
+
+/**
+ * Create a project and return the authoritative projection the service committed.
+ *
+ * Rejections are returned, not thrown: a refused command is an expected outcome of intake, and the UI needs
+ * the code to render a message without inspecting prose.
+ */
+export async function createProject(
+  request: CreateProjectRequest,
+): Promise<ProjectView | CommandError> {
+  try {
+    const result = await transport("create_project", {
+      name: request.name,
+      localPath: request.local_path,
+      initialBrief: request.initial_brief,
+    });
+    return result as ProjectView;
+  } catch (thrown) {
+    const candidate = thrown as Partial<CommandError>;
+    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
+      return candidate as CommandError;
+    }
+    // A rejection that is not already a CommandError would be a contract violation on the Rust side. Surface
+    // it as one rather than inventing an optimistic success, which is how a UI ends up displaying authority
+    // it never received.
+    return {
+      code: "TRANSPORT_FAILURE",
+      message: thrown instanceof Error ? thrown.message : String(thrown),
+    };
+  }
+}
