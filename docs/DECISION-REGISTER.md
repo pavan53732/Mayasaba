@@ -596,7 +596,7 @@ and a contract that declares an output obliges the generator to produce it.
 | Ownership decision | `validate_workspace` is owned by **WorkspaceService**, and the nearest alternative was considered and rejected rather than passed over. `get_workspace_status` is the closest existing WorkspaceService query but does not cover this operation: it is keyed by an **existing** project, whereas `validate_workspace` runs **before any project exists**, on a candidate path that may never become one, and it is what `create_project` consumes and then re-validates rather than trusting (DEC-048). Folding it into `get_workspace_status` would have required that query to accept "no project yet" as an input, which is the conflation DEC-048 exists to prevent. The owning implementation is `crates/workspace::validate_workspace_candidate`, reached through the `crates/core` application-service wrapper `project_service::validate_workspace`. **No code moved between crates** and the shell continues to call the core wrapper; declaring an owner is a contract statement, not a relocation. |
 | Read-only verified before declaring a query | A query must not mutate, so both operations were verified read-only before being declared or left as queries, from their implementations rather than from their names. `project_service::validate_workspace` delegates to `validate_workspace_candidate`, whose own documentation states "This function never creates anything", and whose body only trims, inspects (`exists`, `is_dir`, `canonicalize`) and derives a display name; it writes no SQLite row and creates no directory. Its `#[tauri::command]` wrapper takes no `State` and returns a `WorkspaceCheck`. `ProjectService::recover` delegates to `Storage::recover`, which **reports and never repairs**, and its command returns a `RecoveryView` without writing. `recovery_status` was already declared a query, and the rename does not change that classification. |
 | Migration/reconciliation | No data migration: no Mayasaba database has been created yet, and neither operation name is persisted state — they are transport identifiers, so the rename leaves every stored row untouched. `schema.sql` is unchanged. The renamed handler is reconciled in the frontend, its callers, its tests and the README in the same change, so no stale caller is left behind. |
-| Tests affected | `tools/contracts/verify.mjs` gains the two-way bridge checks and the generated-surface check, and mutation testing exercises each direction; the eight mutation proofs are recorded in the gate-strengthening section of `docs/CONFORMANCE-AND-TESTING.md`. The desktop test suite is updated for the renamed frontend function and must stay green. The gate must pass on a **fresh clone**, not only on the machine that made the change, because a check that reads a working copy's line endings or an untracked file is not a check. |
+| Tests affected | `tools/contracts/verify.mjs` gains the two-way bridge checks and the generated-surface check, and mutation testing exercises each direction; the eight mutation proofs and their controls are recorded in `docs/CONFORMANCE-AND-TESTING.md` under "Bridge two-way gate mutation proofs (DEC-053)". The desktop test suite is updated for the renamed frontend function and must stay green. The gate must pass on a **fresh clone**, not only on the machine that made the change, because a check that reads a working copy's line endings or an untracked file is not a check. |
 | Known limitations | (1) **The gate proves names, not semantics.** It proves that every declared operation is implemented and every implemented operation is declared; it does not prove that a handler's payload matches the declared payload type, that an error code is registered, or that a query is genuinely read-only. Two such mismatches are live and are reported below rather than fixed, because fixing either would change wire behavior beyond the two operations this record touches. (2) **The wire casing does not match the contract's casing.** Reported below in full; not fixed here. (3) **Five error codes are emitted but not registered.** Reported below in full; not fixed here. (4) `validate_configuration` remains declared and unimplemented, and the gate now reports that rather than hiding it; implementing it is out of scope for this record. (5) The 41 parse-only canonical artifacts are unchanged in count — this record adds no parse-only artifact and invariant-checks none of them. |
 | Related decision | Applies AGENTS.md §5 (source-of-truth hierarchy) and §19 (documentation and implementation must not be silently normalized); follows DEC-021 (machine-readable canonical registries) and DEC-026 (the shell is transport, not domain logic); reuses DEC-048's authority boundary and DEC-050's name derivation without altering either. |
 
@@ -657,15 +657,22 @@ about the vocabulary plus a gate check that reads emitted codes, and that is nam
 ### Implementation status, stated plainly
 
 This record changes **two** operations and the gate. The implementation status of every other declared
-operation is unchanged: **31 of the 32 declared commands and 25 of the 27 declared queries still have no
-handler**, and the 30 declared UI events are unchanged. (The request that produced this record said "the other
-28 commands"; the measured figure is 31, and the arithmetic is shown rather than the requested number repeated:
-32 declared commands minus `create_project`, the one implemented command. On the query side, 27 declared
-queries minus `list_projects` and `validate_workspace` leaves 25. No other handler was added, removed or
-altered.) `validate_configuration` remains declared and unimplemented, and is now reported by the gate instead
+operation is unchanged: **31 of the 32 declared commands and 24 of the 27 declared queries still have no
+handler** — 55 of 59 declared operations in total — and the 30 declared UI events are unchanged. (The request
+that produced this record said "the other 28 commands"; the measured figure is 31, and the arithmetic is shown
+rather than the requested number repeated: 32 declared commands minus `create_project`, the one implemented
+command. On the query side, 27 declared queries minus `list_projects`, `get_recovery_status` and
+`validate_workspace` leaves 24. No other handler was added, removed or altered.) The gate reports this figure
+on every run, so the number in this record and the number the gate prints are the same fact.
+`validate_configuration` remains declared and unimplemented, and is now reported by the gate instead
 of being invisible to it. The council runtime, the bus, the adapters, the execution subsystem and the
 validation subsystem are untouched by this record, and nothing here implements any of them. The `41` parse-only
 canonical artifacts remain `41`; the `27` invariant-checked remain `27`.
+
+The three parts of this record land in three commits, in dependency order: the contract declaration first,
+because the contract is the authority and everything else follows it; the rename second, because a registered
+handler must carry a declared name; the gate last, because a gate that enforces a rule before the rule is
+satisfied would be red on its own commit. This record states the end state that all three reach.
 
 ## Change procedure
 

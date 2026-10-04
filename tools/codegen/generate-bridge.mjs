@@ -46,27 +46,54 @@ ${queries.map((q) => `  ${JSON.stringify(q)}: ${JSON.stringify(ownership(q))},`)
 
 const target = path.join(root, "apps/desktop/src/generated/bridge.ts");
 
+// The Rust surface is generated from the same three enums. It was checked in as a "GENERATED FILE - DO NOT
+// EDIT" with no generator owning it and no check reading it, so it could drift from the contract (and from
+// bridge.ts) with nothing noticing - the same parity gap bridge.ts had before its own --check existed. One
+// generator now owns both, and --check compares both, so the two surfaces cannot disagree with the contract
+// or with each other.
+const rust = `// GENERATED FILE — DO NOT EDIT.
+// Source: schemas/tauri-bridge-v1/bridge.schema.json + payloads.json + workspace.manifest.json
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandName { ${commands.join(", ")} }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryName { ${queries.join(", ")} }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventName { ${events.join(", ")} }
+`;
+
+const outputs = [
+  { path: target, content: ts, label: "apps/desktop/src/generated/bridge.ts" },
+  {
+    path: path.join(root, "apps/desktop/src-tauri/src/generated/bridge.rs"),
+    content: rust,
+    label: "apps/desktop/src-tauri/src/generated/bridge.rs",
+  },
+];
+
 if (process.argv.includes("--check")) {
-  if (!fs.existsSync(target)) {
-    console.error("Generated file is missing: apps/desktop/src/generated/bridge.ts");
-    process.exit(1);
+  const stale = [];
+  for (const { path: file, content, label } of outputs) {
+    if (!fs.existsSync(file)) stale.push(`${label} is missing`);
+    // Line-ending agnostic: git stores these files with LF while `core.autocrlf=true` may check them out with
+    // CRLF on Windows, so a raw byte comparison would call them stale on a checkout whose content is identical.
+    else if (fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n") !== content.replace(/\r\n/g, "\n")) {
+      stale.push(`${label} is stale`);
+    }
   }
-  // Line-ending agnostic, for the same reason and with the same reproduction as the protocol generator: git
-// stores this file with LF while `core.autocrlf=true` checks it out with CRLF on Windows, so a raw byte
-// comparison called it stale on a fresh checkout whose content was identical.
-if (fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== ts.replace(/\r\n/g, "\n")) {
+  if (stale.length) {
     console.error(
-      "apps/desktop/src/generated/bridge.ts is stale relative to the contract.\n" +
-      "Run: npm run codegen:bridge"
+      "generated bridge surface is out of date:\n  - " + stale.join("\n  - ") +
+      "\nRun: npm run codegen:bridge"
     );
     process.exit(1);
   }
-  console.log("apps/desktop/src/generated/bridge.ts is up to date");
+  console.log("generated bridge surface is up to date");
   process.exit(0);
 }
 
 fs.mkdirSync(path.join(root, "apps/desktop/src/generated"), { recursive: true });
-fs.writeFileSync(target, ts);
+fs.mkdirSync(path.join(root, "apps/desktop/src-tauri/src/generated"), { recursive: true });
+for (const { path: file, content } of outputs) fs.writeFileSync(file, content);
 console.log(
-  `Generated bridge.ts (${commands.length} commands, ${queries.length} queries, ${events.length} events)`
+  `Generated bridge.ts and bridge.rs (${commands.length} commands, ${queries.length} queries, ${events.length} events)`
 );

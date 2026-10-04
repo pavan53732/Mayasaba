@@ -141,7 +141,7 @@
     "rust_output": "apps/desktop/src-tauri/src/generated/bridge.rs",
     "typescript_output": "apps/desktop/src/generated/bridge.ts",
     "mode": "generated-and-checked-in",
-    "verification": "npm run verify:contracts checks bridge command/query/event identifiers and ownership against workspace.manifest.json; it does not read the generated files themselves. Generated files are checked in and must not be hand-edited, but a regeneration-and-diff drift check is not yet implemented, so that rule is not yet mechanically enforced."
+    "verification": "npm run verify:contracts checks bridge command/query/event identifiers and ownership against workspace.manifest.json, reads both sides of the bridge (the #[tauri::command] functions and generate_handler![...] list in apps/desktop/src-tauri/src/main.rs, and the transport(...) call sites in the non-generated frontend), and runs this generator's --check mode so that both generated files are compared against what the contract implies. A handler or a call naming an undeclared operation fails; a declared operation nothing implements is reported with its count."
   },
   "x-service-mappings": "workspace.manifest.json",
   "x-payload-schema": "schemas/tauri-bridge-v1/payloads.schema.json"

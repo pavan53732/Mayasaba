@@ -277,6 +277,150 @@ for(const c of bridge.properties.command.enum) if(!payloadRegistry.commands?.[c]
 for(const q of bridge.properties.query.enum) if(!payloadRegistry.queries?.[q]) fail("No query payload metadata: "+q);
 for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e]) fail("No event payload metadata: "+e);
 
+// --- The bridge gate is two-way (DEC-053).
+// Every bridge check above reads the contract and nothing else, so the gate could prove the contract was
+// self-consistent while being blind to both failures that actually existed: a handler registered under a name
+// the contract does not declare (`recovery_status`, where the contract declares `get_recovery_status`), and an
+// operation the contract declares that nothing implements. A gate that reads one side of a two-sided agreement
+// cannot detect a disagreement, so both sides are read here.
+//
+// The two directions are deliberately NOT symmetric, and the asymmetry is the design rather than a softening:
+//
+//   implementation -> contract   is a FAILURE. A registered handler or a transport call that names an
+//                                operation the contract does not declare is drift with no defence: the
+//                                contract is the authority (AGENTS.md section 5), so the code is wrong.
+//   contract -> implementation   is REPORTED. The contract deliberately leads implementation - it declares 58
+//                                operations and 4 exist - so "declared and unimplemented" cannot be a failure
+//                                without either deleting 54 declarations or introducing a second registry of
+//                                "pending" operations, which would be a competing source of truth (DEC-017).
+//                                It is reported with its count and names on every run so the gap stays visible
+//                                instead of being silently absorbed by a green gate.
+//
+// A call site whose operation name is not a string literal is a FAILURE rather than a skip: an unresolvable
+// name is precisely the case the check cannot cover, and ignoring it would let the drift this block exists to
+// catch walk through the one door the check cannot see. Comments are stripped before scanning, so a name
+// mentioned in prose is not mistaken for a call site.
+
+// Removes comments while preserving string literals. A regex-only stripper gets one of the two wrong: it either
+// leaves a commented-out call site looking live, or eats a `//` inside a string. State is tracked explicitly.
+// Named distinctly from the simpler `stripComments` used later for this gate's own text, which must keep its
+// existing behaviour. Regex literals are not modelled; none of the scanned files (Rust, or the frontend's
+// non-generated TypeScript) contains one, and a desynchronized scan fails loudly rather than passing quietly.
+const stripCommentsForScan=(src)=>{
+  let out="",state="code",i=0;
+  while(i<src.length){
+    const c=src[i],n=src[i+1];
+    if(state==="code"){
+      if(c==="/"&&n==="/"){state="line";i+=2;continue;}
+      if(c==="/"&&n==="*"){state="block";i+=2;continue;}
+      if(c==="'"||c==='"'||c==="`"){state=c;out+=c;i++;continue;}
+      out+=c;i++;continue;
+    }
+    if(state==="line"){ if(c==="\n"){state="code";out+=c;} i++; continue; }
+    if(state==="block"){ if(c==="*"&&n==="/"){state="code";i+=2;continue;} i++; continue; }
+    if(c==="\\"){out+=c+(n??"");i+=2;continue;}
+    if(c===state){state="code";out+=c;i++;continue;}
+    out+=c;i++;
+  }
+  return out;
+};
+
+const walkFiles=(dir)=>{
+  const out=[];
+  const visit=(rel)=>{
+    for(const entry of fs.readdirSync(path.join(root,rel),{withFileTypes:true})){
+      const child=rel+"/"+entry.name;
+      if(entry.isDirectory()) visit(child); else out.push(child);
+    }
+  };
+  visit(dir);
+  return out;
+};
+
+const BRIDGE_RUST="apps/desktop/src-tauri/src/main.rs";
+const BRIDGE_BOUNDARY="apps/desktop/src/intake/bridge.ts";
+const declaredOps=new Map();
+for(const c of bridge.properties.command.enum) declaredOps.set(c,"command");
+for(const q of bridge.properties.query.enum) declaredOps.set(q,"query");
+
+const bridgeProblems=[];
+
+// --- Rust side: which handlers are registered, and which functions are actually commands.
+const rustCode=stripCommentsForScan(readText(BRIDGE_RUST));
+const handlerList=/generate_handler!\s*\[([\s\S]*?)\]/.exec(rustCode);
+if(!handlerList) fail(
+  `Could not find a generate_handler![...] list in ${BRIDGE_RUST}.\n`+
+  `The bridge gate reads this file to compare registered handlers against the contract, so a registration list `+
+  `it cannot parse is a failure rather than a skip: a handler nothing can enumerate is a handler nothing can check.`
+);
+const registered=handlerList[1].split(",").map(s=>s.trim()).filter(Boolean).map(s=>s.split("::").pop());
+for(const n of registered) if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) fail(
+  `${BRIDGE_RUST}: could not parse "${n}" in generate_handler![...] as a handler name.`
+);
+// Fail closed on an attribute whose function name cannot be read: such a function would be registered or not
+// with nothing noticing, which is the state this check exists to end.
+const commandAttrs=(rustCode.match(/#\[tauri::command\]/g)??[]).length;
+const commandFns=[...rustCode.matchAll(/#\[tauri::command\]\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/g)].map(m=>m[1]);
+if(commandFns.length!==commandAttrs) fail(
+  `${BRIDGE_RUST}: ${commandAttrs} #[tauri::command] attribute(s) but only ${commandFns.length} resolved to a function name.\n`+
+  `An attribute whose function name cannot be read is unchecked, so this is a failure rather than a skip.`
+);
+for(const n of registered) if(!commandFns.includes(n)) bridgeProblems.push(
+  `${BRIDGE_RUST} registers ${n} in generate_handler![...] but defines no #[tauri::command] fn ${n}`
+);
+for(const n of commandFns) if(!registered.includes(n)) bridgeProblems.push(
+  `${BRIDGE_RUST} defines #[tauri::command] fn ${n} but never registers it in generate_handler![...], so it is unreachable from the frontend`
+);
+for(const n of registered) if(!declaredOps.has(n)) bridgeProblems.push(
+  `${BRIDGE_RUST} registers handler ${n}, which the bridge contract declares as neither a command nor a query`
+);
+
+// --- Frontend side: what the Control Room actually asks Rust for. Generated files are excluded because they
+// are derived from the contract rather than from an intent to call something, and tests are excluded because a
+// test's fake transport legitimately names whatever it is exercising.
+const frontendFiles=walkFiles("apps/desktop/src")
+  .filter(f=>/\.(ts|tsx)$/.test(f))
+  .filter(f=>!f.startsWith("apps/desktop/src/generated/"))
+  .filter(f=>!/\.test\.(ts|tsx)$/.test(f));
+const transportCalls=[];
+for(const file of frontendFiles){
+  const code=stripCommentsForScan(readText(file));
+  for(const m of code.matchAll(/(?<![A-Za-z0-9_$])transport\s*\(/g)){
+    const literal=/^\s*(["'])([^"']*)\1/.exec(code.slice(m.index+m[0].length));
+    if(!literal){
+      bridgeProblems.push(`${file} calls transport(...) with an operation name that is not a string literal, so the name cannot be checked against the contract`);
+      continue;
+    }
+    transportCalls.push([file,literal[2]]);
+  }
+  // `invoke` is the raw Tauri boundary. It is permitted in exactly one file, because that file is the single
+  // controlled transport boundary (AGENTS.md section 11); anywhere else it is a second, unchecked door.
+  for(const m of code.matchAll(/(?<![A-Za-z0-9_$.])invoke\s*\(/g)){
+    if(file===BRIDGE_BOUNDARY) continue;
+    const literal=/^\s*(["'])([^"']*)\1/.exec(code.slice(m.index+m[0].length));
+    bridgeProblems.push(
+      `${file} calls invoke(...) directly instead of going through the single transport boundary ${BRIDGE_BOUNDARY}`+
+      (literal?` (it names ${literal[2]})`:"")
+    );
+  }
+}
+for(const [file,name] of transportCalls){
+  if(!declaredOps.has(name)) bridgeProblems.push(
+    `${file} calls transport("${name}"), which the bridge contract declares as neither a command nor a query`
+  );
+  else if(!registered.includes(name)) bridgeProblems.push(
+    `${file} calls transport("${name}") but ${BRIDGE_RUST} registers no handler of that name, so the declared ${declaredOps.get(name)} cannot succeed`
+  );
+}
+if(bridgeProblems.length) fail(
+  `The Tauri bridge disagrees with its own contract (DEC-053):\n  - ${bridgeProblems.join("\n  - ")}\n`+
+  `The contract is the authority (AGENTS.md section 5): declare the operation, or register it under its declared name.`
+);
+
+// The reported direction. Kept as a value so the summary can state it rather than leaving it implied.
+const bridgeImplemented=[...declaredOps.keys()].filter(n=>registered.includes(n));
+const bridgeUnimplemented=[...declaredOps.keys()].filter(n=>!registered.includes(n));
+
 // --- Event emitters (DEC-040). registry.json:event_ownership is keyed by event *category*, not by
 // event type, so it has no per-event key and cannot answer "what emits this event?". event_emitters
 // declares one emitter per canonical event: {kind:"transition", machines:[...]} or
@@ -1153,18 +1297,33 @@ if(councilProblems.length) fail(councilProblems.length+" council decision-qualit
 // which would be the first place in this repository where two artifacts both claim authority and disagree.
 // The generator's --check mode re-derives the file from machines[] and registry.json and compares bytes.
 //
-// Compilation is deliberately NOT claimed here: no Rust toolchain is configured in this environment, so
-// `cargo build` cannot run. What this check proves is that the committed bytes are what the current contract
-// implies. Whether that Rust compiles is unverified and is stated as such rather than implied.
+// Compilation is not what this check proves, and the two are complementary rather than substitutes: a compiler
+// cannot detect that the contract has moved on. Compilation is covered separately - `crates/protocol/src/lib.rs`
+// declares `pub mod generated`, so `cargo test --workspace` and `cargo clippy --workspace --all-targets` do
+// compile machines.rs and envelope.rs. What this check adds is that the committed bytes are what the CURRENT
+// contract implies. (An earlier version of this comment claimed no Rust toolchain was configured and that
+// `cargo build` could not run; both were false by the time rustfmt and clippy were installed, and a stale
+// statement about what is verified is itself a verification defect.)
 const genCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-protocol.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
 if(genCheck.startsWith("FAILED")) fail("crates/protocol generated code is stale or missing.\n"+genCheck+"\nRun: npm run codegen:protocol");
 
-// The Tauri bridge surface gets the same treatment. The Control Room calls these commands, queries and
-// events, and the TypeScript surface previously had no byte-level drift protection at all: verify.mjs checked
-// that every bridge name had payload metadata, never that the generated file was current. Protocol and bridge
-// generation are now at parity.
+// The Tauri bridge surface gets the same treatment. The Control Room calls these commands, queries and events,
+// and the TypeScript surface previously had no byte-level drift protection at all: verify.mjs checked that
+// every bridge name had payload metadata, never that the generated file was current. Protocol and bridge
+// generation are now at parity - and the Rust half is now generated too. `bridge.schema.json` had declared
+// `x-codegen.rust_output` all along, while no generator emitted that file and no check read it: the contract
+// named an output the tooling did not produce, so "generated and checked in" was an assertion with no
+// mechanism behind it. One generator now owns both files and --check compares both.
 const bridgeGenCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-bridge.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
-if(bridgeGenCheck.startsWith("FAILED")) fail("apps/desktop/src/generated/bridge.ts is stale or missing.\n"+bridgeGenCheck+"\nRun: npm run codegen:bridge");
+if(bridgeGenCheck.startsWith("FAILED")) fail("the generated bridge surface is stale or missing.\n"+bridgeGenCheck+"\nRun: npm run codegen:bridge");
+
+// The generated Rust surface is checked for staleness but is not compiled: no `mod` declaration in the shell
+// references apps/desktop/src-tauri/src/generated/bridge.rs, so the build never reads it. That is reported
+// rather than repaired here - wiring it into the crate is a shell change, not a gate change - and it is
+// reported because a generated file that is current but never compiled reads as enforcement it is not.
+console.log(/(^|\n)\s*(?:pub\s+)?mod\s+generated\b/.test(rustCode)
+  ? "Generated bridge.rs: referenced by a `mod generated` declaration, so the compiler reads it"
+  : "Generated bridge.rs: current, but referenced by no `mod` declaration in the shell, so it is not compiled (reported, not blocking)");
 
 // --- Tracked-but-ignored files. .gitignore governs only UNTRACKED paths, so a rule added after files were
 // already committed has no effect on them. That happened twice here: 3,057 files under target/ were committed
@@ -1253,6 +1412,18 @@ gateCoverage={verified:verifiedInCanonical.length,canonical:canonicalList.length
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+// The reported half of the two-way bridge gate. Stated every run, including when it is large, because a gap
+// that is only visible in a document is a gap that drifts; the README figure and this line are the same fact.
+console.log(`Bridge: ${bridgeImplemented.length} of ${declaredOps.size} declared operations implemented; ${bridgeUnimplemented.length} declared with no handler (reported, not blocking)`);
+if(bridgeUnimplemented.length){
+  const lines=[];let current="";
+  for(const n of bridgeUnimplemented){
+    if(current&&(current+", "+n).length>96){lines.push(current+",");current=n;}
+    else current=current?current+", "+n:n;
+  }
+  if(current)lines.push(current);
+  console.log(`Declared bridge operations with no handler:\n${lines.map(l=>"  "+l).join("\n")}`);
+}
 console.log(`Gate coverage: ${gateCoverage.verified} of ${gateCoverage.canonical} canonical artifacts invariant-checked; all ${gateCoverage.parsed} parsed for readability; ${gateCoverage.unverified} parse-only, no invariant enforced (reported, not blocking)`);
 // Hook status is reported, never enforced. A pre-commit gate that checks whether the pre-commit gate
 // is installed would need its own hook, so the recursion is stopped one level down: the mechanism

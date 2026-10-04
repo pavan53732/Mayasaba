@@ -233,7 +233,7 @@ This suite belongs to M0.5 and must run before M1/M2/M3 vertical integration. It
 The local contract gate — `npm run verify:contracts`, which runs `tools/contracts/verify.mjs` from the repository root on the user's Windows PC — must compare:
 
 - `schemas/mcf-v2/registry.json` against protocol/message/event enums — performed by the gate;
-- `schemas/tauri-bridge-v1/bridge.schema.json` bridge identifiers against their declared owners in `workspace.manifest.json` — performed by the gate. The gate compares the identifier **enums** against the manifest's ownership maps; it does not read the generated `bridge.ts`/`bridge.rs` files or compare them for regeneration drift, which is not yet implemented (see `INTERNAL-APPLICATION-ARCHITECTURE.md` §29);
+- `schemas/tauri-bridge-v1/bridge.schema.json` bridge identifiers against their declared owners in `workspace.manifest.json` — performed by the gate. The gate compares the identifier **enums** against the manifest's ownership maps. It also reads **both sides** of the bridge (DEC-053): the `#[tauri::command]` functions and the `generate_handler![...]` list in `apps/desktop/src-tauri/src/main.rs`, and the `transport(...)` call sites in the non-generated, non-test frontend. A handler or a call that names an operation the contract does not declare is a failure, as is a call to a declared operation that no handler registers, a `#[tauri::command]` function that is never registered, a registered name that is not a command function, an `invoke(...)` call outside the single transport boundary, a `transport(...)` name that is not a string literal, and a registration list the gate cannot parse. A declared operation that nothing implements is **reported** with its count rather than failed, because the contract deliberately leads implementation — see the mutation proofs below;
 - `docs/WORKSPACE-MANIFEST.md` against Cargo/npm/Tauri manifests once implementation exists — **partially** performed: the gate currently checks that the declared manifests exist and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. It does not yet parse the root `Cargo.toml`, desktop `package.json` or `tauri.conf.json` contents for a full dependency-graph comparison;
 - adapter probe results against the adapter capability contract — **not** performed by the gate. This is a runtime comparison against a live probe result; the gate checks the adapter set, transports and declared controls statically.
 
@@ -242,3 +242,22 @@ Any mismatch the gate detects is a verification failure, not a warning.
 > **Operational note:** the gate is a local command, and it is wired to a pre-commit hook rather than run by a service. `git config core.hooksPath .githooks` enables it, but that is a per-clone opt-in that git cannot enforce, so a fresh clone commits without the gate until it is set, and `git commit --no-verify` bypasses it on any commit. When the pointer is unset the verifier prints the fact in its summary line — `Pre-commit gate: NOT enabled (core.hooksPath unset)` — as information rather than a failure, so a deliberate opt-out is visible and is not itself treated as an error.
 
 There is no hosted CI; see the DEC-036 record in `docs/DECISION-REGISTER.md`. Running the gate before handoff and commit is required, not optional.
+
+## Bridge two-way gate mutation proofs (DEC-053)
+
+A check that has never been shown to fail is an assertion, not a check. The two-way bridge gate was therefore mutation-tested in eight directions, each applied to the working tree, run, and reverted. Every mutation made the gate exit non-zero and name the specific disagreement; the unmutated tree exits zero; the tree was byte-identical after each revert.
+
+| # | Mutation | Expected and observed failure |
+|---|---|---|
+| a | `main.rs`: register an extra `#[tauri::command] fn ghost_undeclared` under a name the contract does not declare | fails, naming `ghost_undeclared` as an operation the contract declares as neither a command nor a query |
+| b | `main.rs`: remove `validate_workspace` from `generate_handler![...]` while leaving its function defined | fails: a declared handler is defined but never registered, so it is unreachable from the frontend |
+| c | `main.rs`: delete the `#[tauri::command]` attribute from the registered `create_project` | fails: `generate_handler![...]` registers `create_project` but no `#[tauri::command] fn create_project` exists |
+| d | `main.rs`: break the `generate_handler![...]` list so it no longer parses | fails closed — "could not find a `generate_handler![...]` list" — rather than skipping the Rust side |
+| e | frontend: add `transport("ghost_undeclared_op", {})` | fails, naming the undeclared operation and the file |
+| f | frontend: add `transport("get_project", {})`, a declared query with no handler | fails: the call cannot succeed because no handler of that name is registered |
+| g | frontend: add a raw `invoke("list_projects", {})` outside the boundary file, and a `transport(dynamicName, {})` with a non-literal name | fails twice: `invoke` outside the single transport boundary, and an operation name that is not a string literal and therefore cannot be checked |
+| h | generated surface: edit `apps/desktop/src-tauri/src/generated/bridge.rs` and `apps/desktop/src/generated/bridge.ts` without regenerating | fails on both: `generate-bridge.mjs --check` reports each stale file by name |
+
+Two controls were run alongside them. The unmutated tree passes, and a **commented-out** `transport(...)`/`invoke(...)` call does not fail the gate — comments are stripped before scanning, so a name mentioned in prose is not mistaken for a call site. A gate that fired on comments would be turned off rather than fixed.
+
+What the proofs do **not** establish, stated so the green is not over-read: the gate proves that operation *names* agree, never that a handler's payload matches its declared payload type, that a query is genuinely read-only, or that an emitted error code is registered. The wire-casing divergence and the eleven unregistered error codes recorded in DEC-053 are exactly the classes it cannot see, and both are reported there as open items rather than implied to be covered.

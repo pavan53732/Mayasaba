@@ -234,7 +234,7 @@ Contract verification runs locally on the user's Windows PC — there is no host
 npm run verify:contracts
 ~~~
 
-This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
+This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protocol/message/event enums, the Tauri bridge identifiers against their declared owners in `workspace.manifest.json`, both sides of the Tauri bridge — the registered handlers in `apps/desktop/src-tauri/src/main.rs` and the frontend's `transport(...)` call sites — the generated bridge and protocol surfaces against the contract they are derived from, the agent-adapter set and declared controls, the existence of the declared manifests, and that each crate's `Cargo.toml` names its declared `mayasaba-*` dependencies. A non-zero exit means contract drift; it must be resolved before handoff, not waived. It requires no network access and no CI service.
 
 The gate is wired to a version-controlled pre-commit hook, so it is not merely available but run:
 
@@ -261,10 +261,11 @@ What is implemented:
   `create_project`, `list_projects`, `get_recovery_status` and `validate_workspace`. All four names are
   declared in the bridge contract — `create_project` (a declared command) and `list_projects`,
   `get_recovery_status` and `validate_workspace` (declared queries). The contract also still declares
-  `validate_configuration`, which nothing implements. The remaining 31 declared commands and 25 declared
-  queries have no handler. The gate reads the contract and never reads `main.rs` or the frontend's
-  `transport(...)` calls, so a handler whose name the contract does not declare is invisible to it; DEC-053
-  records this drift and the gate change that closes it.
+  `validate_configuration`, which nothing implements. The remaining 31 declared commands and 24 declared
+  queries have no handler. The gate reads both sides: it parses the `#[tauri::command]` functions and the
+  `generate_handler![...]` list out of `main.rs`, and the `transport(...)` call sites out of the frontend, so a
+  handler or a call that names an undeclared operation fails the gate, while a declared operation that nothing
+  implements is reported with its count rather than failed. DEC-053 records the drift this closed.
 - MCF-v2 envelope validation in `crates/protocol`, with the envelope's vocabulary and per-field JSON types
   generated from the contract rather than hand-copied (DEC-051), plus startup recovery and durable-state
   inconsistency reporting in `crates/storage`.
