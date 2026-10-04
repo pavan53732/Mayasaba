@@ -20,3 +20,7 @@ dist/
 
 # clj-kondo local state
 .clj-kondo/
+
+# clojure-lsp local state: .lsp/.cache/db.transit.json is clojure-lsp's analysis cache, whose content
+# records this machine's project root and kondo config hashes. Tool state, not product content.
+.lsp/
