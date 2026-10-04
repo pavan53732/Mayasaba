@@ -11,7 +11,8 @@ fn existing_dir(tag: &str) -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("mayasaba-rec-{}-{}-{}", std::process::id(), tag, n));
+    let dir =
+        std::env::temp_dir().join(format!("mayasaba-rec-{}-{}-{}", std::process::id(), tag, n));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create dir");
     dir
@@ -33,7 +34,9 @@ fn healthy(tag: &str) -> Storage {
     let dir = existing_dir(tag).join("Healthy");
     std::fs::create_dir_all(&dir).unwrap();
     let mut storage = Storage::open_in_memory().expect("open");
-    storage.create_project(&new_project(&dir, tag)).expect("create");
+    storage
+        .create_project(&new_project(&dir, tag))
+        .expect("create");
     storage
 }
 
@@ -41,8 +44,15 @@ fn healthy(tag: &str) -> Storage {
 fn a_healthy_database_recovers_clean() {
     let storage = healthy("clean");
     let report = storage.recover().expect("recover");
-    assert!(report.integrity_ok, "SQLite integrity_check must pass on a healthy database");
-    assert!(report.is_clean(), "a correctly created project must produce no recovery issues: {:?}", report.issues);
+    assert!(
+        report.integrity_ok,
+        "SQLite integrity_check must pass on a healthy database"
+    );
+    assert!(
+        report.is_clean(),
+        "a correctly created project must produce no recovery issues: {:?}",
+        report.issues
+    );
     assert!(report.issues.is_empty());
 }
 
@@ -50,7 +60,11 @@ fn a_healthy_database_recovers_clean() {
 fn an_empty_database_recovers_clean() {
     let storage = Storage::open_in_memory().expect("open");
     let report = storage.recover().expect("recover");
-    assert!(report.is_clean(), "a fresh install has nothing to recover from: {:?}", report.issues);
+    assert!(
+        report.is_clean(),
+        "a fresh install has nothing to recover from: {:?}",
+        report.issues
+    );
 }
 
 #[test]
@@ -73,8 +87,16 @@ fn a_project_without_its_brief_is_reported() {
 
     let report = storage.recover().expect("recover");
     assert!(!report.is_clean());
-    let issue = report.issues.iter().find(|i| i.kind == "PROJECT_WITHOUT_BRIEF").expect("missing-brief issue");
-    assert!(issue.detail.contains("prj_orphan"), "the issue must name the project: {}", issue.detail);
+    let issue = report
+        .issues
+        .iter()
+        .find(|i| i.kind == "PROJECT_WITHOUT_BRIEF")
+        .expect("missing-brief issue");
+    assert!(
+        issue.detail.contains("prj_orphan"),
+        "the issue must name the project: {}",
+        issue.detail
+    );
 }
 
 #[test]
@@ -84,12 +106,23 @@ fn epoch_summary_drift_is_reported() {
     let mut storage = healthy("drift");
     storage
         .conn()
-        .execute("UPDATE projects SET current_epoch = 7 WHERE project_id = 'prj_drift'", [])
+        .execute(
+            "UPDATE projects SET current_epoch = 7 WHERE project_id = 'prj_drift'",
+            [],
+        )
         .expect("inject drift");
 
     let report = storage.recover().expect("recover");
-    let issue = report.issues.iter().find(|i| i.kind == "EPOCH_SUMMARY_DRIFT").expect("drift issue");
-    assert!(issue.detail.contains("7"), "the issue must state both values: {}", issue.detail);
+    let issue = report
+        .issues
+        .iter()
+        .find(|i| i.kind == "EPOCH_SUMMARY_DRIFT")
+        .expect("drift issue");
+    assert!(
+        issue.detail.contains("7"),
+        "the issue must state both values: {}",
+        issue.detail
+    );
 }
 
 #[test]
@@ -98,7 +131,10 @@ fn orphaned_rows_are_reported() {
     // them on. This test reproduces exactly that: it turns FKs off, writes the bad row, and then recovery -
     // running with FKs enforced, as the real application does - must still notice it.
     let mut storage = Storage::open_in_memory().expect("open");
-    storage.conn().execute_batch("PRAGMA foreign_keys = OFF").expect("simulate a build with FKs off");
+    storage
+        .conn()
+        .execute_batch("PRAGMA foreign_keys = OFF")
+        .expect("simulate a build with FKs off");
     storage
         .conn()
         .execute(
@@ -107,11 +143,17 @@ fn orphaned_rows_are_reported() {
             [],
         )
         .expect("inject orphan brief");
-    storage.conn().execute_batch("PRAGMA foreign_keys = ON").expect("restore FK enforcement");
+    storage
+        .conn()
+        .execute_batch("PRAGMA foreign_keys = ON")
+        .expect("restore FK enforcement");
 
     let report = storage.recover().expect("recover");
     assert!(
-        report.issues.iter().any(|i| i.kind == "ORPHANED_PROJECT_ROWS"),
+        report
+            .issues
+            .iter()
+            .any(|i| i.kind == "ORPHANED_PROJECT_ROWS"),
         "an orphaned brief must be reported even with foreign keys now enforced: {:?}",
         report.issues
     );
@@ -134,9 +176,16 @@ fn recovery_reports_and_never_repairs() {
     let _ = storage.recover().expect("recover");
     let still_there: i64 = storage
         .conn()
-        .query_row("SELECT COUNT(*) FROM projects WHERE project_id = 'prj_bad'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM projects WHERE project_id = 'prj_bad'",
+            [],
+            |r| r.get(0),
+        )
         .expect("count");
-    assert_eq!(still_there, 1, "recovery must report, not silently delete authoritative rows");
+    assert_eq!(
+        still_there, 1,
+        "recovery must report, not silently delete authoritative rows"
+    );
 }
 
 #[test]
@@ -156,6 +205,13 @@ fn several_problems_are_all_reported_not_just_the_first() {
     }
 
     let report = storage.recover().expect("recover");
-    let missing = report.issues.iter().filter(|i| i.kind == "PROJECT_WITHOUT_BRIEF").count();
-    assert_eq!(missing, 3, "every affected project must appear, not just the first");
+    let missing = report
+        .issues
+        .iter()
+        .filter(|i| i.kind == "PROJECT_WITHOUT_BRIEF")
+        .count();
+    assert_eq!(
+        missing, 3,
+        "every affected project must appear, not just the first"
+    );
 }

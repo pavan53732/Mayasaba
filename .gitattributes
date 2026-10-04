@@ -5,3 +5,8 @@
 
 # LF for shell scripts generally, so the same failure cannot reappear elsewhere.
 *.sh text eol=lf
+
+# rustfmt output is LF, and rustfmt decides pass/fail. With core.autocrlf=true a checkout would otherwise
+# smudge .rs to CRLF, and `cargo fmt --all --check` would report a diff on every line of every file, making
+# the formatting gate depend on the checkout's settings rather than on the code.
+*.rs text eol=lf

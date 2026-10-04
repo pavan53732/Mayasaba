@@ -69,12 +69,16 @@ fn valid_material() -> Value {
 fn a_legal_envelope_is_accepted() {
     let envelope = validate_envelope(&valid()).expect("a legal envelope must be accepted");
     assert_eq!(envelope.message_type(), "HEARTBEAT");
-    assert_eq!(envelope.project_id(), "33333333-3333-4333-8333-333333333333");
+    assert_eq!(
+        envelope.project_id(),
+        "33333333-3333-4333-8333-333333333333"
+    );
 }
 
 #[test]
 fn a_legal_material_action_envelope_is_accepted() {
-    let envelope = validate_envelope(&valid_material()).expect("a legal material envelope must be accepted");
+    let envelope =
+        validate_envelope(&valid_material()).expect("a legal material envelope must be accepted");
     assert_eq!(envelope.message_type(), "EXECUTION_REQUEST");
 }
 
@@ -95,9 +99,18 @@ fn every_optional_field_may_be_present() {
 
 #[test]
 fn a_non_object_is_rejected() {
-    assert_eq!(validate_envelope(&json!("nope")).err(), Some(EnvelopeRejection::NotAnObject));
-    assert_eq!(validate_envelope(&json!([])).err(), Some(EnvelopeRejection::NotAnObject));
-    assert_eq!(validate_envelope(&json!(null)).err(), Some(EnvelopeRejection::NotAnObject));
+    assert_eq!(
+        validate_envelope(&json!("nope")).err(),
+        Some(EnvelopeRejection::NotAnObject)
+    );
+    assert_eq!(
+        validate_envelope(&json!([])).err(),
+        Some(EnvelopeRejection::NotAnObject)
+    );
+    assert_eq!(
+        validate_envelope(&json!(null)).err(),
+        Some(EnvelopeRejection::NotAnObject)
+    );
 }
 
 #[test]
@@ -118,7 +131,9 @@ fn a_missing_required_field_is_rejected_by_name() {
         v.as_object_mut().unwrap().remove(*field);
         match validate_envelope(&v) {
             Err(EnvelopeRejection::MissingField(name)) => assert_eq!(name, *field),
-            other => panic!("removing required field `{field}` must be reported by name, got {other:?}"),
+            other => {
+                panic!("removing required field `{field}` must be reported by name, got {other:?}")
+            }
         }
     }
 }
@@ -129,19 +144,32 @@ fn an_undefined_field_is_rejected() {
     // never validated.
     let mut v = valid();
     v["not_a_contract_field"] = json!("surprise");
-    assert!(matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::UnknownField(_))));
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::UnknownField(_))
+    ));
 }
 
 #[test]
 fn an_unknown_message_type_is_rejected() {
     let mut v = valid();
     v["message_type"] = json!("DO_ANYTHING");
-    assert!(matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::InvalidValue { field: "message_type", .. })));
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::InvalidValue {
+            field: "message_type",
+            ..
+        })
+    ));
 }
 
 #[test]
 fn an_unknown_channel_or_phase_or_priority_is_rejected() {
-    for (field, bad) in [("channel", "nowhere"), ("phase", "NOT_A_PHASE"), ("priority", "WHENEVER")] {
+    for (field, bad) in [
+        ("channel", "nowhere"),
+        ("phase", "NOT_A_PHASE"),
+        ("priority", "WHENEVER"),
+    ] {
         let mut v = valid();
         v[field] = json!(bad);
         assert!(
@@ -172,7 +200,10 @@ fn a_negative_sequence_or_epoch_is_rejected() {
     for field in ["sequence", "project_epoch"] {
         let mut v = valid();
         v[field] = json!(-1);
-        assert!(validate_envelope(&v).is_err(), "a negative `{field}` must be rejected");
+        assert!(
+            validate_envelope(&v).is_err(),
+            "a negative `{field}` must be rejected"
+        );
     }
     // Zero is the minimum and is legal.
     let mut v = valid();
@@ -185,7 +216,13 @@ fn a_negative_sequence_or_epoch_is_rejected() {
 fn an_envelope_with_no_recipients_is_rejected() {
     let mut v = valid();
     v["recipients"] = json!([]);
-    assert!(matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::InvalidValue { field: "recipients", .. })));
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::InvalidValue {
+            field: "recipients",
+            ..
+        })
+    ));
 }
 
 #[test]
@@ -196,7 +233,13 @@ fn a_withdrawn_agent_type_is_rejected() {
         let mut v = valid();
         v["sender"] = json!({ "actor_type": "AGENT", "actor_id": "x", "agent_type": retired });
         assert!(
-            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::InvalidValue { field: "agent_type", .. })),
+            matches!(
+                validate_envelope(&v).err(),
+                Some(EnvelopeRejection::InvalidValue {
+                    field: "agent_type",
+                    ..
+                })
+            ),
             "retired agent type `{retired}` must be rejected"
         );
     }
@@ -212,16 +255,27 @@ fn a_withdrawn_agent_type_is_rejected() {
 fn an_unknown_actor_kind_is_rejected() {
     let mut v = valid();
     v["sender"] = json!({ "actor_type": "ROBOT", "actor_id": "x" });
-    assert!(validate_envelope(&v).is_err(), "an unknown actor kind must be rejected");
+    assert!(
+        validate_envelope(&v).is_err(),
+        "an unknown actor kind must be rejected"
+    );
 }
 
 #[test]
 fn a_malformed_state_digest_is_rejected() {
-    let bad_digests: Vec<String> = vec!["short".into(), "z".repeat(64), "a".repeat(63), "a".repeat(65)];
+    let bad_digests: Vec<String> = vec![
+        "short".into(),
+        "z".repeat(64),
+        "a".repeat(63),
+        "a".repeat(65),
+    ];
     for bad in &bad_digests {
         let mut v = valid();
         v["state_digest"] = json!(bad);
-        assert!(validate_envelope(&v).is_err(), "malformed state_digest `{bad}` must be rejected");
+        assert!(
+            validate_envelope(&v).is_err(),
+            "malformed state_digest `{bad}` must be rejected"
+        );
     }
     // Uppercase hex is legal; the contract allows both cases.
     let mut v = valid();
@@ -234,7 +288,10 @@ fn an_envelope_asserting_it_carries_secrets_is_rejected() {
     // contains_secret_material carries `const: false` in the contract. Secrets are referenced, never carried.
     let mut v = valid();
     v["security"]["contains_secret_material"] = json!(true);
-    assert!(validate_envelope(&v).is_err(), "an envelope claiming to carry secrets must be rejected");
+    assert!(
+        validate_envelope(&v).is_err(),
+        "an envelope claiming to carry secrets must be rejected"
+    );
 }
 
 #[test]
@@ -246,9 +303,13 @@ fn a_material_action_without_authorization_is_rejected() {
         let mut v = valid_material();
         v.as_object_mut().unwrap().remove(*field);
         match validate_envelope(&v) {
-            Err(EnvelopeRejection::MissingAuthorizationContext(name)) => assert_eq!(name, "EXECUTION_REQUEST"),
+            Err(EnvelopeRejection::MissingAuthorizationContext(name)) => {
+                assert_eq!(name, "EXECUTION_REQUEST")
+            }
             Err(EnvelopeRejection::MissingField(name)) => assert_eq!(name, *field),
-            other => panic!("removing `{field}` from a material envelope must be refused, got {other:?}"),
+            other => {
+                panic!("removing `{field}` from a material envelope must be refused, got {other:?}")
+            }
         }
     }
 }
@@ -258,7 +319,10 @@ fn a_material_action_with_a_null_authorization_is_rejected() {
     // Present-but-null is not present. A context explicitly set to null must not satisfy the requirement.
     let mut v = valid_material();
     v["authorization_context"] = Value::Null;
-    assert!(validate_envelope(&v).is_err(), "a null authorization_context must be rejected");
+    assert!(
+        validate_envelope(&v).is_err(),
+        "a null authorization_context must be rejected"
+    );
 }
 
 #[test]
@@ -266,7 +330,10 @@ fn a_zero_lease_version_is_rejected() {
     // The contract makes lease_version 1-based; zero is not a lease.
     let mut v = valid_material();
     v["authorization_context"]["lease_version"] = json!(0);
-    assert!(validate_envelope(&v).is_err(), "lease_version 0 must be rejected");
+    assert!(
+        validate_envelope(&v).is_err(),
+        "lease_version 0 must be rejected"
+    );
     v["authorization_context"]["lease_version"] = json!(1);
     validate_envelope(&v).expect("lease_version 1 must be accepted");
 }
@@ -294,7 +361,8 @@ fn every_material_action_type_is_actually_gated() {
         assert!(
             matches!(
                 validate_envelope(&v).err(),
-                Some(EnvelopeRejection::MissingAuthorizationContext(_)) | Some(EnvelopeRejection::MissingField(_))
+                Some(EnvelopeRejection::MissingAuthorizationContext(_))
+                    | Some(EnvelopeRejection::MissingField(_))
             ),
             "`{message_type}` is declared a material action and must require authorization"
         );
@@ -305,7 +373,10 @@ fn every_material_action_type_is_actually_gated() {
 fn the_generated_vocabulary_matches_the_contract_size() {
     // A sanity floor. If the generator silently emitted an empty list, every rejection above would still pass
     // while the validator accepted nothing.
-    assert!(vocab::MESSAGE_TYPES.len() >= 50, "message types must come from the contract");
+    assert!(
+        vocab::MESSAGE_TYPES.len() >= 50,
+        "message types must come from the contract"
+    );
     assert!(vocab::CHANNELS.len() >= 15);
     assert!(vocab::PHASES.len() >= 20);
     assert!(vocab::MATERIAL_ACTION_MESSAGE_TYPES.len() >= 20);
@@ -325,7 +396,10 @@ fn a_security_block_without_secret_refs_is_rejected() {
     v["security"] = json!({ "classification": "INTERNAL_PROJECT" });
     assert_eq!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::MissingNestedField { object: "security", field: "secret_refs" })
+        Some(EnvelopeRejection::MissingNestedField {
+            object: "security",
+            field: "secret_refs"
+        })
     );
 }
 
@@ -355,7 +429,10 @@ fn a_recipient_without_actor_id_is_rejected() {
     v["recipients"] = json!([{ "actor_type": "MAYASABA" }]);
     assert_eq!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::MissingNestedField { object: "recipients[]", field: "actor_id" })
+        Some(EnvelopeRejection::MissingNestedField {
+            object: "recipients[]",
+            field: "actor_id"
+        })
     );
 }
 
@@ -367,7 +444,10 @@ fn an_undefined_field_inside_a_nested_object_is_rejected() {
     v["sender"] = json!({ "actor_type": "AGENT", "actor_id": "x", "smuggled": 1 });
     assert_eq!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::UnknownNestedField { object: "sender", field: "smuggled".into() })
+        Some(EnvelopeRejection::UnknownNestedField {
+            object: "sender",
+            field: "smuggled".into()
+        })
     );
 
     let mut v = valid_material();
@@ -381,10 +461,14 @@ fn an_undefined_field_inside_a_nested_object_is_rejected() {
     );
 
     let mut v = valid();
-    v["security"] = json!({ "classification": "INTERNAL_PROJECT", "secret_refs": [], "smuggled": 1 });
+    v["security"] =
+        json!({ "classification": "INTERNAL_PROJECT", "secret_refs": [], "smuggled": 1 });
     assert_eq!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::UnknownNestedField { object: "security", field: "smuggled".into() })
+        Some(EnvelopeRejection::UnknownNestedField {
+            object: "security",
+            field: "smuggled".into()
+        })
     );
 }
 
@@ -396,7 +480,13 @@ fn a_schema_version_with_non_numeric_parts_is_rejected() {
         let mut v = valid();
         v["schema_version"] = json!(bad);
         assert!(
-            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::InvalidValue { field: "schema_version", .. })),
+            matches!(
+                validate_envelope(&v).err(),
+                Some(EnvelopeRejection::InvalidValue {
+                    field: "schema_version",
+                    ..
+                })
+            ),
             "schema_version `{bad}` must be rejected"
         );
     }
@@ -414,7 +504,10 @@ fn a_material_action_may_not_null_its_authorization_fields() {
         let mut v = valid_material();
         v[*field] = Value::Null;
         assert!(
-            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::MissingAuthorizationContext(_))),
+            matches!(
+                validate_envelope(&v).err(),
+                Some(EnvelopeRejection::MissingAuthorizationContext(_))
+            ),
             "a material action with `{field}` explicitly null must be refused"
         );
     }
@@ -470,7 +563,16 @@ fn a_nullable_field_still_accepts_null() {
     // The other side of the type table: a field the contract declares nullable must not become required-non-null
     // merely because it is typed. Over-rejecting is the same defect as under-rejecting.
     let mut v = valid();
-    for field in ["causation_id", "task_id", "round_id", "context_snapshot_id", "state_digest", "idempotency_key", "expires_at", "operation_id"] {
+    for field in [
+        "causation_id",
+        "task_id",
+        "round_id",
+        "context_snapshot_id",
+        "state_digest",
+        "idempotency_key",
+        "expires_at",
+        "operation_id",
+    ] {
         v[field] = Value::Null;
     }
     v["authorization_context"] = Value::Null;
@@ -484,14 +586,20 @@ fn a_repeated_array_entry_is_rejected() {
     v["security"]["secret_refs"] = json!(["vault://a", "vault://a"]);
     assert!(matches!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::InvalidValue { field: "secret_refs", .. })
+        Some(EnvelopeRejection::InvalidValue {
+            field: "secret_refs",
+            ..
+        })
     ));
 
     let mut v = valid_material();
     v["authorization_context"]["required_capabilities"] = json!(["fs.write", "fs.write"]);
     assert!(matches!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::InvalidValue { field: "required_capabilities", .. })
+        Some(EnvelopeRejection::InvalidValue {
+            field: "required_capabilities",
+            ..
+        })
     ));
 }
 
@@ -502,6 +610,9 @@ fn an_empty_idempotency_key_is_rejected() {
     v["idempotency_key"] = json!("");
     assert!(matches!(
         validate_envelope(&v).err(),
-        Some(EnvelopeRejection::InvalidValue { field: "idempotency_key", .. })
+        Some(EnvelopeRejection::InvalidValue {
+            field: "idempotency_key",
+            ..
+        })
     ));
 }

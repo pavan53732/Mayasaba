@@ -8,7 +8,9 @@
 
 use std::sync::Mutex;
 
-use mayasaba_core::project_service::{CreateProjectRequest, ProjectService, ProjectValidationError};
+use mayasaba_core::project_service::{
+    CreateProjectRequest, ProjectService, ProjectValidationError,
+};
 use mayasaba_workspace::WorkspaceRejection;
 use serde::Serialize;
 use tauri::State;
@@ -18,7 +20,9 @@ fn database_path() -> std::path::PathBuf {
     let base = std::env::var("LOCALAPPDATA")
         .or_else(|_| std::env::var("APPDATA"))
         .unwrap_or_else(|_| ".".to_string());
-    std::path::Path::new(&base).join("Mayasaba").join("mayasaba.sqlite3")
+    std::path::Path::new(&base)
+        .join("Mayasaba")
+        .join("mayasaba.sqlite3")
 }
 
 /// The authoritative project, as the Control Room must display it. This is a projection of stored state,
@@ -32,28 +36,28 @@ struct ProjectView {
     phase: String,
     status: String,
     current_epoch: i64,
-brief_id: Option<String>,
-  brief_version: Option<i64>,
-  brief_body: Option<String>,
-  created_at: String,
+    brief_id: Option<String>,
+    brief_version: Option<i64>,
+    brief_body: Option<String>,
+    created_at: String,
 }
 
 impl From<mayasaba_storage::ProjectRecord> for ProjectView {
-  /// One conversion, so a listed project and a created project cannot drift apart in shape.
-  fn from(p: mayasaba_storage::ProjectRecord) -> Self {
-    ProjectView {
-      project_id: p.project_id,
-      name: p.name,
-      local_path: p.local_path,
-      phase: p.phase,
-      status: p.status,
-      current_epoch: p.current_epoch,
-      brief_id: p.brief_id,
-      brief_version: p.brief_version,
-      brief_body: p.brief_body,
-      created_at: p.created_at,
+    /// One conversion, so a listed project and a created project cannot drift apart in shape.
+    fn from(p: mayasaba_storage::ProjectRecord) -> Self {
+        ProjectView {
+            project_id: p.project_id,
+            name: p.name,
+            local_path: p.local_path,
+            phase: p.phase,
+            status: p.status,
+            current_epoch: p.current_epoch,
+            brief_id: p.brief_id,
+            brief_version: p.brief_version,
+            brief_body: p.brief_body,
+            created_at: p.created_at,
+        }
     }
-  }
 }
 
 /// A rejection carrying a machine-readable reason, so the Control Room can distinguish a validation
@@ -72,7 +76,10 @@ impl From<ProjectValidationError> for CommandError {
             ProjectValidationError::BlankInitialBrief => "BLANK_INITIAL_BRIEF",
             ProjectValidationError::IntentNotYetAssessed => "INTAKE_NOT_IMPLEMENTED",
         };
-        CommandError { code, message: e.to_string() }
+        CommandError {
+            code,
+            message: e.to_string(),
+        }
     }
 }
 
@@ -122,46 +129,54 @@ fn validate_workspace(path: String) -> WorkspaceCheck {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RecoveryView {
-  clean: bool,
-  integrity_ok: bool,
-  issues: Vec<RecoveryIssueView>,
+    clean: bool,
+    integrity_ok: bool,
+    issues: Vec<RecoveryIssueView>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RecoveryIssueView {
-  kind: String,
-  detail: String,
+    kind: String,
+    detail: String,
 }
 
 #[tauri::command]
-fn recovery_status(service: State<'_, Mutex<ProjectService>>) -> Result<RecoveryView, CommandError> {
-  let service = service.lock().map_err(|_| CommandError {
-    code: "SERVICE_POISONED",
-    message: "ProjectService lock was poisoned by a prior panic".to_string(),
-  })?;
-  let report = service.recover().map_err(|e| CommandError {
-    code: "STORAGE_FAILURE",
-    message: e.to_string(),
-  })?;
-  Ok(RecoveryView {
-    clean: report.is_clean(),
-    integrity_ok: report.integrity_ok,
-    issues: report
-      .issues
-      .iter()
-      .map(|i| RecoveryIssueView { kind: i.kind.to_string(), detail: i.detail.clone() })
-      .collect(),
-  })
+fn recovery_status(
+    service: State<'_, Mutex<ProjectService>>,
+) -> Result<RecoveryView, CommandError> {
+    let service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "ProjectService lock was poisoned by a prior panic".to_string(),
+    })?;
+    let report = service.recover().map_err(|e| CommandError {
+        code: "STORAGE_FAILURE",
+        message: e.to_string(),
+    })?;
+    Ok(RecoveryView {
+        clean: report.is_clean(),
+        integrity_ok: report.integrity_ok,
+        issues: report
+            .issues
+            .iter()
+            .map(|i| RecoveryIssueView {
+                kind: i.kind.to_string(),
+                detail: i.detail.clone(),
+            })
+            .collect(),
+    })
 }
 
 #[tauri::command]
-fn list_projects(service: State<'_, Mutex<ProjectService>>) -> Result<Vec<ProjectView>, CommandError> {
+fn list_projects(
+    service: State<'_, Mutex<ProjectService>>,
+) -> Result<Vec<ProjectView>, CommandError> {
     // The rehydration path. Everything the Control Room shows for an existing project comes from here, so it
     // is the same authoritative projection creation returns rather than a UI-side reconstruction.
-    let service = service
-        .lock()
-        .map_err(|_| CommandError { code: "SERVICE_POISONED", message: "ProjectService lock was poisoned by a prior panic".to_string() })?;
+    let service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "ProjectService lock was poisoned by a prior panic".to_string(),
+    })?;
     let projects = service.list_projects().map_err(|e| CommandError {
         code: "STORAGE_FAILURE",
         message: e.to_string(),
@@ -191,7 +206,9 @@ fn create_project(
 
     let outcome = service.create_project(&request).map_err(|e| match e {
         mayasaba_core::project_service::CreateProjectError::Validation(v) => v.into(),
-        mayasaba_core::project_service::CreateProjectError::Workspace(WorkspaceRejection::Empty) => CommandError {
+        mayasaba_core::project_service::CreateProjectError::Workspace(
+            WorkspaceRejection::Empty,
+        ) => CommandError {
             code: "EMPTY_FIELD",
             message: WorkspaceRejection::Empty.to_string(),
         },
@@ -199,7 +216,10 @@ fn create_project(
             code: w.code(),
             message: w.to_string(),
         },
-        other => CommandError { code: "STORAGE_FAILURE", message: other.to_string() },
+        other => CommandError {
+            code: "STORAGE_FAILURE",
+            message: other.to_string(),
+        },
     })?;
 
     let project = match outcome {
@@ -219,14 +239,22 @@ fn main() {
     // rendered as a plausible-looking empty Control Room. It never repairs.
     match service.recover() {
         Ok(report) if report.is_clean() => {}
-        Ok(report) => eprintln!("mayasaba: startup recovery found {} issue(s):", report.issues.len()),
+        Ok(report) => eprintln!(
+            "mayasaba: startup recovery found {} issue(s):",
+            report.issues.len()
+        ),
         Err(error) => eprintln!("mayasaba: startup recovery could not run: {error}"),
     }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
-        .invoke_handler(tauri::generate_handler![create_project, list_projects, recovery_status, validate_workspace])
+        .invoke_handler(tauri::generate_handler![
+            create_project,
+            list_projects,
+            recovery_status,
+            validate_workspace
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
 }

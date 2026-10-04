@@ -53,11 +53,16 @@ fn a_caller_cannot_make_the_name_disagree_with_the_folder() {
     std::fs::create_dir_all(&dir).unwrap();
 
     let mut storage = Storage::open_in_memory().expect("open");
-    storage.create_project(&new_project(&dir, "cannot")).expect("create");
+    storage
+        .create_project(&new_project(&dir, "cannot"))
+        .expect("create");
 
     let record = storage.get_project("prj_cannot").expect("read back");
     assert_eq!(record.name, "RealFolder");
-    assert_ne!(record.name, "SomethingElse", "no caller-supplied name can survive");
+    assert_ne!(
+        record.name, "SomethingElse",
+        "no caller-supplied name can survive"
+    );
 
     let _ = std::fs::remove_dir_all(dir.parent().unwrap());
 }
@@ -66,7 +71,10 @@ fn a_caller_cannot_make_the_name_disagree_with_the_folder() {
 fn a_filesystem_root_gets_the_explicit_fallback_label() {
     assert_eq!(derive_project_display_name("C:\\"), ROOT_WORKSPACE_NAME);
     assert_eq!(derive_project_display_name(r"C:\Users"), "Users");
-    assert_eq!(derive_project_display_name(r"C:\Users\pavan\Projects\InvoiceAI"), "InvoiceAI");
+    assert_eq!(
+        derive_project_display_name(r"C:\Users\pavan\Projects\InvoiceAI"),
+        "InvoiceAI"
+    );
 }
 
 #[test]
@@ -75,9 +83,13 @@ fn creation_remains_atomic_with_the_derived_name() {
     // no project and therefore no derived name behind.
     let dir = existing_dir("atomic");
     let mut storage = Storage::open_in_memory().expect("open");
-    storage.inject_fault_before_insert("project_briefs").expect("trigger");
+    storage
+        .inject_fault_before_insert("project_briefs")
+        .expect("trigger");
 
-    assert!(storage.create_project(&new_project(&dir, "atomic")).is_err());
+    assert!(storage
+        .create_project(&new_project(&dir, "atomic"))
+        .is_err());
     assert_eq!(storage.count("projects").unwrap(), 0);
 
     let _ = std::fs::remove_dir_all(&dir);

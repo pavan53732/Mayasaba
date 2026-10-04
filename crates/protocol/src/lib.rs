@@ -16,7 +16,15 @@
 pub mod envelope;
 pub mod generated {
     //! Generated from the machine-readable contract. Do not edit by hand.
+    //!
+    //! `#[rustfmt::skip]` is load-bearing on both declarations, not cosmetic. The contract gate compares
+    //! these files byte-for-byte with `tools/codegen/generate-protocol.mjs --check`, and rustfmt would
+    //! otherwise rewrap their long const arrays. Formatting them would fail the staleness check, and
+    //! regenerating them would fail `cargo fmt --all --check`, so without this attribute the two gates
+    //! cannot both be satisfied. The generator owns the formatting of its own output.
+    #[rustfmt::skip]
     pub mod envelope;
+    #[rustfmt::skip]
     pub mod machines;
 }
 

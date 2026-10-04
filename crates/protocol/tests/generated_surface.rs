@@ -9,7 +9,7 @@
 //! caught as a failing assertion rather than as a compile error or, worse, as a silently wrong constant.
 
 use mayasaba_protocol::generated::machines::{
-    owner_crate, spine, state_count, states, unreviewed_branches, branches, Machine, AGENT_TYPES,
+    branches, owner_crate, spine, state_count, states, unreviewed_branches, Machine, AGENT_TYPES,
     EVENT_TYPES, SERVICE_EMITTED_EVENTS, TRANSITION_COMMANDS, TRANSITION_EMITTED_EVENTS,
 };
 
@@ -18,7 +18,11 @@ fn all_lists_every_machine_in_the_contract() {
     // The contract declares twelve machines. If a machine is added to the contract and the crate is not
     // regenerated, ALL and this count both change together only if the test data changes too, which is why
     // the count is asserted independently below.
-    assert_eq!(Machine::ALL.len(), 12, "expected one variant per declared machine");
+    assert_eq!(
+        Machine::ALL.len(),
+        12,
+        "expected one variant per declared machine"
+    );
     let mut ids: Vec<&str> = Machine::ALL.iter().map(|m| m.id()).collect();
     ids.sort_unstable();
     ids.dedup();
@@ -29,7 +33,8 @@ fn all_lists_every_machine_in_the_contract() {
 fn from_id_round_trips_for_every_machine() {
     for machine in Machine::ALL {
         let id = machine.id();
-        let back = Machine::from_id(id).unwrap_or_else(|| panic!("{id} did not resolve back to a Machine"));
+        let back = Machine::from_id(id)
+            .unwrap_or_else(|| panic!("{id} did not resolve back to a Machine"));
         assert_eq!(back, *machine, "from_id(id(m)) must equal m");
     }
 }
@@ -37,7 +42,11 @@ fn from_id_round_trips_for_every_machine() {
 #[test]
 fn display_matches_id() {
     for machine in Machine::ALL {
-        assert_eq!(machine.to_string(), machine.id(), "Display must render the contract id");
+        assert_eq!(
+            machine.to_string(),
+            machine.id(),
+            "Display must render the contract id"
+        );
     }
 }
 
@@ -50,8 +59,12 @@ fn from_id_rejects_unknown_identifiers() {
 #[test]
 fn owner_crate_is_declared_for_every_machine() {
     for machine in Machine::ALL {
-        let owner = owner_crate(*machine).unwrap_or_else(|| panic!("{} has no declared owner", machine.id()));
-        assert!(owner.starts_with("crates/"), "{machine} owner {owner} is not a crate path");
+        let owner = owner_crate(*machine)
+            .unwrap_or_else(|| panic!("{} has no declared owner", machine.id()));
+        assert!(
+            owner.starts_with("crates/"),
+            "{machine} owner {owner} is not a crate path"
+        );
     }
 }
 
@@ -74,8 +87,16 @@ fn spine_states_and_branches_are_internally_consistent() {
         // Every branch endpoint must be a declared state, or the machine permits an edge into nowhere.
         for b in branches(*machine) {
             if let Some((from, to)) = b.split_once("->") {
-                assert!(declared.contains(&from), "{} branch {b} leaves undeclared state {from}", machine.id());
-                assert!(declared.contains(&to), "{} branch {b} enters undeclared state {to}", machine.id());
+                assert!(
+                    declared.contains(&from),
+                    "{} branch {b} leaves undeclared state {from}",
+                    machine.id()
+                );
+                assert!(
+                    declared.contains(&to),
+                    "{} branch {b} enters undeclared state {to}",
+                    machine.id()
+                );
             } else {
                 panic!("{} branch {b} is not in SOURCE->TARGET form", machine.id());
             }
@@ -134,23 +155,40 @@ fn emitter_sets_partition_the_canonical_events() {
 fn agent_types_are_exactly_the_three_supported_adapters() {
     // DEC-029 reduced the agent set to three. If the contract changes, this fails and asks the question
     // again rather than letting a fourth adapter appear because a schema edit allowed it.
-    assert_eq!(AGENT_TYPES.len(), 3, "DEC-029 fixes the agent set at three: {AGENT_TYPES:?}");
+    assert_eq!(
+        AGENT_TYPES.len(),
+        3,
+        "DEC-029 fixes the agent set at three: {AGENT_TYPES:?}"
+    );
     for expected in ["HERMES_AGENT", "KILO_CODE", "OPEN_CODE"] {
-        assert!(AGENT_TYPES.contains(&expected), "missing agent type {expected}");
+        assert!(
+            AGENT_TYPES.contains(&expected),
+            "missing agent type {expected}"
+        );
     }
     for forbidden in ["CLAUDE_CODE", "CLINE"] {
-        assert!(!AGENT_TYPES.contains(&forbidden), "{forbidden} was withdrawn by DEC-029");
+        assert!(
+            !AGENT_TYPES.contains(&forbidden),
+            "{forbidden} was withdrawn by DEC-029"
+        );
     }
 }
 
 #[test]
 fn transition_commands_are_unique_and_non_empty() {
-    assert!(!TRANSITION_COMMANDS.is_empty(), "the contract registers transition commands");
+    assert!(
+        !TRANSITION_COMMANDS.is_empty(),
+        "the contract registers transition commands"
+    );
     let mut sorted = TRANSITION_COMMANDS.to_vec();
     sorted.sort_unstable();
     let count = sorted.len();
     sorted.dedup();
-    assert_eq!(sorted.len(), count, "transition command names must be unique");
+    assert_eq!(
+        sorted.len(),
+        count,
+        "transition command names must be unique"
+    );
 }
 
 #[test]

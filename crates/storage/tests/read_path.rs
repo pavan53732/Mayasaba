@@ -10,7 +10,12 @@ fn existing_dir(tag: &str) -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("mayasaba-read-{}-{}-{}", std::process::id(), tag, n));
+    let dir = std::env::temp_dir().join(format!(
+        "mayasaba-read-{}-{}-{}",
+        std::process::id(),
+        tag,
+        n
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create dir");
     dir
@@ -34,11 +39,16 @@ fn a_created_project_is_read_back_identically() {
     std::fs::create_dir_all(&dir).unwrap();
 
     let mut storage = Storage::open_in_memory().expect("open");
-    storage.create_project(&new_project(&dir, "roundtrip", "1700000000")).expect("create");
+    storage
+        .create_project(&new_project(&dir, "roundtrip", "1700000000"))
+        .expect("create");
 
     let record = storage.get_project("prj_roundtrip").expect("read back");
     assert_eq!(record.project_id, "prj_roundtrip");
-    assert_eq!(record.name, "RoundTrip", "the name survives as the derived folder leaf");
+    assert_eq!(
+        record.name, "RoundTrip",
+        "the name survives as the derived folder leaf"
+    );
     assert_eq!(record.local_path, dir.to_string_lossy());
     assert_eq!(record.phase, "DISCOVERY");
     assert_eq!(record.status, "ACTIVE");
@@ -46,17 +56,26 @@ fn a_created_project_is_read_back_identically() {
     assert_eq!(record.brief_id.as_deref(), Some("brf_roundtrip"));
     assert_eq!(record.brief_version, Some(1));
     assert_eq!(record.brief_body.as_deref(), Some("Intent for roundtrip."));
-    assert_eq!(record.created_at, "1700000000", "the read path returns creation time, needed to order the list");
+    assert_eq!(
+        record.created_at, "1700000000",
+        "the read path returns creation time, needed to order the list"
+    );
 }
 
 #[test]
 fn listing_returns_every_project_newest_first() {
     let mut storage = Storage::open_in_memory().expect("open");
 
-    for (tag, leaf, at) in [("old", "Oldest", "1700000001"), ("mid", "Middle", "1700000002"), ("new", "Newest", "1700000003")] {
+    for (tag, leaf, at) in [
+        ("old", "Oldest", "1700000001"),
+        ("mid", "Middle", "1700000002"),
+        ("new", "Newest", "1700000003"),
+    ] {
         let dir = existing_dir(tag).join(leaf);
         std::fs::create_dir_all(&dir).unwrap();
-        storage.create_project(&new_project(&dir, tag, at)).expect("create");
+        storage
+            .create_project(&new_project(&dir, tag, at))
+            .expect("create");
     }
 
     let listed = storage.list_projects().expect("list");
@@ -71,7 +90,10 @@ fn listing_returns_every_project_newest_first() {
 #[test]
 fn listing_an_empty_database_is_empty_not_an_error() {
     let storage = Storage::open_in_memory().expect("open");
-    assert!(storage.list_projects().expect("list").is_empty(), "a fresh install has no projects, which is not a failure");
+    assert!(
+        storage.list_projects().expect("list").is_empty(),
+        "a fresh install has no projects, which is not a failure"
+    );
 }
 
 #[test]
@@ -85,7 +107,9 @@ fn a_persisted_project_survives_reopening_the_file() {
 
     {
         let mut storage = Storage::open(&dir.join("mayasaba.sqlite3")).expect("open");
-        storage.create_project(&new_project(&ws, "durable", "1700000009")).expect("create");
+        storage
+            .create_project(&new_project(&ws, "durable", "1700000009"))
+            .expect("create");
     }
 
     let reopened = Storage::open(&dir.join("mayasaba.sqlite3")).expect("reopen");
@@ -101,7 +125,9 @@ fn a_persisted_project_survives_reopening_the_file() {
 #[test]
 fn reading_an_unknown_project_is_not_found_rather_than_an_empty_record() {
     let storage = Storage::open_in_memory().expect("open");
-    let err = storage.get_project("prj_nope").expect_err("must not resolve");
+    let err = storage
+        .get_project("prj_nope")
+        .expect_err("must not resolve");
     assert!(
         matches!(err, mayasaba_storage::StorageError::NotFound(_)),
         "an unknown project must be NotFound, or the Control Room could render a project that does not exist"

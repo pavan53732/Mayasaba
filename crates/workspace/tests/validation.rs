@@ -4,7 +4,10 @@
 //! become an authorized workspace, and an authorized workspace must be the canonical path rather than whatever
 //! spelling the UI sent.
 
-use mayasaba_workspace::{derive_project_display_name, validate_workspace_candidate, WorkspaceRejection, ROOT_WORKSPACE_NAME};
+use mayasaba_workspace::{
+    derive_project_display_name, validate_workspace_candidate, WorkspaceRejection,
+    ROOT_WORKSPACE_NAME,
+};
 
 /// A real directory that exists for the duration of the test.
 fn existing_dir(tag: &str) -> std::path::PathBuf {
@@ -15,24 +18,43 @@ fn existing_dir(tag: &str) -> std::path::PathBuf {
 }
 
 fn nonexistent_dir(tag: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("mayasaba-ws-missing-{}-{}", std::process::id(), tag))
+    std::env::temp_dir().join(format!(
+        "mayasaba-ws-missing-{}-{}",
+        std::process::id(),
+        tag
+    ))
 }
 
 #[test]
 fn an_existing_local_folder_is_authorized_and_canonicalized() {
     let dir = existing_dir("ok");
-    let result = validate_workspace_candidate(&dir.to_string_lossy()).expect("existing folder is a valid candidate");
+    let result = validate_workspace_candidate(&dir.to_string_lossy())
+        .expect("existing folder is a valid candidate");
 
     assert!(!result.canonical_path.is_empty());
-    assert!(std::path::Path::new(&result.canonical_path).is_absolute(), "the persisted root must be absolute");
-    assert!(std::path::Path::new(&result.canonical_path).is_dir(), "the canonical path must resolve to the folder");
-    assert_eq!(result.requested_path, dir.to_string_lossy(), "the requested spelling is retained for display");
+    assert!(
+        std::path::Path::new(&result.canonical_path).is_absolute(),
+        "the persisted root must be absolute"
+    );
+    assert!(
+        std::path::Path::new(&result.canonical_path).is_dir(),
+        "the canonical path must resolve to the folder"
+    );
+    assert_eq!(
+        result.requested_path,
+        dir.to_string_lossy(),
+        "the requested spelling is retained for display"
+    );
 
     // A path spelled with a redundant segment must canonicalize to the same root, so the persisted value
     // cannot be used to smuggle a different spelling past a later comparison.
     let roundabout = dir.join(".").join("..").join(dir.file_name().unwrap());
-    let second = validate_workspace_candidate(&roundabout.to_string_lossy()).expect("roundabout path is the same folder");
-    assert_eq!(second.canonical_path, result.canonical_path, "canonicalization must collapse redundant segments");
+    let second = validate_workspace_candidate(&roundabout.to_string_lossy())
+        .expect("roundabout path is the same folder");
+    assert_eq!(
+        second.canonical_path, result.canonical_path,
+        "canonicalization must collapse redundant segments"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -50,7 +72,10 @@ fn a_nonexistent_folder_is_rejected_and_is_never_authorized() {
 
     // Selection must not create anything. If validation ever began creating the folder, this would pass
     // silently and a side effect would hide inside a selection gesture.
-    assert!(!missing.exists(), "workspace selection must never create the folder");
+    assert!(
+        !missing.exists(),
+        "workspace selection must never create the folder"
+    );
 
     let _ = std::fs::remove_dir_all(&missing);
 }
@@ -71,9 +96,18 @@ fn a_file_is_not_a_workspace() {
 
 #[test]
 fn an_empty_or_whitespace_candidate_is_rejected() {
-    assert_eq!(validate_workspace_candidate("").err(), Some(WorkspaceRejection::Empty));
-    assert_eq!(validate_workspace_candidate("   ").err(), Some(WorkspaceRejection::Empty));
-    assert_eq!(validate_workspace_candidate("\t\n").err(), Some(WorkspaceRejection::Empty));
+    assert_eq!(
+        validate_workspace_candidate("").err(),
+        Some(WorkspaceRejection::Empty)
+    );
+    assert_eq!(
+        validate_workspace_candidate("   ").err(),
+        Some(WorkspaceRejection::Empty)
+    );
+    assert_eq!(
+        validate_workspace_candidate("\t\n").err(),
+        Some(WorkspaceRejection::Empty)
+    );
 }
 
 #[test]
@@ -102,7 +136,11 @@ fn rejections_carry_distinct_machine_readable_codes() {
     let mut sorted = codes.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
-    assert_eq!(sorted.len(), codes.len(), "each rejection needs its own code so the UI can branch without parsing prose");
+    assert_eq!(
+        sorted.len(),
+        codes.len(),
+        "each rejection needs its own code so the UI can branch without parsing prose"
+    );
     assert!(codes.iter().all(|c| c.starts_with("WORKSPACE_")));
 }
 
@@ -115,7 +153,10 @@ fn every_rejection_has_a_human_message() {
         WorkspaceRejection::NotLocal,
         WorkspaceRejection::NotAccessible,
     ] {
-        assert!(!rejection.to_string().is_empty(), "{rejection:?} needs a user-facing message");
+        assert!(
+            !rejection.to_string().is_empty(),
+            "{rejection:?} needs a user-facing message"
+        );
     }
 }
 #[test]
@@ -141,7 +182,10 @@ fn a_filesystem_root_falls_back_rather_than_inventing_a_name() {
     assert_eq!(derive_project_display_name("C:\\"), ROOT_WORKSPACE_NAME);
     // A folder one level below the root still has a real name.
     assert_eq!(derive_project_display_name(r"C:\Users"), "Users");
-    assert_eq!(derive_project_display_name(r"C:\Users\Pavan\Projects\InvoiceAI"), "InvoiceAI");
+    assert_eq!(
+        derive_project_display_name(r"C:\Users\Pavan\Projects\InvoiceAI"),
+        "InvoiceAI"
+    );
 }
 
 #[test]
@@ -155,8 +199,14 @@ fn the_display_name_is_metadata_and_never_an_identity_key() {
 
     let a = validate_workspace_candidate(&one.to_string_lossy()).expect("first candidate");
     let b = validate_workspace_candidate(&two.to_string_lossy()).expect("second candidate");
-    assert_eq!(a.derived_project_name, b.derived_project_name, "the same leaf name is allowed twice");
-    assert_ne!(a.canonical_path, b.canonical_path, "the workspaces are genuinely different folders");
+    assert_eq!(
+        a.derived_project_name, b.derived_project_name,
+        "the same leaf name is allowed twice"
+    );
+    assert_ne!(
+        a.canonical_path, b.canonical_path,
+        "the workspaces are genuinely different folders"
+    );
 
     let _ = std::fs::remove_dir_all(&one);
     let _ = std::fs::remove_dir_all(&two);

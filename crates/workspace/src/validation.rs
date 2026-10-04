@@ -64,7 +64,6 @@ pub struct WorkspaceValidation {
     pub derived_project_name: String,
 }
 
-
 /// Validate a user-selected folder as a candidate workspace root.
 ///
 /// Order matters. Emptiness first because there is nothing to inspect; locality before existence so a network
@@ -74,7 +73,9 @@ pub struct WorkspaceValidation {
 ///
 /// This function never creates anything. Requiring the folder to exist keeps a side effect out of a selection
 /// gesture; creating a directory is a separate decision with its own UX and its own authorization.
-pub fn validate_workspace_candidate(candidate: &str) -> Result<WorkspaceValidation, WorkspaceRejection> {
+pub fn validate_workspace_candidate(
+    candidate: &str,
+) -> Result<WorkspaceValidation, WorkspaceRejection> {
     let trimmed = candidate.trim();
     if trimmed.is_empty() {
         return Err(WorkspaceRejection::Empty);
@@ -96,7 +97,9 @@ pub fn validate_workspace_candidate(candidate: &str) -> Result<WorkspaceValidati
 
     // Canonicalize resolves `..`, relative segments and short names, so the persisted root is unambiguous and a
     // later comparison against it cannot be fooled by a different spelling of the same folder.
-    let canonical = path.canonicalize().map_err(|_| WorkspaceRejection::NotAccessible)?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| WorkspaceRejection::NotAccessible)?;
     let canonical_path = canonical.to_string_lossy().into_owned();
 
     Ok(WorkspaceValidation {

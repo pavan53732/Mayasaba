@@ -52,7 +52,10 @@ impl std::fmt::Display for ProjectValidationError {
         match self {
             ProjectValidationError::EmptyField(name) => write!(f, "{name} must not be empty"),
             ProjectValidationError::BlankInitialBrief => {
-                write!(f, "initial_brief.body must contain project intent, not whitespace")
+                write!(
+                    f,
+                    "initial_brief.body must contain project intent, not whitespace"
+                )
             }
             ProjectValidationError::IntentNotYetAssessed => {
                 write!(f, "brief intake assessment is not implemented")
@@ -81,12 +84,18 @@ pub struct ProjectService {
 impl ProjectService {
     /// Open the durable store at `path` and apply the canonical schema.
     pub fn open(path: &Path) -> Result<Self, CreateProjectError> {
-        Ok(ProjectService { storage: Storage::open(path)?, now: Box::new(epoch_seconds) })
+        Ok(ProjectService {
+            storage: Storage::open(path)?,
+            now: Box::new(epoch_seconds),
+        })
     }
 
     /// Ephemeral store for tests.
     pub fn in_memory() -> Result<Self, CreateProjectError> {
-        Ok(ProjectService { storage: Storage::open_in_memory()?, now: Box::new(epoch_seconds) })
+        Ok(ProjectService {
+            storage: Storage::open_in_memory()?,
+            now: Box::new(epoch_seconds),
+        })
     }
 
     /// Replace the clock. For tests that assert on stored timestamps.
@@ -105,7 +114,10 @@ impl ProjectService {
     /// Validation runs to completion before storage is touched, so a rejected request cannot leave a
     /// partial project behind. That is the cheap half of atomicity; the durable half is that the four
     /// writes share one transaction inside the storage crate.
-    pub fn create_project(&mut self, req: &CreateProjectRequest) -> Result<CreateProjectOutcome, CreateProjectError> {
+    pub fn create_project(
+        &mut self,
+        req: &CreateProjectRequest,
+    ) -> Result<CreateProjectOutcome, CreateProjectError> {
         Self::validate(req)?;
 
         // The workspace is re-validated here, not trusted from the caller. The Control Room validates a
@@ -122,7 +134,10 @@ impl ProjectService {
             local_path: workspace.canonical_path,
             brief_id: format!("brf_{}", Self::digest(&format!("brief:{nonce}"))),
             brief_body: req.initial_brief_body.trim().to_string(),
-            brief_source: req.brief_source.clone().unwrap_or_else(|| "INITIAL_INTAKE_COMPOSER".to_string()),
+            brief_source: req
+                .brief_source
+                .clone()
+                .unwrap_or_else(|| "INITIAL_INTAKE_COMPOSER".to_string()),
             event_id: format!("evt_{}", Self::digest(&format!("event:{nonce}"))),
             created_at: created_at.clone(),
         };
@@ -186,9 +201,9 @@ impl ProjectService {
 /// a uuid dependency. The counter guarantees distinctness within the process even if two creations land in
 /// the same clock tick.
 fn next_nonce() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);

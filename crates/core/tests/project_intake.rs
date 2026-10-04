@@ -6,7 +6,8 @@
 //! mock, so the rollback is performed by the database and cannot be asserted away.
 
 use mayasaba_core::project_service::{
-    CreateProjectError, CreateProjectOutcome, CreateProjectRequest, ProjectService, ProjectValidationError,
+    CreateProjectError, CreateProjectOutcome, CreateProjectRequest, ProjectService,
+    ProjectValidationError,
 };
 
 /// A real local directory, because `create_project` now validates the workspace and refuses fabricated paths.
@@ -18,7 +19,12 @@ fn workspace_dir(tag: &str) -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("mayasaba-intake-{}-{}-{}", std::process::id(), tag, n));
+    let dir = std::env::temp_dir().join(format!(
+        "mayasaba-intake-{}-{}-{}",
+        std::process::id(),
+        tag,
+        n
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create workspace dir");
     dir
@@ -27,7 +33,8 @@ fn workspace_dir(tag: &str) -> std::path::PathBuf {
 fn request() -> CreateProjectRequest {
     CreateProjectRequest {
         local_path: workspace_dir("default").to_string_lossy().into_owned(),
-        initial_brief_body: "Build a local-first control plane for coordinating CLI coding agents.".to_string(),
+        initial_brief_body: "Build a local-first control plane for coordinating CLI coding agents."
+            .to_string(),
         brief_source: None,
     }
 }
@@ -40,17 +47,30 @@ fn created_project(outcome: CreateProjectOutcome) -> mayasaba_storage::ProjectRe
 
 #[test]
 fn creates_project_brief_epoch_and_event_atomically() {
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000000");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000000");
 
-    let project = created_project(service.create_project(&request()).expect("creation should succeed"));
+    let project = created_project(
+        service
+            .create_project(&request())
+            .expect("creation should succeed"),
+    );
 
     // Authoritative readback: the record carries the brief, so the anchor exists.
     // The display name is DERIVED from the workspace folder leaf, not supplied by the caller (DEC-050).
     assert_eq!(project.phase, "DISCOVERY");
     assert_eq!(project.status, "ACTIVE");
     assert_eq!(project.current_epoch, 0, "a new project starts at epoch 0");
-    assert_eq!(project.brief_version, Some(1), "the first brief version is 1");
-    assert!(project.brief_id.is_some(), "a project cannot exist without a brief id");
+    assert_eq!(
+        project.brief_version,
+        Some(1),
+        "the first brief version is 1"
+    );
+    assert!(
+        project.brief_id.is_some(),
+        "a project cannot exist without a brief id"
+    );
     assert_eq!(
         project.brief_body.as_deref(),
         Some("Build a local-first control plane for coordinating CLI coding agents.")
@@ -78,8 +98,13 @@ fn creates_project_brief_epoch_and_event_atomically() {
 fn a_project_never_exists_without_its_brief() {
     // The brief insert is made to fail by a real SQLite trigger, after the project row has already been
     // written inside the transaction. If the four writes were not atomic, the project row would survive.
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000000");
-    service.storage().inject_fault_before_insert("project_briefs").expect("install fault trigger");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000000");
+    service
+        .storage()
+        .inject_fault_before_insert("project_briefs")
+        .expect("install fault trigger");
 
     let result = service.create_project(&request());
 
@@ -89,15 +114,25 @@ fn a_project_never_exists_without_its_brief() {
     );
 
     let storage = service.storage();
-    assert_eq!(storage.count("projects").unwrap(), 0, "project row must be rolled back");
+    assert_eq!(
+        storage.count("projects").unwrap(),
+        0,
+        "project row must be rolled back"
+    );
     assert_eq!(storage.count("project_briefs").unwrap(), 0);
     assert_eq!(storage.count("project_epochs").unwrap(), 0);
-    assert_eq!(storage.count("events").unwrap(), 0, "no event may survive a rolled-back creation");
+    assert_eq!(
+        storage.count("events").unwrap(),
+        0,
+        "no event may survive a rolled-back creation"
+    );
 }
 
 #[test]
 fn a_blank_initial_brief_is_rejected_before_anything_is_persisted() {
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000000");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000000");
 
     for blank in ["", "   ", "\t\n  \t"] {
         let mut bad = request();
@@ -106,23 +141,33 @@ fn a_blank_initial_brief_is_rejected_before_anything_is_persisted() {
 
         match result {
             Err(CreateProjectError::Validation(ProjectValidationError::BlankInitialBrief)) => {}
-            other => panic!("whitespace brief {blank:?} must be rejected as BlankInitialBrief, got {other:?}"),
+            other => panic!(
+                "whitespace brief {blank:?} must be rejected as BlankInitialBrief, got {other:?}"
+            ),
         }
     }
 
-    assert_eq!(service.storage().count("projects").unwrap(), 0, "a rejected request must not persist anything");
+    assert_eq!(
+        service.storage().count("projects").unwrap(),
+        0,
+        "a rejected request must not persist anything"
+    );
     assert_eq!(service.storage().count("project_briefs").unwrap(), 0);
 }
 
 #[test]
 fn an_empty_workspace_path_is_rejected() {
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000000");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000000");
 
     let mut no_path = request();
     no_path.local_path = "".to_string();
     assert!(matches!(
         service.create_project(&no_path),
-        Err(CreateProjectError::Validation(ProjectValidationError::EmptyField("local_path")))
+        Err(CreateProjectError::Validation(
+            ProjectValidationError::EmptyField("local_path")
+        ))
     ));
 
     assert_eq!(service.storage().count("projects").unwrap(), 0);
@@ -131,7 +176,10 @@ fn an_empty_workspace_path_is_rejected() {
 #[test]
 fn reading_back_an_unknown_project_is_not_found_rather_than_an_empty_record() {
     let service = ProjectService::in_memory().expect("service");
-    let err = service.storage().get_project("prj_does_not_exist").expect_err("must not resolve");
+    let err = service
+        .storage()
+        .get_project("prj_does_not_exist")
+        .expect_err("must not resolve");
     assert!(
         matches!(err, mayasaba_storage::StorageError::NotFound(_)),
         "an unknown project must be NotFound, not a default record, or the Control Room could render a project that does not exist"
@@ -145,7 +193,9 @@ fn two_projects_may_share_a_local_path_because_the_contract_does_not_forbid_it()
     // workspace is an undecided product question and needs a contract decision, not a constraint added
     // quietly in a test.
     let shared = workspace_dir("shared");
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000001");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000001");
 
     let mut first = request();
     first.local_path = shared.to_string_lossy().into_owned();
@@ -153,7 +203,9 @@ fn two_projects_may_share_a_local_path_because_the_contract_does_not_forbid_it()
 
     let mut second = request();
     second.local_path = shared.to_string_lossy().into_owned();
-    service.create_project(&second).expect("second project on the same path is currently permitted");
+    service
+        .create_project(&second)
+        .expect("second project on the same path is currently permitted");
 
     assert_eq!(service.storage().count("projects").unwrap(), 2);
 }
@@ -162,7 +214,9 @@ fn two_projects_may_share_a_local_path_because_the_contract_does_not_forbid_it()
 fn a_fabricated_workspace_path_is_refused_before_anything_is_persisted() {
     // The workspace is validated, not trusted. A path that does not exist cannot become a project workspace,
     // and selecting it must not quietly create it either.
-    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000003");
+    let mut service = ProjectService::in_memory()
+        .expect("service")
+        .with_fixed_clock("1700000003");
 
     let mut bad = request();
     bad.local_path = std::env::temp_dir()
@@ -177,8 +231,15 @@ fn a_fabricated_workspace_path_is_refused_before_anything_is_persisted() {
         "a nonexistent workspace must be refused as a workspace rejection, got {result:?}"
     );
 
-    assert_eq!(service.storage().count("projects").unwrap(), 0, "a refused workspace must not persist anything");
-    assert!(!std::path::Path::new(&bad.local_path).exists(), "validation must not create the folder");
+    assert_eq!(
+        service.storage().count("projects").unwrap(),
+        0,
+        "a refused workspace must not persist anything"
+    );
+    assert!(
+        !std::path::Path::new(&bad.local_path).exists(),
+        "validation must not create the folder"
+    );
 }
 
 #[test]
@@ -190,13 +251,18 @@ fn creation_survives_reopening_the_database_from_disk() {
     let _ = std::fs::remove_file(&db);
 
     let project_id = {
-        let mut service = ProjectService::open(&db).expect("open").with_fixed_clock("1700000002");
+        let mut service = ProjectService::open(&db)
+            .expect("open")
+            .with_fixed_clock("1700000002");
         let project = created_project(service.create_project(&request()).expect("create"));
         project.project_id.clone()
     };
 
     let reopened = ProjectService::open(&db).expect("reopen");
-    let record = reopened.storage().get_project(&project_id).expect("read back after reopen");
+    let record = reopened
+        .storage()
+        .get_project(&project_id)
+        .expect("read back after reopen");
     assert_eq!(record.brief_version, Some(1), "the brief survives a reopen");
     assert_eq!(record.current_epoch, 0);
 

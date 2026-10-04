@@ -49,7 +49,10 @@ pub enum EnvelopeRejection {
     /// A material-action message is missing the authorization context that authorises it.
     MissingAuthorizationContext(String),
     /// A field has the wrong JSON type.
-    WrongType { field: &'static str, expected: &'static str },
+    WrongType {
+        field: &'static str,
+        expected: &'static str,
+    },
     /// A field's JSON type is not among the types the contract permits for it.
     WrongJsonType {
         field: &'static str,
@@ -57,7 +60,10 @@ pub enum EnvelopeRejection {
         allowed: &'static [&'static str],
     },
     /// A required field is absent from a nested object the contract defines.
-    MissingNestedField { object: &'static str, field: &'static str },
+    MissingNestedField {
+        object: &'static str,
+        field: &'static str,
+    },
     /// A nested object carries a field the contract does not define.
     UnknownNestedField { object: &'static str, field: String },
 }
@@ -66,11 +72,21 @@ impl std::fmt::Display for EnvelopeRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EnvelopeRejection::NotAnObject => write!(f, "envelope must be a JSON object"),
-            EnvelopeRejection::MissingField(name) => write!(f, "envelope is missing required field `{name}`"),
-            EnvelopeRejection::UnknownField(name) => write!(f, "envelope carries undefined field `{name}`"),
-            EnvelopeRejection::InvalidValue { field, detail } => write!(f, "envelope field `{field}` is invalid: {detail}"),
+            EnvelopeRejection::MissingField(name) => {
+                write!(f, "envelope is missing required field `{name}`")
+            }
+            EnvelopeRejection::UnknownField(name) => {
+                write!(f, "envelope carries undefined field `{name}`")
+            }
+            EnvelopeRejection::InvalidValue { field, detail } => {
+                write!(f, "envelope field `{field}` is invalid: {detail}")
+            }
             EnvelopeRejection::UnsupportedProtocolVersion(v) => {
-                write!(f, "unsupported protocol version `{v}`; this build speaks {}", vocab::PROTOCOL_VERSION)
+                write!(
+                    f,
+                    "unsupported protocol version `{v}`; this build speaks {}",
+                    vocab::PROTOCOL_VERSION
+                )
             }
             EnvelopeRejection::MissingAuthorizationContext(name) => write!(
                 f,
@@ -80,7 +96,11 @@ impl std::fmt::Display for EnvelopeRejection {
             EnvelopeRejection::WrongType { field, expected } => {
                 write!(f, "envelope field `{field}` must be {expected}")
             }
-            EnvelopeRejection::WrongJsonType { field, got, allowed } => write!(
+            EnvelopeRejection::WrongJsonType {
+                field,
+                got,
+                allowed,
+            } => write!(
                 f,
                 "envelope field `{field}` has JSON type {got}, but the contract permits {}",
                 allowed.join(" or ")
@@ -109,11 +129,17 @@ pub struct Envelope {
 
 impl Envelope {
     pub fn message_type(&self) -> &str {
-        self.value.get("message_type").and_then(Value::as_str).unwrap_or_default()
+        self.value
+            .get("message_type")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
     }
 
     pub fn project_id(&self) -> &str {
-        self.value.get("project_id").and_then(Value::as_str).unwrap_or_default()
+        self.value
+            .get("project_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
     }
 }
 
@@ -143,7 +169,9 @@ fn holds_type(value: &Value, kind: &str) -> bool {
         "Obj" => value.is_object(),
         "Num" => value.is_number(),
         "Int" => {
-            value.as_i64().is_some() || value.as_u64().is_some() || value.as_f64().is_some_and(|f| f.fract() == 0.0)
+            value.as_i64().is_some()
+                || value.as_u64().is_some()
+                || value.as_f64().is_some_and(|f| f.fract() == 0.0)
         }
         _ => false,
     }
@@ -176,7 +204,9 @@ pub fn validate_envelope(value: &Value) -> Result<Envelope, EnvelopeRejection> {
     // additionalProperties:false in the contract. An unrecognised field is refused rather than ignored,
     // because ignoring it would let a sender smuggle meaning the receiver never sees validated.
     for key in obj.keys() {
-        if !vocab::REQUIRED_FIELDS.contains(&key.as_str()) && !vocab::OPTIONAL_FIELDS.contains(&key.as_str()) {
+        if !vocab::REQUIRED_FIELDS.contains(&key.as_str())
+            && !vocab::OPTIONAL_FIELDS.contains(&key.as_str())
+        {
             return Err(EnvelopeRejection::UnknownField(key.clone()));
         }
     }
@@ -187,7 +217,11 @@ pub fn validate_envelope(value: &Value) -> Result<Envelope, EnvelopeRejection> {
     for &(field, allowed) in vocab::FIELD_TYPES {
         if let Some(held) = obj.get(field) {
             if !allowed.iter().any(|kind| holds_type(held, *kind)) {
-                return Err(EnvelopeRejection::WrongJsonType { field, got: json_type_name(held), allowed });
+                return Err(EnvelopeRejection::WrongJsonType {
+                    field,
+                    got: json_type_name(held),
+                    allowed,
+                });
             }
         }
     }
@@ -201,7 +235,9 @@ pub fn validate_envelope(value: &Value) -> Result<Envelope, EnvelopeRejection> {
     check_minimum(obj, "project_epoch")?;
     check_non_empty_string(obj, "idempotency_key")?;
 
-    let sender = obj.get("sender").ok_or(EnvelopeRejection::MissingField("sender"))?;
+    let sender = obj
+        .get("sender")
+        .ok_or(EnvelopeRejection::MissingField("sender"))?;
     check_identity(sender, "sender")?;
     check_recipients(obj)?;
     check_state_digest(obj)?;
@@ -210,18 +246,25 @@ pub fn validate_envelope(value: &Value) -> Result<Envelope, EnvelopeRejection> {
     // The conditional rule: a material action must arrive with the authorization context that permits it. The
     // contract's `then` narrows every one of these fields to a non-nullable type, so presence alone is not
     // enough - a field explicitly set to null does not satisfy it.
-    let message_type = obj.get("message_type").and_then(Value::as_str).unwrap_or_default();
+    let message_type = obj
+        .get("message_type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if vocab::MATERIAL_ACTION_MESSAGE_TYPES.contains(&message_type) {
         for field in vocab::MATERIAL_REQUIRED_FIELDS {
             let present = obj.get(*field).map(|v| !v.is_null()).unwrap_or(false);
             if !present {
-                return Err(EnvelopeRejection::MissingAuthorizationContext(message_type.to_string()));
+                return Err(EnvelopeRejection::MissingAuthorizationContext(
+                    message_type.to_string(),
+                ));
             }
         }
         check_authorization_context(obj)?;
     }
 
-    Ok(Envelope { value: value.clone() })
+    Ok(Envelope {
+        value: value.clone(),
+    })
 }
 
 fn check_enum(
@@ -235,7 +278,10 @@ fn check_enum(
             field,
             detail: format!("`{s}` is not one of the {} legal values", allowed.len()),
         }),
-        Some(_) => Err(EnvelopeRejection::WrongType { field, expected: "a string" }),
+        Some(_) => Err(EnvelopeRejection::WrongType {
+            field,
+            expected: "a string",
+        }),
         None => Err(EnvelopeRejection::MissingField(field)),
     }
 }
@@ -257,7 +303,10 @@ fn check_nested_shape(
     }
     for key in map.keys() {
         if !allowed.contains(&key.as_str()) {
-            return Err(EnvelopeRejection::UnknownNestedField { object, field: key.clone() });
+            return Err(EnvelopeRejection::UnknownNestedField {
+                object,
+                field: key.clone(),
+            });
         }
     }
     Ok(())
@@ -273,9 +322,15 @@ fn check_nested_enum(
         Some(Value::String(s)) if allowed.contains(&s.as_str()) => Ok(()),
         Some(Value::String(s)) => Err(EnvelopeRejection::InvalidValue {
             field,
-            detail: format!("`{s}` is not one of the {} legal values for `{object}`", allowed.len()),
+            detail: format!(
+                "`{s}` is not one of the {} legal values for `{object}`",
+                allowed.len()
+            ),
         }),
-        Some(_) => Err(EnvelopeRejection::WrongType { field, expected: "a string" }),
+        Some(_) => Err(EnvelopeRejection::WrongType {
+            field,
+            expected: "a string",
+        }),
         None => Err(EnvelopeRejection::MissingNestedField { object, field }),
     }
 }
@@ -283,7 +338,12 @@ fn check_nested_enum(
 fn check_schema_version(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRejection> {
     let raw = match obj.get("schema_version") {
         Some(Value::String(v)) => v.clone(),
-        Some(_) => return Err(EnvelopeRejection::WrongType { field: "schema_version", expected: "a string" }),
+        Some(_) => {
+            return Err(EnvelopeRejection::WrongType {
+                field: "schema_version",
+                expected: "a string",
+            })
+        }
         None => return Err(EnvelopeRejection::MissingField("schema_version")),
     };
 
@@ -291,7 +351,9 @@ fn check_schema_version(obj: &serde_json::Map<String, Value>) -> Result<(), Enve
     // non-empty digits. The pinned MAJOR is generated from that same pattern, so this function cannot drift
     // from it without the generator refusing to emit.
     let parts: Vec<&str> = raw.split('.').collect();
-    let all_numeric = parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
+    let all_numeric = parts
+        .iter()
+        .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
     if parts.len() == 3 && all_numeric && parts[0] == vocab::SCHEMA_VERSION_MAJOR {
         Ok(())
     } else {
@@ -306,14 +368,20 @@ fn check_schema_version(obj: &serde_json::Map<String, Value>) -> Result<(), Enve
 }
 
 /// A `minimum: 0` integer, which the type table cannot express.
-fn check_minimum(obj: &serde_json::Map<String, Value>, field: &'static str) -> Result<(), EnvelopeRejection> {
+fn check_minimum(
+    obj: &serde_json::Map<String, Value>,
+    field: &'static str,
+) -> Result<(), EnvelopeRejection> {
     match obj.get(field) {
         Some(Value::Number(n)) if n.as_i64().is_some_and(|v| v >= 0) => Ok(()),
         Some(Value::Number(_)) => Err(EnvelopeRejection::InvalidValue {
             field,
             detail: "must be zero or greater".to_string(),
         }),
-        Some(_) => Err(EnvelopeRejection::WrongType { field, expected: "an integer" }),
+        Some(_) => Err(EnvelopeRejection::WrongType {
+            field,
+            expected: "an integer",
+        }),
         None => Err(EnvelopeRejection::MissingField(field)),
     }
 }
@@ -330,21 +398,26 @@ fn check_non_empty_string(
             field,
             detail: "must not be empty when present".to_string(),
         }),
-        Some(_) => Err(EnvelopeRejection::WrongType { field, expected: "a string or null" }),
+        Some(_) => Err(EnvelopeRejection::WrongType {
+            field,
+            expected: "a string or null",
+        }),
     }
 }
 
 /// `uniqueItems: true` on an array of strings, which the type table cannot express.
 fn check_unique_strings(value: &Value, field: &'static str) -> Result<(), EnvelopeRejection> {
-    let items = value
-        .as_array()
-        .ok_or(EnvelopeRejection::WrongType { field, expected: "an array of strings" })?;
+    let items = value.as_array().ok_or(EnvelopeRejection::WrongType {
+        field,
+        expected: "an array of strings",
+    })?;
 
     let mut seen: Vec<&str> = Vec::with_capacity(items.len());
     for item in items {
-        let s = item
-            .as_str()
-            .ok_or(EnvelopeRejection::WrongType { field, expected: "an array of strings" })?;
+        let s = item.as_str().ok_or(EnvelopeRejection::WrongType {
+            field,
+            expected: "an array of strings",
+        })?;
         if seen.contains(&s) {
             return Err(EnvelopeRejection::InvalidValue {
                 field,
@@ -359,21 +432,33 @@ fn check_unique_strings(value: &Value, field: &'static str) -> Result<(), Envelo
 /// An actor identity: the contract's own `identity.schema.json`, applied to the sender and to every recipient
 /// alike. The same rule must hold in both positions - a recipient must not be a shape the sender may not be.
 fn check_identity(identity: &Value, object: &'static str) -> Result<(), EnvelopeRejection> {
-    let map = identity
-        .as_object()
-        .ok_or(EnvelopeRejection::WrongType { field: object, expected: "an identity object" })?;
+    let map = identity.as_object().ok_or(EnvelopeRejection::WrongType {
+        field: object,
+        expected: "an identity object",
+    })?;
 
-    check_nested_shape(map, object, vocab::IDENTITY_REQUIRED_FIELDS, vocab::IDENTITY_FIELDS)?;
+    check_nested_shape(
+        map,
+        object,
+        vocab::IDENTITY_REQUIRED_FIELDS,
+        vocab::IDENTITY_FIELDS,
+    )?;
     check_nested_enum(map, object, "actor_type", vocab::ACTOR_TYPES)?;
 
     // actor_id carries minLength:1 - an identity with no id names nobody.
     match map.get("actor_id") {
         Some(Value::String(s)) if !s.is_empty() => {}
         Some(Value::String(_)) => {
-            return Err(EnvelopeRejection::InvalidValue { field: "actor_id", detail: "must not be empty".into() })
+            return Err(EnvelopeRejection::InvalidValue {
+                field: "actor_id",
+                detail: "must not be empty".into(),
+            })
         }
         _ => {
-            return Err(EnvelopeRejection::WrongType { field: "actor_id", expected: "a non-empty string" })
+            return Err(EnvelopeRejection::WrongType {
+                field: "actor_id",
+                expected: "a non-empty string",
+            })
         }
     }
 
@@ -389,17 +474,25 @@ fn check_identity(identity: &Value, object: &'static str) -> Result<(), Envelope
                     detail: format!("`{s}` is not a supported agent type (DEC-029)"),
                 })
             }
-            _ => return Err(EnvelopeRejection::WrongType { field: "agent_type", expected: "a string or null" }),
+            _ => {
+                return Err(EnvelopeRejection::WrongType {
+                    field: "agent_type",
+                    expected: "a string or null",
+                })
+            }
         }
     }
     Ok(())
 }
 
 fn check_recipients(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRejection> {
-    let recipients = obj.get("recipients").ok_or(EnvelopeRejection::MissingField("recipients"))?;
-    let list = recipients
-        .as_array()
-        .ok_or(EnvelopeRejection::WrongType { field: "recipients", expected: "an array" })?;
+    let recipients = obj
+        .get("recipients")
+        .ok_or(EnvelopeRejection::MissingField("recipients"))?;
+    let list = recipients.as_array().ok_or(EnvelopeRejection::WrongType {
+        field: "recipients",
+        expected: "an array",
+    })?;
 
     // minItems:1 in the contract. An envelope addressed to nobody is a routing defect, not a broadcast.
     if list.is_empty() {
@@ -420,28 +513,44 @@ fn check_recipients(obj: &serde_json::Map<String, Value>) -> Result<(), Envelope
 fn check_state_digest(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRejection> {
     match obj.get("state_digest") {
         None | Some(Value::Null) => Ok(()),
-        Some(Value::String(s)) if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) => Ok(()),
+        Some(Value::String(s)) if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) => {
+            Ok(())
+        }
         Some(Value::String(s)) => Err(EnvelopeRejection::InvalidValue {
             field: "state_digest",
             detail: format!("`{s}` is not 64 hex characters"),
         }),
-        Some(_) => Err(EnvelopeRejection::WrongType { field: "state_digest", expected: "a string or null" }),
+        Some(_) => Err(EnvelopeRejection::WrongType {
+            field: "state_digest",
+            expected: "a string or null",
+        }),
     }
 }
 
 fn check_security(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRejection> {
-    let security = obj.get("security").ok_or(EnvelopeRejection::MissingField("security"))?;
-    let map = security
-        .as_object()
-        .ok_or(EnvelopeRejection::WrongType { field: "security", expected: "an object" })?;
+    let security = obj
+        .get("security")
+        .ok_or(EnvelopeRejection::MissingField("security"))?;
+    let map = security.as_object().ok_or(EnvelopeRejection::WrongType {
+        field: "security",
+        expected: "an object",
+    })?;
 
-    check_nested_shape(map, "security", vocab::SECURITY_REQUIRED_FIELDS, vocab::SECURITY_FIELDS)?;
+    check_nested_shape(
+        map,
+        "security",
+        vocab::SECURITY_REQUIRED_FIELDS,
+        vocab::SECURITY_FIELDS,
+    )?;
     check_nested_enum(map, "security", "classification", vocab::CLASSIFICATIONS)?;
 
     // secret_refs is required, and holds unique strings: secrets are referenced, never carried.
     let refs = map
         .get("secret_refs")
-        .ok_or(EnvelopeRejection::MissingNestedField { object: "security", field: "secret_refs" })?;
+        .ok_or(EnvelopeRejection::MissingNestedField {
+            object: "security",
+            field: "secret_refs",
+        })?;
     check_unique_strings(refs, "secret_refs")?;
 
     // contains_secret_material carries `const: false` in the contract. An envelope asserting it carries secrets
@@ -457,13 +566,16 @@ fn check_security(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRe
     Ok(())
 }
 
-fn check_authorization_context(obj: &serde_json::Map<String, Value>) -> Result<(), EnvelopeRejection> {
+fn check_authorization_context(
+    obj: &serde_json::Map<String, Value>,
+) -> Result<(), EnvelopeRejection> {
     let context = obj
         .get("authorization_context")
         .ok_or(EnvelopeRejection::MissingField("authorization_context"))?;
-    let map = context
-        .as_object()
-        .ok_or(EnvelopeRejection::WrongType { field: "authorization_context", expected: "an object" })?;
+    let map = context.as_object().ok_or(EnvelopeRejection::WrongType {
+        field: "authorization_context",
+        expected: "an object",
+    })?;
 
     // All seven fields, including required_capabilities - which PolicyService consumes and a hand-copied list
     // had silently stopped requiring.
@@ -474,13 +586,27 @@ fn check_authorization_context(obj: &serde_json::Map<String, Value>) -> Result<(
         vocab::AUTHORIZATION_CONTEXT_FIELDS,
     )?;
 
-    for field in ["lease_id", "workspace_id", "agent_id", "policy_scope", "capability_snapshot_id"] {
+    for field in [
+        "lease_id",
+        "workspace_id",
+        "agent_id",
+        "policy_scope",
+        "capability_snapshot_id",
+    ] {
         match map.get(field) {
             Some(Value::String(s)) if !s.is_empty() => {}
             Some(Value::String(_)) => {
-                return Err(EnvelopeRejection::InvalidValue { field, detail: "must not be empty".into() })
+                return Err(EnvelopeRejection::InvalidValue {
+                    field,
+                    detail: "must not be empty".into(),
+                })
             }
-            _ => return Err(EnvelopeRejection::WrongType { field, expected: "a non-empty string" }),
+            _ => {
+                return Err(EnvelopeRejection::WrongType {
+                    field,
+                    expected: "a non-empty string",
+                })
+            }
         }
     }
 
@@ -495,11 +621,11 @@ fn check_authorization_context(obj: &serde_json::Map<String, Value>) -> Result<(
         }
     }
 
-    let capabilities = map
-        .get("required_capabilities")
-        .ok_or(EnvelopeRejection::MissingNestedField {
-            object: "authorization_context",
-            field: "required_capabilities",
-        })?;
+    let capabilities =
+        map.get("required_capabilities")
+            .ok_or(EnvelopeRejection::MissingNestedField {
+                object: "authorization_context",
+                field: "required_capabilities",
+            })?;
     check_unique_strings(capabilities, "required_capabilities")
 }

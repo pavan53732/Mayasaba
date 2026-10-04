@@ -6,8 +6,9 @@
 
 pub mod project_service;
 
-pub use project_service::{
-    validate_workspace, CreateProjectError, CreateProjectOutcome, ProjectService, ProjectValidationError,
-};
 pub use mayasaba_storage::{RecoveryIssue, RecoveryReport};
 pub use mayasaba_workspace::{WorkspaceRejection, WorkspaceValidation};
+pub use project_service::{
+    validate_workspace, CreateProjectError, CreateProjectOutcome, ProjectService,
+    ProjectValidationError,
+};
