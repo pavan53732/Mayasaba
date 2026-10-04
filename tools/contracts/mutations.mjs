@@ -222,12 +222,33 @@ const MUTATIONS = [
     id: "dec055-h",
     what: "crates/bus: the mapping produces a code the registry does not declare",
     check: GATE,
-    edits: [{ file: BUS_ERROR_RS, find: '=> "DUPLICATE_CONFLICT"', replace: '=> "SEQUENCE_COLLISION"' }],
+    edits: [
+      {
+        file: BUS_ERROR_RS,
+        // Anchored on the arm rather than on the code string: two arms legitimately produce
+        // DUPLICATE_CONFLICT, and an anchor matching twice is not a mutation.
+        find: 'BusError::SequenceConflict { .. } => "DUPLICATE_CONFLICT"',
+        replace: 'BusError::SequenceConflict { .. } => "SEQUENCE_COLLISION"',
+      },
+    ],
     expect: ["which schemas/error-v1/registry.json does not register"],
   },
 
   // --- DEC-058: the bus's retry/dispatch policy, against the machine it terminates through and against the
   // crate's shipped defaults.
+  {
+    id: "dec059-a",
+    what: "crates/bus: the inbound duplicate arm produces a code the registry does not declare",
+    check: GATE,
+    edits: [
+      {
+        file: BUS_ERROR_RS,
+        find: 'BusError::DuplicateMessage { .. } => "DUPLICATE_CONFLICT"',
+        replace: 'BusError::DuplicateMessage { .. } => "DUPLICATE_MESSAGE"',
+      },
+    ],
+    expect: ["which schemas/error-v1/registry.json does not register"],
+  },
   {
     id: "dec058-a",
     what: "bus-policies.json: the declared termination path is not an edge the message_delivery machine has",
