@@ -4,8 +4,11 @@
   "title":"Mayasaba Tauri command/query/event payload registry",
   "type":"object",
   "additionalProperties":false,
-  "required":["commands","queries","events"],
+  "required":["schema_version","authority","commands","queries","events"],
   "properties":{
+    "$schema":{"type":"string"},
+    "schema_version":{"type":"string"},
+    "authority":{"const":"schemas/tauri-bridge-v1/payloads.json"},
     "commands":{"type":"object","additionalProperties":{"$ref":"#/$defs/operation"}},
     "queries":{"type":"object","additionalProperties":{"$ref":"#/$defs/query_operation"}},
     "events":{"type":"object","additionalProperties":{"$ref":"#/$defs/event"}}

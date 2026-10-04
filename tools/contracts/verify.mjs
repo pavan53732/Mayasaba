@@ -783,6 +783,78 @@ const briefFields=(createProject.request_fields ?? []).filter(f=>f.required && /
 if(!briefFields.length) fail("create_project declares no required initial brief field. Project creation must persist the user's stated intent as ProjectBrief version 1 in the same transaction (DEC-030); a project must never exist without its intent anchor.");
 if(!createProject.atomicity) fail("create_project declares no atomicity. Creating a project, its first brief, the PROJECT_CREATED event and the initial epoch is one domain transaction, not a sequence of calls.");
 
+// --- Canonical artifact readability and registry/schema conformance.
+// 22 of the 38 canonical artifacts declared in workspace.manifest.json:schema_sources were previously
+// existence-checked only, including some of the highest-consequence registries in the repository. Two of
+// them ship a sibling schema, so their contents can be checked for real rather than merely counted.
+//
+// This is a deliberately small JSON Schema subset - type, required, properties, additionalProperties, const,
+// enum, minimum, items, minItems - because this repository has zero runtime dependencies and those are the
+// keywords its own schemas actually use. It is not a general validator and does not pretend to be; it
+// enforces what these files declare and reports honestly on the rest.
+const jsonType=(v)=>Array.isArray(v)?"array":v===null?"null":typeof v==="number"&&Number.isInteger(v)?"integer":typeof v;
+function validateSubset(value,schema,at,problems){
+  if(schema.type){
+    const want=Array.isArray(schema.type)?schema.type:[schema.type];
+    const actual=jsonType(value);
+    const ok=want.some(t=>t===actual||(t==="number"&&actual==="integer"));
+    if(!ok){problems.push(`${at} must be ${want.join("|")}, found ${actual}`);return;}
+  }
+  if(schema.const!==undefined && value!==schema.const) problems.push(`${at} must equal ${JSON.stringify(schema.const)}`);
+  if(schema.enum && !schema.enum.includes(value)) problems.push(`${at} must be one of ${JSON.stringify(schema.enum)}`);
+  if(typeof value==="number" && schema.minimum!==undefined && value<schema.minimum) problems.push(`${at} must be >= ${schema.minimum}`);
+  if(Array.isArray(value)){
+    if(schema.minItems!==undefined && value.length<schema.minItems) problems.push(`${at} needs at least ${schema.minItems} item(s)`);
+    if(schema.items) value.forEach((v,i)=>validateSubset(v,schema.items,`${at}[${i}]`,problems));
+  }
+  if(jsonType(value)==="object"){
+    for(const key of schema.required ?? []) if(!(key in value)) problems.push(`${at} is missing required key "${key}"`);
+    for(const [key,sub] of Object.entries(schema.properties ?? {})){
+      if(key in value) validateSubset(value[key],sub,`${at}.${key}`,problems);
+    }
+    if(schema.additionalProperties===false && schema.properties){
+      for(const key of Object.keys(value)) if(!(key in schema.properties)) problems.push(`${at} declares "${key}", which the schema does not permit`);
+    }
+  }
+}
+const conformanceProblems=[];
+const validateAgainst=(file,schemaFile)=>{
+  let instance,schema;
+  try{ instance=read(file); }catch(e){ conformanceProblems.push(`${file} is not parseable JSON: ${e.message}`); return; }
+  try{ schema=read(schemaFile); }catch(e){ conformanceProblems.push(`${schemaFile} is not parseable JSON: ${e.message}`); return; }
+  validateSubset(instance,schema,file,conformanceProblems);
+};
+validateAgainst("schemas/error-v1/registry.json","schemas/error-v1/registry.schema.json");
+validateAgainst("schemas/service-contracts-v1/registry.json","schemas/service-contracts-v1/registry.schema.json");
+// configuration.schema.json describes the Configuration document (ui, agents, runtime, ...), not
+// configuration-registry.json, which is an envelope of layers/precedence/groups. Validating the registry
+// against it was a wrong pairing, not a finding.
+validateAgainst("schemas/tauri-bridge-v1/payloads.json","schemas/tauri-bridge-v1/payloads.schema.json");
+
+// Every canonical artifact must at least be readable in its declared form. This is weak but it is not
+// nothing: an unreadable or malformed registry that nothing opens is exactly how the previous divergence
+// survived, and parsing is the cheapest check that would have caught it.
+const manifestForCoverage=read("workspace.manifest.json");
+const canonicalAll=manifestForCoverage.schema_sources ?? [];
+const unreadable=[];
+for(const f of canonicalAll){
+  if(f.endsWith(".sql")||f.endsWith(".md")){ if(!exists(f)) unreadable.push(f); continue; }
+  try{ read(f); }catch(e){ unreadable.push(`${f} (${e.message})`); }
+}
+if(unreadable.length) fail(`Canonical artifact(s) declared in workspace.manifest.json:schema_sources are unreadable:\n  - ${unreadable.join("\n  - ")}`);
+
+// The service registry and the workspace manifest both describe application services. If they disagree, an
+// implementation agent cannot tell which crate owns a service, and Tauri command ownership resolves against
+// the manifest.
+const serviceRegistry=read("schemas/service-contracts-v1/registry.json");
+const declaredServices=Object.keys(serviceRegistry.services ?? serviceRegistry.contracts ?? {});
+const manifestServices=Object.keys(read("workspace.manifest.json").application_services ?? {});
+const serviceDrift=declaredServices.filter(s=>!manifestServices.includes(s)).map(s=>`${s} is in service-contracts-v1/registry.json but not in workspace.manifest.json application_services`)
+  .concat(manifestServices.filter(s=>!declaredServices.includes(s)).map(s=>`${s} is in workspace.manifest.json application_services but not in service-contracts-v1/registry.json`));
+if(serviceDrift.length) fail(`Service registry and workspace manifest disagree on ${serviceDrift.length} service(s):\n  - ${serviceDrift.join("\n  - ")}`);
+
+if(conformanceProblems.length) fail(conformanceProblems.length+" registry/schema conformance problem(s):\n  - "+conformanceProblems.join("\n  - "));
+
 // --- Gate coverage self-report.
 // This gate was strengthened across DEC-036..DEC-043 and each fix found real defects, which is also how it
 // stayed silent about whole layers. It had never read schema.sql, so the durable layer was unverified while
@@ -812,20 +884,26 @@ const coverageVerified=new Set([
   "schemas/tauri-bridge-v1/bridge.schema.json",
   "schemas/tauri-bridge-v1/payloads.json",
   "schemas/tauri-bridge-v1/payloads.schema.json",
+  "schemas/error-v1/registry.json",
+  "schemas/service-contracts-v1/registry.json",
   "schemas/sqlite-v1/schema.sql",
   "workspace.manifest.json",
   "docs/DATA-MODEL.md",
 ]);
 const drift=[...coverageVerified].filter(f=>!contentRead.has(f));
 if(drift.length) fail(`Gate coverage map claims these artifacts are verified, but this run did not read their contents:\n  - ${drift.join("\n  - ")}\nEither restore the check that reads them or remove them from the coverage map. A coverage claim that nothing enforces is the defect this block exists to prevent.`);
-const canonical=read("workspace.manifest.json").schema_sources ?? [];
-const unverified=canonical.filter(f=>!coverageVerified.has(f));
-gateCoverage={verified:coverageVerified.size,canonical:canonical.length,unverified:unverified.length};
+// Report verified and unverified against the same denominator. An earlier version counted every entry in the
+// coverage map, including artifacts outside schema_sources, so the reported figures did not sum to the
+// canonical total - a reporting bug in the mechanism meant to fix reporting blindness.
+const canonicalList=read("workspace.manifest.json").schema_sources ?? [];
+const verifiedInCanonical=canonicalList.filter(f=>coverageVerified.has(f));
+const unverified=canonicalList.filter(f=>!coverageVerified.has(f));
+gateCoverage={verified:verifiedInCanonical.length,canonical:canonicalList.length,unverified:unverified.length,parsed:canonicalList.length};
 
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
-console.log(`Gate coverage: ${gateCoverage.verified} artifacts content-verified of ${gateCoverage.canonical} canonical (${gateCoverage.unverified} existence-checked only, reported not enforced)`);
+console.log(`Gate coverage: ${gateCoverage.verified} of ${gateCoverage.canonical} canonical artifacts invariant-checked; all ${gateCoverage.parsed} parsed for readability; ${gateCoverage.unverified} parse-only, no invariant enforced (reported, not blocking)`);
 // Hook status is reported, never enforced. A pre-commit gate that checks whether the pre-commit gate
 // is installed would need its own hook, so the recursion is stopped one level down: the mechanism
 // cannot verify itself, but its absence is a reported fact in the gate's own output rather than a
