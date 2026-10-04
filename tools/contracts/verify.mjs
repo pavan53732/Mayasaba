@@ -1025,6 +1025,38 @@ expectConstant("CHANNELS",envelopeSchema.properties.channel.enum);
 expectConstant("PHASES",envelopeSchema.properties.phase.enum);
 if(constantProblems.length) fail(constantProblems.length+" generated envelope constant(s) disagree with the contract:\n  - "+constantProblems.join("\n  - ")+"\nRun: npm run codegen:protocol, then check the generator with the same edit.");
 
+// --- Recovery vocabulary ownership (DEC-017), and what is deliberately not enforced here.
+// schemas/recovery-v1/recovery-events.json declared the recovery state vocabulary a second time: its 13
+// `states` were identical, element for element, to recovery.schema.json:properties.state.enum. One concept
+// therefore had two canonical declarations in the allowlist and nothing compared them, which is the
+// shadow-source pattern DEC-017 prohibits. The duplicate is removed and this check keeps it removed - a
+// re-added `states` list fails here rather than quietly becoming a second owner again.
+//
+// The `events` list is checked for a self-consistent `authority` and for repeated entries, and its members are
+// resolved against the two vocabularies that could legitimately declare them: the canonical MCF event enum and
+// the Tauri UI event enum. That resolution is REPORTED rather than enforced, and the reason is stated rather
+// than implied. RECOVERY_STEP_CHANGED and RECOVERY_BLOCKED are declared in neither; registering them is a
+// recovery-subsystem decision, because a UI event needs a bridge enum member, a payload entry, an owning
+// service and a regenerated bridge. Reporting keeps the gap visible on every run without making the repository
+// uncommittable, which a blocking version would do immediately. The limitation is stated so the green is not
+// read as "every recovery event is registered".
+const recoveryEvents=read("schemas/recovery-v1/recovery-events.json");
+const recoverySchema=read("schemas/recovery-v1/recovery.schema.json");
+const recoveryProblems=[];
+if(recoveryEvents.states!==undefined) recoveryProblems.push("schemas/recovery-v1/recovery-events.json declares `states`; the recovery state vocabulary is owned by schemas/recovery-v1/recovery.schema.json:properties.state.enum, and a second declaration of one concept is the shadow-source pattern DEC-017 prohibits");
+if(recoveryEvents.authority!=="schemas/recovery-v1/recovery-events.json") recoveryProblems.push(`schemas/recovery-v1/recovery-events.json declares authority ${JSON.stringify(recoveryEvents.authority)}, which is not its own path`);
+const recoveryEventList=recoveryEvents.events;
+if(!Array.isArray(recoveryEventList)||recoveryEventList.length===0) recoveryProblems.push("schemas/recovery-v1/recovery-events.json declares no events");
+else {
+  const repeats=[...new Set(recoveryEventList.filter((e,i)=>recoveryEventList.indexOf(e)!==i))];
+  if(repeats.length) recoveryProblems.push(`schemas/recovery-v1/recovery-events.json repeats event(s): ${repeats.join(", ")}`);
+}
+const recoveryStates=recoverySchema.properties?.state?.enum;
+if(!Array.isArray(recoveryStates)||recoveryStates.length===0) recoveryProblems.push("schemas/recovery-v1/recovery.schema.json declares no state enum, but it owns the recovery state vocabulary");
+if(recoveryProblems.length) fail(recoveryProblems.length+" recovery vocabulary problem(s):\n  - "+recoveryProblems.join("\n  - "));
+const undeclaredRecoveryEvents=(recoveryEventList??[]).filter(e=>!events.includes(e)&&!bridge.properties.event_type.enum.includes(e));
+if(undeclaredRecoveryEvents.length) console.log(`Recovery events declared in neither the MCF event enum nor the Tauri UI event enum (reported, not blocking; registering them is a recovery-subsystem decision): ${undeclaredRecoveryEvents.join(", ")}`);
+
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
 // crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -
@@ -1066,6 +1098,8 @@ const coverageVerified=new Set([
   "schemas/mcf-v2/event-to-ui.registry.json",
   "schemas/mcf-v2/envelope.schema.json",
   "schemas/mcf-v2/identity.schema.json",
+  "schemas/recovery-v1/recovery-events.json",
+  "schemas/recovery-v1/recovery.schema.json",
   "schemas/agent-adapter-v1/native-event.schema.json",
   "schemas/agent-adapter-v1/native-to-mcf.registry.json",
   "schemas/agent-adapter-v1/native-transport-contract.json",
