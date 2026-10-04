@@ -121,7 +121,7 @@ table is what enforces them.
 | --- | --- | --- |
 | `messages.delivery_state` | `crates/bus` | The `message_delivery` machine's twelve states, declared in `schemas/mcf-v2/transition-types.json`. This is the one column whose vocabulary is machine-readable and gate-adjacent, so it is not restated here. |
 | `outbox.dispatch_state` | `crates/bus` | `PENDING` (not yet attempted), `FAILED` (the last attempt failed and a retry is scheduled), `DISPATCHED` (handed to the transport), `ABANDONED` (expired; it will not be retried). `PENDING` and `FAILED` are claimable; the other two are terminal (DEC-058) |
-| `inbox.processing_state` | `crates/bus` | `PERSISTED` (seen and recorded, not yet acknowledged), `ACKED` (receipt acknowledged), `PROCESSING`, `PROCESSED`, `RETRYING` (refused retryably, awaiting requeue), `DEAD_LETTER` (refused terminally) (DEC-059) |
+| `inbox.processing_state` | `crates/bus` | `PERSISTED` (seen and recorded, not yet acknowledged), `ACKED` (receipt acknowledged), `PROCESSING`, `PROCESSED`, `RETRYING` (refused retryably, awaiting requeue), `DEAD_LETTER` (refused terminally), `EXPIRED` (never requeued, so the processing budget was exhausted) (DEC-059, DEC-062) |
 | `message_receipts.receipt_state` | `crates/bus` | `ACKED`, `NACKED`. A message that was acknowledged and later refused has one row whose state becomes `NACKED`; `acknowledged_at` still records that it was acknowledged, so the two facts do not overwrite each other (DEC-059) |
 
 `inbox.processing_state` has no `DUPLICATE` value, and that is deliberate: a redelivery is recognised by the

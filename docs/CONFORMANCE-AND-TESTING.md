@@ -223,6 +223,25 @@ in event identity rather than in requeue. `crates/bus/tests/inbox.rs` now proves
 - an inbound message has no queue entry until it is requeued, which is why requeue upserts one rather than
   updating it.
 
+## The last declared exit (DEC-062)
+
+`RETRYING` had no exit, so a message refused retryably and never requeued waited forever with nothing recording
+that it was stuck. `crates/bus/tests/inbox.rs` proves the declared `RETRYING -> EXPIRED` edge, and that a state
+machine with a state nothing can leave is a machine describing behaviour the system does not have.
+
+Must prove:
+
+- a refused message can be expired to `EXPIRED` with a `MESSAGE_EXPIRED` event, the terminal event on its inbox
+  row, and a `dead_letters` row whose reason is the budget rather than one particular refusal;
+- a redelivery after the expiry is a duplicate reporting `EXPIRED` and the terminal event;
+- a message that was never queued has **no** queue entry after expiring - the absence is asserted, because the
+  expiry must not create an abandoned row for a message that never queued;
+- a message that **was** requeued has its queue entry abandoned with no next attempt time, so a later pass cannot
+  send a message already declared unprocessable;
+- expiring a message that is not `RETRYING` is refused, leaves the state alone and writes no dead letter;
+- a message refused, requeued and refused again reaches a **second** `ACTION_FAILED` event under its own
+  pass-suffixed id, which is the pass count above two that DEC-061 could not reach.
+
 ## Project intent and user-contribution tests
 
 Must prove:

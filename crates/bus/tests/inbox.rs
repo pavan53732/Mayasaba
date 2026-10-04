@@ -762,3 +762,178 @@ fn requeueing_a_message_that_is_not_retrying_is_refused() {
         "a refused requeue must not have appended anything"
     );
 }
+
+#[test]
+fn a_message_refused_retryably_and_never_requeued_can_be_expired() {
+    let (mut bus, _dir) = bus_with_project("retrying_expire");
+    let envelope = envelope(
+        "msg_x_1",
+        "prj_retrying_expire",
+        1,
+        Some("op_x_1"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+
+    bus.receive(&envelope, &clock).expect("receive");
+    bus.start_processing("msg_x_1", &clock).expect("start");
+    bus.reject_processing("msg_x_1", "the adapter was busy", true, &clock)
+        .expect("reject");
+    assert_eq!(state_of(&bus, "msg_x_1"), "RETRYING");
+
+    // RETRYING -> EXPIRED, the last declared exit the bus was missing.
+    bus.expire_retrying("msg_x_1", &clock).expect("expire");
+    assert_eq!(state_of(&bus, "msg_x_1"), "EXPIRED");
+    let row = bus
+        .storage()
+        .inbox_row("msg_x_1")
+        .expect("inbox")
+        .expect("row");
+    assert_eq!(row.processing_state, "EXPIRED");
+    assert_eq!(
+        row.terminal_event_id.as_deref(),
+        Some("evt_msg_x_1_message_expired")
+    );
+    assert_eq!(
+        events_of(&bus, "msg_x_1"),
+        vec![
+            "MESSAGE_RECEIVED",
+            "MESSAGE_ACKED",
+            "ACTION_STARTED",
+            "ACTION_FAILED",
+            "MESSAGE_EXPIRED"
+        ]
+    );
+    // No queue entry exists, and the expiry must not create one: this message was received, not queued, so there
+    // is nothing to abandon. Creating one would leave an abandoned queue entry for a message that never queued.
+    assert_eq!(
+        count(
+            &bus,
+            "SELECT COUNT(*) FROM outbox WHERE message_id = ?1",
+            "msg_x_1"
+        ),
+        0
+    );
+
+    let (final_error, attempts): (String, i64) = bus
+        .storage()
+        .conn()
+        .query_row(
+            "SELECT final_error_json, attempts FROM dead_letters WHERE message_id = ?1",
+            ["msg_x_1"],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("dead letter");
+    // The reason is the budget, not one particular refusal: the refusals themselves are in the event log, and
+    // there is no stored processing-attempt count to derive an expiry from.
+    assert_eq!(
+        final_error,
+        r#"{"code":"PROCESS_FAILED","detail":"the processing budget was exhausted"}"#
+    );
+    assert_eq!(attempts, 1);
+
+    // A redelivery after the expiry is a duplicate, and reports the terminal event.
+    let again = bus.receive(&envelope, &clock).expect("redelivery");
+    assert!(again.duplicate);
+    assert_eq!(again.processing_state, "EXPIRED");
+    assert_eq!(
+        again.terminal_event_id.as_deref(),
+        Some("evt_msg_x_1_message_expired")
+    );
+}
+
+#[test]
+fn expiring_a_message_that_is_not_retrying_is_refused() {
+    let (mut bus, _dir) = bus_with_project("expire_refused");
+    let envelope = envelope(
+        "msg_x_2",
+        "prj_expire_refused",
+        1,
+        Some("op_x_2"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+    bus.receive(&envelope, &clock).expect("receive");
+
+    let err = bus
+        .expire_retrying("msg_x_2", &clock)
+        .expect_err("only a retrying message can expire from RETRYING");
+    assert_eq!(err.code(), "SCHEMA_INVALID");
+    assert_eq!(state_of(&bus, "msg_x_2"), "ACKED");
+    assert_eq!(
+        count(
+            &bus,
+            "SELECT COUNT(*) FROM dead_letters WHERE message_id = ?1",
+            "msg_x_2"
+        ),
+        0,
+        "a refused expiry must not dead-letter the message"
+    );
+}
+
+#[test]
+fn expiring_a_requeued_message_abandons_its_queue_entry() {
+    let (mut bus, _dir) = bus_with_project("expire_requeued");
+    let envelope = envelope(
+        "msg_x_3",
+        "prj_expire_requeued",
+        1,
+        Some("op_x_3"),
+        r#"{"task":"a"}"#,
+    );
+    let clock = at("2026-10-04T00:00:10Z");
+
+    // Round once so a queue entry exists, then refuse again and expire from RETRYING.
+    bus.receive(&envelope, &clock).expect("receive");
+    bus.start_processing("msg_x_3", &clock).expect("start");
+    bus.reject_processing("msg_x_3", "busy", true, &clock)
+        .expect("reject");
+    bus.requeue("msg_x_3", &clock).expect("requeue");
+    let mut transport = ScriptedTransport::always_ok();
+    bus.dispatch_due(&clock, &mut transport).expect("dispatch");
+    bus.receive(&envelope, &clock).expect("redelivery");
+    bus.start_processing("msg_x_3", &clock)
+        .expect("start again");
+    bus.reject_processing("msg_x_3", "still busy", true, &clock)
+        .expect("reject again");
+    bus.expire_retrying("msg_x_3", &clock).expect("expire");
+
+    assert_eq!(state_of(&bus, "msg_x_3"), "EXPIRED");
+    // A queue entry exists this time, and the expiry abandons it rather than leaving it claimable: a later pass
+    // must not send a message that has already been declared unprocessable.
+    let (dispatch_state, due): (String, Option<String>) = bus
+        .storage()
+        .conn()
+        .query_row(
+            "SELECT dispatch_state, next_attempt_at FROM outbox WHERE message_id = ?1",
+            ["msg_x_3"],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("outbox");
+    assert_eq!(dispatch_state, "ABANDONED");
+    assert_eq!(due, None);
+
+    // The second pass's transitions are recorded under their own ids, which is what the pass suffix is for.
+    let ids: Vec<String> = {
+        let conn = bus.storage().conn();
+        let mut stmt = conn
+            .prepare("SELECT event_id FROM events WHERE payload_json LIKE ?1 ORDER BY rowid")
+            .expect("prepare");
+        let rows = stmt
+            .query_map(["%\"msg_x_3\"%"], |r| r.get::<_, String>(0))
+            .expect("query");
+        rows.map(|r| r.expect("id")).collect()
+    };
+    assert!(
+        ids.contains(&"evt_msg_x_3_action_failed".to_string()),
+        "{ids:?}"
+    );
+    assert!(
+        ids.contains(&"evt_msg_x_3_action_failed_2".to_string()),
+        "{ids:?}"
+    );
+    assert!(
+        ids.contains(&"evt_msg_x_3_message_expired".to_string()),
+        "{ids:?}"
+    );
+}

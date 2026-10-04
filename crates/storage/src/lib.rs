@@ -1531,6 +1531,72 @@ fn requeue_message_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &st
 }
 
 /// ACKED -> PROCESSING (ACTION_STARTED), which is the boundary the side effect sits behind.
+/// End a message that was refused retryably and never requeued: the declared `RETRYING -> EXPIRED` edge.
+///
+/// This is the last declared exit the bus did not implement. Without it a message refused retryably and not
+/// requeued waited in `RETRYING` forever, with nothing recording that it was stuck - worse than a failure,
+/// because a failure is visible.
+///
+/// Like requeue, this is a **decision the caller takes** rather than a timer the bus invents: the schema stores
+/// no processing-attempt count, so there is no stored budget to derive an expiry from. The reason recorded is
+/// therefore the budget itself rather than one particular refusal; the refusals themselves are in the event log,
+/// which is where the reasons went in the first place.
+///
+/// The terminal state is `EXPIRED`, not `DEAD_LETTER`. `DEAD_LETTER` belongs to `PROCESSING -> REJECTED ->
+/// DEAD_LETTER`, a receiver refusing a message outright; this is a message that could not be processed in time,
+/// which is what `EXPIRED` names.
+fn expire_retrying_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &str) -> Result<()> {
+    let message = load_message_in(tx, message_id)?;
+    advance_in(tx, message_id, "RETRYING", "EXPIRED", "an expiry")?;
+    let terminal_event = next_transition_event_id(tx, message_id, "MESSAGE_EXPIRED")?;
+    append_event_in(
+        tx,
+        &transition_event(
+            tx,
+            message_id,
+            "MESSAGE_EXPIRED",
+            &message.project_id,
+            &message.session_id,
+            &message.correlation_id,
+            message.causation_id.as_deref(),
+            transition_payload_fields(message_id, &message.message_type, message.sequence)?,
+            now,
+        )?,
+    )?;
+    tx.execute(
+        "UPDATE outbox SET dispatch_state = 'ABANDONED', next_attempt_at = NULL WHERE message_id = ?1",
+        [message_id],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "INSERT INTO dead_letters (dead_letter_id, message_id, project_id, final_error_json, attempts,
+                                   created_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5)
+         ON CONFLICT(dead_letter_id) DO NOTHING",
+        rusqlite::params![
+            format!("dl_{message_id}"),
+            message_id,
+            message.project_id,
+            canonical::jcs_object(&[
+                ("code", canonical::JcsValue::Str("PROCESS_FAILED")),
+                (
+                    "detail",
+                    canonical::JcsValue::Str("the processing budget was exhausted"),
+                ),
+            ])?,
+            now
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE inbox SET processing_state = 'EXPIRED', terminal_event_id = ?2 WHERE message_id = ?1",
+        rusqlite::params![message_id, terminal_event],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// `ACKED -> PROCESSING` (`ACTION_STARTED`), which is the boundary the side effect sits behind.
 fn start_processing_in(tx: &rusqlite::Transaction<'_>, message_id: &str, now: &str) -> Result<()> {
     let message = load_message_in(tx, message_id)?;
     advance_in(tx, message_id, "ACKED", "PROCESSING", "starting processing")?;
@@ -1828,6 +1894,13 @@ impl Storage {
     pub fn requeue_message(&mut self, message_id: &str, now: &str) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         requeue_message_in(&tx, message_id, now)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// End a message that was refused retryably and never requeued: the declared `RETRYING -> EXPIRED` edge.
+    pub fn expire_retrying(&mut self, message_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        expire_retrying_in(&tx, message_id, now)?;
         tx.commit().map_err(StorageError::Db)
     }
 

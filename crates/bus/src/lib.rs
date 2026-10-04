@@ -498,6 +498,18 @@ impl Bus {
             .map_err(error::classify)
     }
 
+    /// End a message that was refused retryably and never requeued: the declared `RETRYING -> EXPIRED` edge.
+    ///
+    /// This is the last declared exit the bus did not implement, so every state the machine declares now has a
+    /// way out. Like `requeue`, it is a decision rather than a timer: there is no stored processing budget to
+    /// expire against, so the caller decides, and a caller who never decides leaves a message visibly `RETRYING`
+    /// rather than invisibly stuck.
+    pub fn expire_retrying(&mut self, message_id: &str, clock: &dyn Clock) -> Result<(), BusError> {
+        self.storage
+            .expire_retrying(message_id, &clock.now_rfc3339())
+            .map_err(error::classify)
+    }
+
     /// Refuse a message that was being processed.
     ///
     /// `retryable` chooses which declared path the refusal takes, and it is the only thing that does: a
