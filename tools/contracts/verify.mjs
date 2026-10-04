@@ -1166,6 +1166,38 @@ if(genCheck.startsWith("FAILED")) fail("crates/protocol generated code is stale 
 const bridgeGenCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-bridge.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
 if(bridgeGenCheck.startsWith("FAILED")) fail("apps/desktop/src/generated/bridge.ts is stale or missing.\n"+bridgeGenCheck+"\nRun: npm run codegen:bridge");
 
+// --- Tracked-but-ignored files. .gitignore governs only UNTRACKED paths, so a rule added after files were
+// already committed has no effect on them. That happened twice here: 3,057 files under target/ were committed
+// by `git add -A` in 8c19151 before /target/ was ignored, and 12,459 files under .clj-kondo/.cache were
+// committed before .clj-kondo/ was ignored in 5613e81. In both cases the ignore rule was present, the gate was
+// green, and the repository still carried the files - so the rule read as protection it was not providing.
+// `git ls-files -ci --exclude-standard` is exactly the question "is anything tracked while ignored", which no
+// other check in this file asks.
+//
+// Reported as SKIPPED rather than passed when git is unavailable or this is not a work tree: a check that
+// cannot run must not report success, which is the same reason the consumer-coverage check says which mode it
+// used instead of silently passing. Confined to a single git call so it stays cheap on every commit.
+const ignoredButTracked=(()=>{
+  try {
+    return execFileSync("git",["ls-files","-ci","--exclude-standard"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]})
+      .trim().split(/\r?\n/).filter(Boolean);
+  } catch { return null; }
+})();
+if(ignoredButTracked===null){
+  console.log("Tracked-but-ignored check: skipped (git unavailable, or this is not a git work tree)");
+} else if(ignoredButTracked.length){
+  const shown=ignoredButTracked.slice(0,20);
+  // The fix is per top-level directory, so name the distinct ones rather than 12,459 individual commands.
+  const dirs=[...new Set(ignoredButTracked.map(f=>f.split("/").slice(0,2).join("/")))];
+  fail(
+    `${ignoredButTracked.length} tracked file(s) are also matched by .gitignore, so the ignore rule has no effect on them.\n`+
+    `  - ${shown.join("\n  - ")}`+
+    (ignoredButTracked.length>shown.length?`\n  ... and ${ignoredButTracked.length-shown.length} more`:"")+
+    `\nFix: git rm -r --cached <dir> for each of: ${dirs.join(", ")}`+
+    `\n(--cached removes them from the index only, so the files stay on disk for the tools that own them.)`
+  );
+}
+
 // --- Gate coverage self-report.
 // This gate was strengthened across DEC-036..DEC-043 and each fix found real defects, which is also how it
 // stayed silent about whole layers. It had never read schema.sql, so the durable layer was unverified while
