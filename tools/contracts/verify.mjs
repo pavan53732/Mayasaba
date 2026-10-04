@@ -239,11 +239,20 @@ for(const [c,rec] of Object.entries(commandRegistry)){
 for(const [c,{transitionId}] of declaredCommands){
   if(!(c in commandRegistry)) fail(`Transition ${transitionId} uses command ${c}, which is not registered in registry.json:transition_commands`);
 }
-// The ADVANCE_<MACHINE> convention is what keeps the adjacency spine from needing 110 more
-// registrations; it is a rule, so it is checked rather than assumed.
+// The ADVANCE_<MACHINE> convention drives a machine's adjacent spine, so it is required exactly when
+// there is a spine to drive, and forbidden when there is not. Both directions are checked: a
+// requirement alone forces a command onto a machine with no subject, and an exemption alone lets a
+// machine with no spine keep a dangling advance command (or a used one, which the global
+// "registered but unused" check below cannot see). The condition is derived from the declared spine
+// rather than carried as a flag, so it cannot drift from the data.
 for(const [machine,def] of Object.entries(transition.machines??{})){
   const want="ADVANCE_"+machine.toUpperCase();
-  if(!(want in commandRegistry)) fail(`Machine ${machine} has no ${want} command registered`);
+  const spine=def.spine??[];
+  if(spine.length<2){
+    if(want in commandRegistry) fail(`Machine ${machine} declares a ${spine.length}-state spine, so it has no spine edge to advance, and ${want} must not be registered`);
+    continue;
+  }
+  if(!(want in commandRegistry)) fail(`Machine ${machine} declares a ${spine.length}-state spine but has no ${want} command registered`);
   if(commandRegistry[want].kind!=="advance") fail(`Command ${want} must be registered with kind "advance"`);
   if(commandRegistry[want].machine!==machine) fail(`Command ${want} is registered under machine "${commandRegistry[want].machine}", expected "${machine}"`);
 }

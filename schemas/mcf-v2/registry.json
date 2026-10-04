@@ -354,6 +354,12 @@
         "service": "AgentService",
         "crate": "crates/agents"
       },
+      "FAIL_AGENT": {
+        "machine": "agent_session",
+        "kind": "specific",
+        "service": "AgentService",
+        "crate": "crates/agents"
+      },
       "ADVANCE_TASK": {
         "machine": "task",
         "kind": "advance",
@@ -391,6 +397,24 @@
         "crate": "crates/tasks"
       },
       "UNBLOCK_TASK": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "START_TASK_REPAIR": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "MARK_TASK_LEASE_EXPIRED": {
+        "machine": "task",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
+      },
+      "INVALIDATE_TASK": {
         "machine": "task",
         "kind": "specific",
         "service": "TaskService",
@@ -504,6 +528,18 @@
         "service": "ExecutionService",
         "crate": "crates/execution"
       },
+      "DENY_EXECUTION": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
+      "CLEANUP_EXECUTION": {
+        "machine": "execution",
+        "kind": "specific",
+        "service": "ExecutionService",
+        "crate": "crates/execution"
+      },
       "ADVANCE_VALIDATION": {
         "machine": "validation",
         "kind": "advance",
@@ -556,12 +592,6 @@
         "machine": "repair",
         "kind": "specific",
         "service": "RepairService",
-        "crate": "crates/core"
-      },
-      "ADVANCE_CONTEXT": {
-        "machine": "context",
-        "kind": "advance",
-        "service": "ContextService",
         "crate": "crates/core"
       },
       "INVALIDATE_CONTEXT": {
