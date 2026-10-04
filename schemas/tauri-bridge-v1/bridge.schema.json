@@ -55,6 +55,7 @@
         "get_context_status",
         "get_task_graph",
         "get_workspace_status",
+        "validate_workspace",
         "get_build_status",
         "get_test_runs",
         "get_failures",

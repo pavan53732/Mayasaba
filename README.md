@@ -246,24 +246,26 @@ git config core.hooksPath .githooks
 
 ## Current status
 
-Verified at `1d4cff3` (2026-10-05). The machine-readable contract is packaged and gated: `npm run
+Verified on 2026-10-05 as part of the DEC-053 bridge reconciliation; the decision record states the exact
+validation performed and the open items it left. The machine-readable contract is packaged and gated: `npm run
 verify:contracts` checks the MCF registries and enums, the Tauri bridge identifiers against their declared
 owners in `workspace.manifest.json`, the agent-adapter set and its declared controls, the declared manifests,
 and each crate's declared dependencies. It reports 59 MCF message types, 121 events, 12 state machines, 32
-Tauri commands, 26 queries and 30 UI events, and it invariant-checks 27 of the 68 canonical artifacts; the
+Tauri commands, 27 queries and 30 UI events, and it invariant-checks 27 of the 68 canonical artifacts; the
 other 41 are parsed but have no invariant enforced against them.
 
 What is implemented:
 
 - A working vertical slice through Tauri into SQLite. Four handlers are registered in
   `apps/desktop/src-tauri/src/main.rs` (`generate_handler!`) and called by the Control Room intake surface:
-  `create_project`, `list_projects`, `recovery_status` and `validate_workspace`. Only two of those names are
-  declared in the bridge contract — `create_project` (a declared command) and `list_projects` (a declared
-  query). The contract instead declares `get_recovery_status`, and declares no `validate_workspace` at all,
-  while still declaring `validate_configuration`, which nothing implements. The remaining 31 declared commands
-  and 25 declared queries have no handler. The gate reads the contract and never reads `main.rs` or the
-  frontend's `transport(...)` calls, so a handler whose name the contract does not declare is invisible to it;
-  this drift is recorded as an open item rather than fixed here.
+  `create_project`, `list_projects`, `recovery_status` and `validate_workspace`. Three of those names are
+  declared in the bridge contract — `create_project` (a declared command) and `list_projects` and
+  `validate_workspace` (declared queries) — while the contract names the fourth `get_recovery_status` and the
+  handler is registered as `recovery_status`. The contract also still declares `validate_configuration`, which
+  nothing implements. The remaining 31 declared commands and 25 declared queries have no handler. The gate
+  reads the contract and never reads `main.rs` or the frontend's `transport(...)` calls, so a handler whose
+  name the contract does not declare is invisible to it; DEC-053 records this drift and the gate change that
+  closes it.
 - MCF-v2 envelope validation in `crates/protocol`, with the envelope's vocabulary and per-field JSON types
   generated from the contract rather than hand-copied (DEC-051), plus startup recovery and durable-state
   inconsistency reporting in `crates/storage`.

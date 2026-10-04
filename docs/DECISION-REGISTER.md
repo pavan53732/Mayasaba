@@ -56,6 +56,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-050 | The Initial Intake Composer takes no project-name field; the display name is derived by the owning service from the validated canonical workspace folder leaf, and `project_id` is never derived from a path | HARD_LOCK |
 | DEC-051 | `operation_id` is a conditional envelope field, required of material-action messages and optional otherwise; the envelope validator's field sets, nested field sets and per-field JSON types are generated from the contract rather than hand-copied | HARD_LOCK |
 | DEC-052 | Council decision quality is governed by controller-computed facts, never agent claims: modes are selected deterministically from structured inputs, evidence grades are computed by the controller, corroboration counts lineage groups rather than agents, roles are controller-assigned framing without authority, the chair's synthesis is independently reviewed, budgets are explicit with unreported tokens recorded as UNAVAILABLE, and outcome tracking is append-only, controller-derived and informational only | HARD_LOCK |
+| DEC-053 | `validate_workspace` is a declared read-only query owned by WorkspaceService, the registered handler is renamed to the contract's `get_recovery_status` rather than the contract being renamed to the code, and the bridge gate reads both sides — the Rust handler registration and the frontend transport calls — so a declared-but-unimplemented operation and an implemented-but-undeclared one are both failures | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -569,6 +570,102 @@ Known limitations and open items, recorded rather than fixed
    make a decision record look like a produced artifact.
 4. Two recovery events remain undeclared in both event vocabularies; see the note in the recovery ownership
    commit. Unrelated to this record and reported by the gate on every run.
+
+## DEC-053 bridge reconciliation record
+
+Classification: ADDITIVE for one operation, REFINEMENT for one registered name, and a gate strengthening.
+Date: 2026-10-05. Supersedes none. HARD_LOCK.
+
+The Tauri bridge had drifted from its own contract in three independent ways, and the gate could see none of
+them because it read only one side. Four handlers were registered in `apps/desktop/src-tauri/src/main.rs`;
+the contract declared two of them under the names they were registered with. The third was declared under a
+different name — the contract said `get_recovery_status`, the code and the frontend said `recovery_status` —
+and the fourth, `validate_workspace`, was declared nowhere at all. Separately, `bridge.schema.json` declared a
+`x-codegen.rust_output` that no generator emitted and no check read, while the file itself was checked in and
+referenced by no `mod` declaration in the shell: generated in name only. AGENTS.md §19 forbids silently
+normalizing a documentation/implementation disagreement, so each one is resolved here in the direction the
+source-of-truth hierarchy requires (AGENTS.md §5) — the machine-readable contract outranks implementation,
+and a contract that declares an output obliges the generator to produce it.
+
+| Field | Value |
+|---|---|
+| Previous behavior | `main.rs` registers exactly four handlers: `create_project`, `list_projects`, `recovery_status` and `validate_workspace`. Of those four names, exactly two were declared: `create_project` (a command) and `list_projects` (a query). `recovery_status` was not a declared identifier anywhere — the contract declared `get_recovery_status`, a `RecoveryService` query — so the operation existed on the wire under a name the contract does not contain, and the frontend called it by that undeclared name. `validate_workspace` was declared in no registry, no payload metadata, no payload type and no owner map, so it existed only as code. In the other direction the contract declares `validate_configuration`, which no handler implements. The gate cross-checked the contract against `workspace.manifest.json` and never read `main.rs` or the frontend, so a handler whose name the contract does not declare, and a declared name nothing implements, were both invisible to it. `apps/desktop/src-tauri/src/generated/bridge.rs` carried a "GENERATED FILE — DO NOT EDIT" header, was named as `x-codegen.rust_output` by `bridge.schema.json`, was emitted by no generator and was read by no check, so the rule that it must not be hand-edited was unenforceable and its content was free to disagree with both the contract and `bridge.ts`. |
+| New behavior | **(1) ADDITIVE — `validate_workspace` is declared as a query owned by `WorkspaceService`**, in all five places a bridge operation is declared: `schemas/tauri-bridge-v1/bridge.schema.json` (query enum), `schemas/tauri-bridge-v1/payloads.json` (owner, request type, response type, one required `path` request field), `schemas/tauri-bridge-v1/payload-types.json` (`validate_workspaceRequest`, `validate_workspaceResponse`), `schemas/service-contracts-v1/registry.json` (`WorkspaceService` operation list) and `workspace.manifest.json` (`tauri_bridge.queries`). Declared queries 26 → 27. **(2) REFINEMENT — the registered handler is renamed `recovery_status` → `get_recovery_status`** in `main.rs` (the function and its `generate_handler!` entry), in the frontend (`transport("recovery_status")` → `transport("get_recovery_status")`, `recoveryStatus()` → `getRecoveryStatus()`), in its callers and tests, and in the README. **The contract was not changed**: it already named this operation `get_recovery_status`, so the code moved to the contract rather than the contract moving to the code. No request field, response field, payload type or error code changed. **(3) GATE STRENGTHENING — `tools/contracts/verify.mjs` now reads both sides of the bridge.** It parses the `#[tauri::command]` functions and the `generate_handler![...]` list out of `main.rs`, parses the `transport(...)` call sites out of the non-generated, non-test frontend, and requires that every declared command and query be implemented on the Rust side, that every registered handler and every called transport name be declared, and that the two generated surfaces be current. It fails closed: a `main.rs` whose registration list cannot be parsed is a failure, not a skip. **(4) One generator owns both generated surfaces.** `tools/codegen/generate-bridge.mjs` now emits `apps/desktop/src/generated/bridge.ts` and `apps/desktop/src-tauri/src/generated/bridge.rs` from the same three enums, and `--check` compares both, so the two surfaces cannot disagree with the contract or with each other. |
+| Reason | The hierarchy in AGENTS.md §5 places the machine-readable contract above implementation, so a disagreement is resolved in the contract's favour unless the contract is itself the defect. Here the contract was **right about the name** — `get_recovery_status` is a `RecoveryService` query and the operation is a read-only recovery-status read — and **incomplete about the operation** — `validate_workspace` was real, was called by the intake surface, and was declared nowhere. Renaming the code was therefore both the correct repair and the smaller one; renaming the contract would have moved a declared identifier to match an undeclared implementation, which is the direction the hierarchy forbids. The gate's one-sidedness is the root cause of the whole class rather than an aggravating detail: a gate that reads only the contract can prove the contract is internally consistent but cannot detect that nothing implements a declared operation, or that something implements a name the contract does not contain. The same one-sidedness applied to code generation, where the contract declared an output that no generator produced, so "generated and checked in" was an assertion with no mechanism behind it. |
+| Compatibility impact | **ADDITIVE** at the contract layer: one query enum member (26 → 27) plus its owner, payload metadata and two payload types. **REFINEMENT** for one registered handler name. No MCF envelope, message type, event type, state, edge, transition, command registration or SQLite shape changes; the command enum is unchanged at 32 and the UI event enum is unchanged at 30. The rename is breaking for any caller of the `recovery_status` invoke name — the Tauri invoke name and the Rust function name are the same string, so the change is observable from the frontend — and the only caller in the repository, `apps/desktop/src/intake/bridge.ts`, is updated in the same change. `bridge.rs` gains content it did not have (`validate_workspace` in the query enum) and a generator that owns it; it is still referenced by no `mod` declaration, so nothing compiles differently as a result. |
+| Ownership decision | `validate_workspace` is owned by **WorkspaceService**, and the nearest alternative was considered and rejected rather than passed over. `get_workspace_status` is the closest existing WorkspaceService query but does not cover this operation: it is keyed by an **existing** project, whereas `validate_workspace` runs **before any project exists**, on a candidate path that may never become one, and it is what `create_project` consumes and then re-validates rather than trusting (DEC-048). Folding it into `get_workspace_status` would have required that query to accept "no project yet" as an input, which is the conflation DEC-048 exists to prevent. The owning implementation is `crates/workspace::validate_workspace_candidate`, reached through the `crates/core` application-service wrapper `project_service::validate_workspace`. **No code moved between crates** and the shell continues to call the core wrapper; declaring an owner is a contract statement, not a relocation. |
+| Read-only verified before declaring a query | A query must not mutate, so both operations were verified read-only before being declared or left as queries, from their implementations rather than from their names. `project_service::validate_workspace` delegates to `validate_workspace_candidate`, whose own documentation states "This function never creates anything", and whose body only trims, inspects (`exists`, `is_dir`, `canonicalize`) and derives a display name; it writes no SQLite row and creates no directory. Its `#[tauri::command]` wrapper takes no `State` and returns a `WorkspaceCheck`. `ProjectService::recover` delegates to `Storage::recover`, which **reports and never repairs**, and its command returns a `RecoveryView` without writing. `recovery_status` was already declared a query, and the rename does not change that classification. |
+| Migration/reconciliation | No data migration: no Mayasaba database has been created yet, and neither operation name is persisted state — they are transport identifiers, so the rename leaves every stored row untouched. `schema.sql` is unchanged. The renamed handler is reconciled in the frontend, its callers, its tests and the README in the same change, so no stale caller is left behind. |
+| Tests affected | `tools/contracts/verify.mjs` gains the two-way bridge checks and the generated-surface check, and mutation testing exercises each direction; the eight mutation proofs are recorded in the gate-strengthening section of `docs/CONFORMANCE-AND-TESTING.md`. The desktop test suite is updated for the renamed frontend function and must stay green. The gate must pass on a **fresh clone**, not only on the machine that made the change, because a check that reads a working copy's line endings or an untracked file is not a check. |
+| Known limitations | (1) **The gate proves names, not semantics.** It proves that every declared operation is implemented and every implemented operation is declared; it does not prove that a handler's payload matches the declared payload type, that an error code is registered, or that a query is genuinely read-only. Two such mismatches are live and are reported below rather than fixed, because fixing either would change wire behavior beyond the two operations this record touches. (2) **The wire casing does not match the contract's casing.** Reported below in full; not fixed here. (3) **Five error codes are emitted but not registered.** Reported below in full; not fixed here. (4) `validate_configuration` remains declared and unimplemented, and the gate now reports that rather than hiding it; implementing it is out of scope for this record. (5) The 41 parse-only canonical artifacts are unchanged in count — this record adds no parse-only artifact and invariant-checks none of them. |
+| Related decision | Applies AGENTS.md §5 (source-of-truth hierarchy) and §19 (documentation and implementation must not be silently normalized); follows DEC-021 (machine-readable canonical registries) and DEC-026 (the shell is transport, not domain logic); reuses DEC-048's authority boundary and DEC-050's name derivation without altering either. |
+
+### Wire-format divergence, reported and not fixed
+
+The contract's payload types name their fields in **snake_case**, and the Rust wire structs rename their fields
+to **camelCase** with `#[serde(rename_all = "camelCase")]`. The two disagree, and no document in this
+repository decides which is canonical: a search of the canonical documents and machine-readable contracts finds
+no casing decision at all, so this record reports the exact differences rather than inventing a convention or
+picking a winner.
+
+Concretely, for the four operations that exist end to end:
+
+| Operation | Declared in the contract | Actually on the wire |
+|---|---|---|
+| `create_project` request | `create_projectRequest`: `local_path`, `initial_brief`, `project_paths` | `localPath`, `initialBrief` |
+| `create_project` response | `create_projectResponse`: `project_id`, `brief_id`, `epoch`, `phase`, `status`, `created_at` | `projectId`, `name`, `localPath`, `phase`, `status`, `currentEpoch`, `briefId`, `briefVersion`, `briefBody`, `createdAt` |
+| `list_projects` response | names `list_projectsResponse`, which `payload-types.json` **does not define** | the `ProjectView` projection — the same shape `create_project` returns |
+| `get_recovery_status` response | names `get_recovery_statusResponse`, which `payload-types.json` **does not define** | `clean`, `integrityOk`, `issues[{kind, detail}]` |
+| `validate_workspace` request | `validate_workspaceRequest`: `path` | `path` |
+| `validate_workspace` response | `validate_workspaceResponse`: `status`, `canonical_path`, `requested_path`, `derived_project_name`, `code`, `message` | `status`, `canonicalPath`, `requestedPath`, `derivedProjectName`, `code`, `message` |
+
+Two of the six rows agree exactly (`validate_workspace`'s request, and its `status`/`code`/`message` fields);
+the divergence is confined to multi-word field names. `validate_workspaceResponse` was declared snake_case
+because that is the convention every neighbouring type in `payload-types.json` already uses, and inventing a
+different convention for the new type would have created a second style inside one file. The mismatch is
+therefore **recorded as an open item and deliberately not fixed here**: resolving it means either renaming wire
+fields (a breaking frontend change across four operations) or renaming contract fields (a contract change to
+five types), and both are outside this record's scope, which is to reconcile two operations and make the gate
+two-way. The gate does not currently compare field names to the wire, so it cannot detect this class; extending
+it to do so is the natural follow-up and is named as remaining work rather than implied to be done.
+
+A second, related gap is visible in the same table. Of the 58 declared operations, `payload-types.json` defines
+a type for only three requests (`create_projectRequest`, `get_council_roundRequest`, `validate_workspaceRequest`)
+and three responses (`create_projectResponse`, `get_council_roundResponse`, `validate_workspaceResponse`). Every
+other declared operation **names** a request and a response type that does not exist, which is what that file's
+own `rule` permits — a type is declared when an operation gains declared request fields, not speculatively — but
+it means most operations' response shapes are unconstrained by the contract. Adding a type for an operation
+nobody implements would be a declaration nothing consumes, so this is reported and not filled in.
+
+### Error codes emitted but not registered, reported and not fixed
+
+`schemas/error-v1/registry.json` is the canonical error-code vocabulary every subsystem's explicit error codes
+are drawn from. Eleven codes are emitted by the slice and are **absent** from it: the five
+`WorkspaceRejection` codes `WORKSPACE_EMPTY`, `WORKSPACE_DOES_NOT_EXIST`, `WORKSPACE_NOT_A_DIRECTORY`,
+`WORKSPACE_NOT_LOCAL`, `WORKSPACE_NOT_ACCESSIBLE` (emitted by `validate_workspace` and by `create_project`'s
+workspace branch), and `EMPTY_FIELD`, `BLANK_INITIAL_BRIEF`, `INTAKE_NOT_IMPLEMENTED`, `STORAGE_FAILURE`,
+`SERVICE_POISONED`, `TRANSPORT_FAILURE`. The registry contains exactly one `WORKSPACE_*` code,
+`WORKSPACE_MISMATCH`, which no implementation emits.
+
+These are reported rather than fixed for two reasons. First, registering a code is a vocabulary decision, not a
+mechanical one: a registered code needs a `mcf_code` and a `tauri_code` and a stated meaning, and inventing ten
+of those to satisfy a gate would be inventing a contract to match code — the direction AGENTS.md §5 forbids.
+Second, the gate does not yet check emitted codes against the registry, so registering them would change no
+verification result while creating ten contract entries nobody has reviewed. The correct fix is a decision
+about the vocabulary plus a gate check that reads emitted codes, and that is named here as remaining work.
+
+### Implementation status, stated plainly
+
+This record changes **two** operations and the gate. The implementation status of every other declared
+operation is unchanged: **31 of the 32 declared commands and 25 of the 27 declared queries still have no
+handler**, and the 30 declared UI events are unchanged. (The request that produced this record said "the other
+28 commands"; the measured figure is 31, and the arithmetic is shown rather than the requested number repeated:
+32 declared commands minus `create_project`, the one implemented command. On the query side, 27 declared
+queries minus `list_projects` and `validate_workspace` leaves 25. No other handler was added, removed or
+altered.) `validate_configuration` remains declared and unimplemented, and is now reported by the gate instead
+of being invisible to it. The council runtime, the bus, the adapters, the execution subsystem and the
+validation subsystem are untouched by this record, and nothing here implements any of them. The `41` parse-only
+canonical artifacts remain `41`; the `27` invariant-checked remain `27`.
 
 ## Change procedure
 

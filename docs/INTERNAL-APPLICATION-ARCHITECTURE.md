@@ -195,6 +195,7 @@ Queries:
 - get_context_status
 - get_task_graph
 - get_workspace_status
+- validate_workspace
 - get_build_status
 - get_test_runs
 - get_failures
@@ -773,6 +774,7 @@ Admission is not a bridge command. `prepare_workspace`, `checkpoint_workspace` a
 | get_context_status | ContextService |
 | get_task_graph | TaskService |
 | get_workspace_status | WorkspaceService |
+| validate_workspace | WorkspaceService |
 | get_build_status | BuildService |
 | get_test_runs | TestService |
 | get_failures | RepairService |

@@ -87,6 +87,31 @@
         "outcomes":{"type":"array","description":"Append-only, derived only from controller facts: a validation result, the reopen_decision command, or decision supersession. HELD carries a validation evidence reference.","items":{"type":"object","additionalProperties":false,"required":["outcome_record_id","decision_id","status","source","recorded_at"],"properties":{"outcome_record_id":{"type":"string"},"decision_id":{"type":"string"},"status":{"enum":["HELD","AMENDED","REVERSED","UNRESOLVED"]},"source":{"enum":["VALIDATION_RESULT","REOPEN_DECISION","USER_SUPERSESSION"]},"validation_evidence_id":{"type":["string","null"]},"recorded_at":{"type":"string"}}}},
         "offline_agent_ids":{"type":"array","items":{"type":"string"},"description":"Participants currently paused as offline or dropped. A paused interval is excluded from the wall-clock budget and recorded; silence is never agreement."}
       }
+    },
+    "validate_workspaceRequest":{
+      "title":"Validate a candidate workspace folder without persisting anything",
+      "description":"Read-only. Rust validates and canonicalizes the candidate and returns a check result; nothing is created and nothing is written, so a path that does not exist can never come back AUTHORIZED. This runs before a project exists and feeds create_project, which re-validates the same path rather than trusting this answer.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["path"],
+      "properties":{
+        "path":{"type":"string","minLength":1,"pattern":"\\S","description":"The candidate folder the user selected or typed. A UNC or other network path is refused as not-local (DEC-004)."}
+      }
+    },
+    "validate_workspaceResponse":{
+      "title":"The authoritative outcome of validating a workspace candidate",
+      "description":"AUTHORIZED means the folder exists, is local, is a directory and could be canonicalized; it does not authorize every operation inside it, because task-scoped paths, policy and leases remain narrower (DEC-048). On INVALID, code carries the machine-readable WorkspaceRejection and the path fields are null. Field names follow the contract's snake_case convention, the same one create_projectRequest and create_projectResponse use.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["status","requested_path"],
+      "properties":{
+        "status":{"enum":["AUTHORIZED","INVALID"]},
+        "canonical_path":{"type":["string","null"],"description":"Absolute, normalized path; null on INVALID. This is the spelling create_project persists."},
+        "requested_path":{"type":"string","description":"The path exactly as the caller supplied it, before normalization."},
+        "derived_project_name":{"type":["string","null"],"description":"The display name derived from the canonical folder leaf (DEC-050); null on INVALID."},
+        "code":{"type":["string","null"],"description":"A machine-readable rejection code (WORKSPACE_*); null on AUTHORIZED."},
+        "message":{"type":["string","null"],"description":"A human-readable rejection message; null on AUTHORIZED."}
+      }
     }
   },
   "$defs":{

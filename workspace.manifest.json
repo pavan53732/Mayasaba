@@ -269,6 +269,7 @@
       "get_context_status": "ContextService",
       "get_task_graph": "TaskService",
       "get_workspace_status": "WorkspaceService",
+      "validate_workspace": "WorkspaceService",
       "get_build_status": "BuildService",
       "get_test_runs": "TestService",
       "get_failures": "RepairService",

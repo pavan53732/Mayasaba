@@ -261,6 +261,19 @@
       "request": "get_workspace_statusRequest",
       "response": "get_workspace_statusResponse"
     },
+    "validate_workspace": {
+      "owner": "WorkspaceService",
+      "request": "validate_workspaceRequest",
+      "response": "validate_workspaceResponse",
+      "request_fields": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "The candidate workspace folder the user selected or typed. Read-only: Rust validates and canonicalizes it and returns a check result; nothing is created and nothing is persisted by this operation."
+        }
+      ]
+    },
     "get_build_status": {
       "owner": "BuildService",
       "request": "get_build_statusRequest",
