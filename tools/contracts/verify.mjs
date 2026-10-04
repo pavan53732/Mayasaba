@@ -1511,6 +1511,62 @@ if(typeof councilPolicies.escalation!=="string"||councilPolicies.escalation.leng
 if(typeof councilPolicies.reporting?.minimum_sample_for_percentage!=="number") councilProblems.push("council-policies.json declares no minimum sample for percentage reporting");
 if(councilProblems.length) fail(councilProblems.length+" council decision-quality contract problem(s):\n  - "+councilProblems.join("\n  - "));
 
+// --- Bus retry/dispatch policy (DEC-058) against the machine it terminates through and against the crate.
+// `bus-policies.json` is configuration, so nothing here locks its numbers: what is checked is that the numbers
+// are usable, that the crate's shipped defaults are the same numbers, and - the check that matters - that the
+// termination path the policy declares is an edge the `message_delivery` machine actually has. A policy that
+// named a path the machine does not declare would be a contract describing behaviour the contract forbids, and
+// it would be found only when a message exhausted its budget in production.
+const busPolicies=read("schemas/mcf-v2/bus-policies.json");
+const busPolicyProblems=[];
+const positiveInt=(value,label)=>{
+  if(!Number.isInteger(value)||value<1) busPolicyProblems.push(`${label} is ${JSON.stringify(value)}; it must be a positive integer`);
+  return value;
+};
+const busMaxAttempts=positiveInt(busPolicies.dispatch?.max_attempts,"bus-policies.json dispatch.max_attempts");
+positiveInt(busPolicies.dispatch?.batch_size,"bus-policies.json dispatch.batch_size");
+const busBase=positiveInt(busPolicies.backoff?.base_seconds,"bus-policies.json backoff.base_seconds");
+const busMultiplier=positiveInt(busPolicies.backoff?.multiplier,"bus-policies.json backoff.multiplier");
+const busCap=positiveInt(busPolicies.backoff?.cap_seconds,"bus-policies.json backoff.cap_seconds");
+if(busBase>busCap) busPolicyProblems.push(`bus-policies.json backoff.base_seconds (${busBase}) exceeds cap_seconds (${busCap}), so the first delay would already be capped and the multiplier would do nothing`);
+for(const group of ["dispatch","backoff","terminal"]){
+  if(typeof busPolicies[group]?.rule!=="string"||busPolicies[group].rule.length===0) busPolicyProblems.push(`bus-policies.json:${group} declares no rule; a policy number with no stated semantics is a number a reader has to guess at`);
+}
+if(typeof busPolicies.rule!=="string"||busPolicies.rule.length===0) busPolicyProblems.push("bus-policies.json declares no top-level rule");
+// The backoff must be stated to be deterministic, because the design requires it and a jittered backoff would
+// need a random source this crate deliberately does not have.
+if(!/deterministic/.test(busPolicies.backoff?.rule??"")) busPolicyProblems.push("bus-policies.json backoff.rule must state that the delay is deterministic from stored state, which is what docs/MCF-V2-IMPLEMENTATION-DESIGN.md requires and what a jittered backoff would break");
+// The termination path, checked against the machine rather than taken on trust.
+// `state_mutation` is a sentence (`message_delivery.state = EXPIRED`), so the target state is read out of it
+// rather than assumed to be the field's whole value.
+const mutatedState=(mutation)=>/=\s*([A-Z_]+)\s*$/.exec(mutation??"")?.[1]??null;
+const deliveryEdges=new Set((transition.transitions?.message_delivery??[])
+  .map(t=>`${t.source_state}->${mutatedState(t.state_mutation)}`));
+const declaredPath=busPolicies.terminal?.on_attempt_budget_exhausted;
+if(declaredPath!=="QUEUED_TO_EXPIRED") busPolicyProblems.push(`bus-policies.json terminal.on_attempt_budget_exhausted is ${JSON.stringify(declaredPath)}; the accepted reading of the machine is that an exhausted sender terminates through QUEUED -> EXPIRED, so any other value needs a decision record rather than a policy edit`);
+if(!deliveryEdges.has("QUEUED->EXPIRED")) busPolicyProblems.push("bus-policies.json terminates through QUEUED -> EXPIRED, which the message_delivery machine does not declare");
+if(busPolicies.terminal?.dead_letter!==true) busPolicyProblems.push("bus-policies.json must require a dead letter when the attempt budget is exhausted, because the alternative loses the reason the message died");
+// The crate's shipped defaults, read back out of the Rust rather than assumed to match.
+// Read as text, not through `read`: that helper parses JSON, and this is Rust source.
+const busPolicySource=fs.readFileSync(path.join(root,"crates/bus/src/policy.rs"),"utf8");
+const rustConst=(name)=>{
+  const m=new RegExp(`pub const ${name}: i64 = (\\d+);`).exec(busPolicySource);
+  return m?Number(m[1]):null;
+};
+const busDefaults=[
+  ["MAX_ATTEMPTS",busMaxAttempts,"dispatch.max_attempts"],
+  ["BATCH_SIZE",busPolicies.dispatch?.batch_size,"dispatch.batch_size"],
+  ["BASE_SECONDS",busBase,"backoff.base_seconds"],
+  ["MULTIPLIER",busMultiplier,"backoff.multiplier"],
+  ["CAP_SECONDS",busCap,"backoff.cap_seconds"],
+];
+for(const [constant,expected,where] of busDefaults){
+  const got=rustConst(constant);
+  if(got===null) busPolicyProblems.push(`crates/bus/src/policy.rs declares no \`pub const ${constant}: i64 = <n>;\` for the gate to read; the shipped default and ${where} must be comparable rather than merely similar`);
+  else if(got!==expected) busPolicyProblems.push(`crates/bus/src/policy.rs ${constant} is ${got} but bus-policies.json ${where} is ${expected}; the shipped default and the policy file must agree`);
+}
+if(busPolicyProblems.length) fail(busPolicyProblems.length+" bus policy problem(s):\n  - "+busPolicyProblems.join("\n  - "));
+
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
 // crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -

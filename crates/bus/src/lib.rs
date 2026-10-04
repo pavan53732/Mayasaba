@@ -28,19 +28,78 @@
 //! (`DISPATCHED`, `RETRYING`, `EXPIRED`, `DEAD_LETTER`, and the whole inbox side) are unreachable today, and
 //! `outbox.dispatch_state` therefore only ever holds `PENDING`.
 
+pub mod clock;
+pub mod dispatch;
 pub mod error;
+pub mod policy;
+pub mod transport;
 
+pub use clock::{Clock, FixedClock};
+pub use dispatch::{decide, DispatchDecision};
 pub use error::BusError;
+pub use policy::{BackoffPolicy, DispatchPolicy};
+pub use transport::{Transport, TransportError};
 
 use mayasaba_protocol::envelope::{parse_envelope, Envelope};
-use mayasaba_storage::{EnqueuedMessage, NewOutboundMessage, Storage};
+use mayasaba_storage::{DeliveryAttempt, EnqueuedMessage, NewOutboundMessage, Storage};
 
 /// Mayasaba durable bus crate boundary.
 pub const CRATE_NAME: &str = "mayasaba-bus";
 
+/// What one dispatch pass did.
+///
+/// Returned rather than logged, because the caller decides whether a pass is observable and this crate performs
+/// no I/O. The counts are derived from the outcomes, so they cannot disagree with them.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DispatchReport {
+    /// One entry per queue entry the pass claimed, in the order it was claimed.
+    pub outcomes: Vec<DispatchOutcome>,
+}
+
+/// What happened to one claimed queue entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DispatchOutcome {
+    /// Handed to the transport, and the message advanced `QUEUED -> DISPATCHED`.
+    Dispatched { message_id: String, attempt_no: i64 },
+    /// The transport refused it. The message is still `QUEUED` and the next attempt is scheduled.
+    Failed {
+        message_id: String,
+        attempt_no: i64,
+        /// The registry code of the transport's refusal.
+        code: &'static str,
+        /// Seconds until the next attempt.
+        retry_in_seconds: i64,
+    },
+    /// The attempt budget was exhausted, so the message terminated `QUEUED -> EXPIRED` with a dead letter.
+    Expired { message_id: String, attempts: i64 },
+}
+
+impl DispatchReport {
+    /// How many entries were handed over.
+    pub fn dispatched(&self) -> usize {
+        self.count(|o| matches!(o, DispatchOutcome::Dispatched { .. }))
+    }
+
+    /// How many entries the transport refused.
+    pub fn failed(&self) -> usize {
+        self.count(|o| matches!(o, DispatchOutcome::Failed { .. }))
+    }
+
+    /// How many entries exhausted their budget.
+    pub fn expired(&self) -> usize {
+        self.count(|o| matches!(o, DispatchOutcome::Expired { .. }))
+    }
+
+    fn count(&self, predicate: impl Fn(&DispatchOutcome) -> bool) -> usize {
+        self.outcomes.iter().filter(|o| predicate(o)).count()
+    }
+}
+
 /// The durable communication bus.
 pub struct Bus {
     storage: Storage,
+    dispatch_policy: DispatchPolicy,
+    backoff_policy: BackoffPolicy,
 }
 
 impl Bus {
@@ -50,12 +109,142 @@ impl Bus {
     /// for the whole of its work, and a caller holding a second handle to the same connection could interleave
     /// with it.
     pub fn new(storage: Storage) -> Self {
-        Bus { storage }
+        Bus {
+            storage,
+            dispatch_policy: DispatchPolicy::default(),
+            backoff_policy: BackoffPolicy::default(),
+        }
+    }
+
+    /// Take ownership of a storage handle and use an explicit policy.
+    ///
+    /// The policy is an argument rather than something the bus reads from
+    /// `schemas/mcf-v2/bus-policies.json`, because reading a file is I/O and this crate performs none. The
+    /// defaults are the shipped values; a caller that wants the configuration layer's overrides passes them.
+    pub fn with_policy(
+        storage: Storage,
+        dispatch_policy: DispatchPolicy,
+        backoff_policy: BackoffPolicy,
+    ) -> Self {
+        Bus {
+            storage,
+            dispatch_policy,
+            backoff_policy,
+        }
+    }
+
+    /// The policy this bus dispatches under.
+    pub fn dispatch_policy(&self) -> DispatchPolicy {
+        self.dispatch_policy
+    }
+
+    /// The policy this bus backs off under.
+    pub fn backoff_policy(&self) -> BackoffPolicy {
+        self.backoff_policy
     }
 
     /// The storage handle, for reading back what the bus wrote.
     pub fn storage(&self) -> &Storage {
         &self.storage
+    }
+
+    /// Run one dispatch pass: claim the due queue entries, decide each one's fate from its stored attempt count,
+    /// and act.
+    ///
+    /// `clock` supplies the instant that decides which entries are due, and `transport` is the only thing the
+    /// message is handed to. Neither is stored on the bus, because a pass is the unit of work and a caller may
+    /// legitimately run two passes with different clocks (a test) or different transports (a failover).
+    ///
+    /// # The two things this must not do
+    ///
+    /// **It must not advance `delivery_state` for a failed handover.** The machine declares no such transition,
+    /// so a refused message stays `QUEUED` and its failure lives in `message_attempts`. `DISPATCHED` therefore
+    /// means "handed to the transport" and never "the transport was tried".
+    ///
+    /// **It must not retry forever.** The decision is taken from `outbox.attempts`, which is durable, so a
+    /// process that crashes on every attempt still runs out of budget. When it does, the message terminates
+    /// through the declared `QUEUED -> EXPIRED` edge and a dead letter records the last failure.
+    ///
+    /// A failure to *persist* what happened is a `BusError` and stops the pass, because the alternative is a
+    /// dispatcher that keeps sending messages whose record it cannot write. A failure to *deliver* is not an
+    /// error of the pass: it is an outcome, recorded and reported.
+    pub fn dispatch_due(
+        &mut self,
+        clock: &dyn Clock,
+        transport: &mut dyn Transport,
+    ) -> Result<DispatchReport, BusError> {
+        let now = clock.now_rfc3339();
+        let due = self
+            .storage
+            .due_outbound(&now, self.dispatch_policy.batch_size)
+            .map_err(error::classify)?;
+        let mut report = DispatchReport::default();
+
+        for entry in due {
+            match decide(entry.attempts, &self.dispatch_policy) {
+                DispatchDecision::Expire { attempts } => {
+                    // An expiry is not a delivery attempt, so it writes no `message_attempts` row: that table
+                    // records what was tried, and nothing is tried here - the decision is that trying is over.
+                    // The dead letter therefore reports the last *real* failure, and the count comes from
+                    // `outbox.attempts`, which is the durable record of how many attempts were made.
+                    self.storage
+                        .expire_message(&entry, &now)
+                        .map_err(error::classify)?;
+                    report.outcomes.push(DispatchOutcome::Expired {
+                        message_id: entry.message_id,
+                        attempts,
+                    });
+                }
+                DispatchDecision::Send { attempt_no } => {
+                    let started_at = clock.now_rfc3339();
+                    match transport.send(&entry.envelope_json) {
+                        Ok(()) => {
+                            let attempt = DeliveryAttempt {
+                                attempt_no,
+                                started_at,
+                                finished_at: clock.now_rfc3339(),
+                                outcome: "SENT".to_string(),
+                                error_code: None,
+                                error_detail: None,
+                            };
+                            self.storage
+                                .record_dispatched(&entry, &attempt)
+                                .map_err(error::classify)?;
+                            report.outcomes.push(DispatchOutcome::Dispatched {
+                                message_id: entry.message_id,
+                                attempt_no,
+                            });
+                        }
+                        Err(failure) => {
+                            let retry_in_seconds = self.backoff_policy.delay_seconds(attempt_no);
+                            let attempt = DeliveryAttempt {
+                                attempt_no,
+                                started_at,
+                                finished_at: clock.now_rfc3339(),
+                                outcome: "TRANSPORT_REFUSED".to_string(),
+                                error_code: Some(failure.code().to_string()),
+                                error_detail: Some(failure.detail().to_string()),
+                            };
+                            self.storage
+                                .record_failed_attempt(
+                                    &entry.message_id,
+                                    &attempt,
+                                    retry_in_seconds,
+                                )
+                                .map_err(error::classify)?;
+                            report.outcomes.push(DispatchOutcome::Failed {
+                                message_id: entry.message_id,
+                                attempt_no,
+                                code: failure.code(),
+                                retry_in_seconds,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(report)
     }
 
     /// Validate, persist and queue one outbound message.

@@ -5,58 +5,12 @@
 //! bytes, and that a retry is told apart from a conflict by the request body. Each is checked by reading the
 //! tables and the returned error, not by trusting that the call returned `Ok`.
 
+mod common;
+
+use common::{envelope, existing_dir, project};
 use mayasaba_bus::{Bus, BusError};
 use mayasaba_protocol::generated::envelope as vocab;
-use mayasaba_storage::{NewProject, Storage};
-
-fn existing_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("mayasaba-bus-{}-{}", std::process::id(), tag));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create dir");
-    dir
-}
-
-fn project(dir: &std::path::Path, tag: &str) -> NewProject {
-    NewProject {
-        project_id: format!("prj_{tag}"),
-        local_path: dir.to_string_lossy().into_owned(),
-        brief_id: format!("brf_{tag}"),
-        brief_body: "Body".to_string(),
-        brief_source: "TEST".to_string(),
-        event_id: format!("evt_{tag}_genesis"),
-        created_at: "2026-10-04T00:00:00Z".to_string(),
-    }
-}
-
-/// A complete, legal MCF-v2 envelope, assembled by concatenation so the JSON braces stay readable.
-fn envelope(
-    message_id: &str,
-    project_id: &str,
-    sequence: i64,
-    operation_id: Option<&str>,
-    payload: &str,
-) -> String {
-    let operation = match operation_id {
-        Some(id) => format!(r#""{id}""#),
-        None => "null".to_string(),
-    };
-    [
-        r#"{"protocol_version":"MCF-2","schema_version":"2.0.0","#.to_string(),
-        format!(r#""message_id":"{message_id}","event_id":"src_{message_id}","#),
-        format!(r#""project_id":"{project_id}","session_id":"sess_1","#),
-        r#""sender":{"actor_type":"MAYASABA","actor_id":"controller"},"#.to_string(),
-        r#""recipients":[{"actor_type":"AGENT","actor_id":"hermes-1"}],"#.to_string(),
-        r#""channel":"task","message_type":"TASK","phase":"IMPLEMENTATION","#.to_string(),
-        format!(r#""correlation_id":"corr_1","sequence":{sequence},"project_epoch":0,"#),
-        r#""priority":"TASK_CONTROL","created_at":"2026-10-04T00:00:05Z","#.to_string(),
-        r#""requires_ack":true,"requires_response":false,"blocking":false,"#.to_string(),
-        format!(r#""payload":{payload},"#),
-        r#""security":{"classification":"INTERNAL_PROJECT","secret_refs":[]},"#.to_string(),
-        format!(r#""operation_id":{operation}}}"#),
-    ]
-    .concat()
-}
-
+use mayasaba_storage::Storage;
 /// A storage handle holding one created project, and the bus over it.
 fn bus_with_project(tag: &str) -> (Bus, std::path::PathBuf) {
     let dir = existing_dir(tag);

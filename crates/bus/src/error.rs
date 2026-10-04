@@ -40,6 +40,16 @@ pub enum BusError {
     Malformed { column: String, detail: String },
     /// The durable write failed, so the message is not queued and nothing may be assumed about it.
     Storage(StorageError),
+    /// The message terminated because its delivery-attempt budget is exhausted.
+    ///
+    /// Reported rather than swallowed, because an expiry is a real outcome: the message will never be delivered
+    /// and a dead letter now records why. It is not something a caller can retry - the budget is spent.
+    Expired {
+        message_id: String,
+        attempts: i64,
+        /// The registry code of the last failure, which is what the dead letter records.
+        last_error: &'static str,
+    },
 }
 
 /// Turn a storage refusal into the bus's own report of it.
@@ -91,6 +101,10 @@ impl BusError {
             BusError::SequenceConflict { .. } => "DUPLICATE_CONFLICT",
             BusError::Malformed { .. } => "SCHEMA_INVALID",
             BusError::Storage(_) => "STORAGE_FAILURE",
+            // The message expired, so the condition is that it is dead-lettered and will not be retried. The
+            // registry's own meaning for this code is exactly that: the message exhausted its retry budget and
+            // is retained for inspection.
+            BusError::Expired { .. } => "DEAD_LETTERED",
         }
     }
 }
@@ -130,6 +144,15 @@ impl std::fmt::Display for BusError {
                 write!(f, "stored value in `{column}` is not usable: {detail}")
             }
             BusError::Storage(e) => write!(f, "{e}"),
+            BusError::Expired {
+                message_id,
+                attempts,
+                last_error,
+            } => write!(
+                f,
+                "message `{message_id}` exhausted its delivery budget after {attempts} attempt(s); the last \
+                 failure was {last_error} and a dead letter records it"
+            ),
         }
     }
 }

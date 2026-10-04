@@ -1,0 +1,22 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "version":"1.0.0",
+  "authority":"schemas/mcf-v2/bus-policies.json",
+  "dispatch":{
+    "max_attempts":5,
+    "batch_size":32,
+    "rule":"A queue entry is due when its next_attempt_at is at or before the dispatcher's now, and it is sent only while its recorded attempt count is below max_attempts. batch_size bounds how many entries one dispatch pass claims, so a large backlog is worked through in bounded passes rather than in one unbounded sweep. These are configuration-style defaults, not locked constants: the config-v1 layer may override them, and the bus takes them as an argument rather than reading them from this file."
+  },
+  "backoff":{
+    "base_seconds":2,
+    "multiplier":2,
+    "cap_seconds":300,
+    "rule":"The delay before attempt n, counting from 1, is base_seconds * multiplier^(n-1), capped at cap_seconds. It is computed from the recorded attempt count and these values alone - no jitter and no sampling of the wall clock - so two runs over the same stored state compute the same next attempt time. Jitter is deliberately absent: docs/MCF-V2-IMPLEMENTATION-DESIGN.md requires backoff to be 'bounded and deterministic from stored retry policy/attempt state', and this is a local single-user machine where a thundering herd is not a failure mode. The multiplication saturates rather than wrapping, so a corrupted attempt count cannot produce a delay in the past."
+  },
+  "terminal":{
+    "on_attempt_budget_exhausted":"QUEUED_TO_EXPIRED",
+    "dead_letter":true,
+    "rule":"When the attempt budget is exhausted the message terminates through the declared QUEUED -> EXPIRED transition, and a dead_letters row records the final error and the attempt count. DEAD_LETTER is reserved for the declared PROCESSING -> REJECTED -> DEAD_LETTER path, which is a receiver refusing a message it received, not a sender failing to hand one over. A transport failure therefore never advances messages.delivery_state: the message stays QUEUED until it either dispatches or expires, so DISPATCHED means 'handed to the transport' and never 'the transport was tried'."
+  },
+  "rule":"This file owns the bus's retry and dispatch policy. It is configuration, so the numbers here are defaults rather than locked constants, and `crates/bus/src/policy.rs` ships the same values as its `Default` implementation for callers that configure nothing. The contract gate reads both and requires them to agree, so the two are one source of truth rather than two lists that happen to match."
+}

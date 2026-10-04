@@ -644,6 +644,14 @@ CREATE INDEX IF NOT EXISTS idx_messages_correlation ON messages(correlation_id);
 -- batch on every connection and `CREATE INDEX IF NOT EXISTS` is a no-op when it is already there. A new column
 -- could not: there is no migration runner, so an ALTER here would never reach an existing database.
 CREATE INDEX IF NOT EXISTS idx_messages_operation ON messages(project_id, json_extract(envelope_json, '$.operation_id'));
+-- The dispatcher's one query is "which queue entries are pending and due?", ordered by when they became due.
+-- `dispatch_state` first because it is the equality predicate and `next_attempt_at` second because it is both
+-- the range predicate and the sort, so one index serves the filter and the order.
+CREATE INDEX IF NOT EXISTS idx_outbox_due ON outbox(dispatch_state, next_attempt_at);
+-- Every delivery attempt is recorded, and the observability requirement is that a message's attempts can be
+-- read back with their outcomes, timestamps and retry count.
+CREATE INDEX IF NOT EXISTS idx_attempts_message ON message_attempts(message_id, attempt_no);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_project ON dead_letters(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_project_sequence ON events(project_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_events_project_hash ON events(project_id, event_hash);

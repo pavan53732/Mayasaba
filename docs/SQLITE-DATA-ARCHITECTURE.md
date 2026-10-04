@@ -120,14 +120,22 @@ table is what enforces them.
 | Column | Owner | Vocabulary |
 | --- | --- | --- |
 | `messages.delivery_state` | `crates/bus` | The `message_delivery` machine's twelve states, declared in `schemas/mcf-v2/transition-types.json`. This is the one column whose vocabulary is machine-readable and gate-adjacent, so it is not restated here. |
-| `outbox.dispatch_state` | `crates/bus` | `PENDING`, `DISPATCHED`, `FAILED`, `ABANDONED` (DEC-058) |
+| `outbox.dispatch_state` | `crates/bus` | `PENDING` (not yet attempted), `FAILED` (the last attempt failed and a retry is scheduled), `DISPATCHED` (handed to the transport), `ABANDONED` (expired; it will not be retried). `PENDING` and `FAILED` are claimable; the other two are terminal (DEC-058) |
 | `inbox.processing_state` | `crates/bus` | **Undeclared.** The inbound side is not implemented; its vocabulary is declared by the record that implements it. |
 | `message_receipts.receipt_state` | `crates/bus` | **Undeclared**, for the same reason. |
 
-`outbox.next_attempt_at` is set to the message's `created_at` on enqueue, so "is this attempt due?" is the same
-single comparison for a first attempt and for a retry, and `outbox.attempts` starts at `0`. The `UNIQUE`
-constraint on `outbox.message_id` makes the queue entry one-to-one with its message, which is why the bus derives
-the queue entry's id from the message id rather than minting one.
+`outbox.next_attempt_at` is set to the message's `created_at` on enqueue, normalized to a fixed-width UTC stamp
+through SQLite, and thereafter to the instant the last attempt finished plus the policy's backoff. Both the
+normalization and the backoff arithmetic are done in SQL rather than in Rust, so the column holds exactly one
+spelling of time and the due check is a comparison of like with like. `outbox.attempts` starts at `0` and is the
+**durable** attempt count the dispatch decision reads, which is what stops a restart from resetting a message's
+retry budget. The `UNIQUE` constraint on `outbox.message_id` makes the queue entry one-to-one with its message,
+which is why the bus derives the queue entry's id from the message id rather than minting one.
+
+`message_attempts` records delivery attempts, so a message that exhausts its budget has exactly as many rows as
+it made attempts and no row for the expiry itself: the expiry is the decision that trying is over, not a try.
+`dead_letters.final_error_json` therefore holds the last recorded failure rather than the expiry, and
+`dead_letters.attempts` holds the count that `outbox.attempts` agrees with.
 
 ## Transaction boundaries
 A material domain command transaction may include:

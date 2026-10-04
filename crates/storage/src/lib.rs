@@ -733,11 +733,17 @@ fn enqueue_message_in(
 
     // PERSISTED -> QUEUED. The outbox row is what makes the message dispatchable, and `next_attempt_at` starts
     // at the queueing time so "is it due?" is one comparison for a first attempt and a retry alike.
+    //
+    // The stamp is normalized through SQLite rather than copied. `created_at` comes from the envelope and the
+    // contract types it as `format: date-time`, which admits an offset (`2026-10-04T02:00:05+02:00`); the due
+    // check compares this column with a UTC clock stamp, and that comparison is only correct while every value
+    // in the column is the same fixed-width UTC spelling. `messages.created_at` keeps the sender's own spelling,
+    // because that column is the record of what the sender said.
     let outbox_id = outbox_id_for(&new.message_id);
     tx.execute(
         "INSERT INTO outbox (outbox_id, message_id, project_id, queued_at, dispatch_state, next_attempt_at,
                              attempts)
-         VALUES (?1, ?2, ?3, ?4, 'PENDING', ?4, 0)",
+         VALUES (?1, ?2, ?3, ?4, 'PENDING', strftime('%Y-%m-%dT%H:%M:%SZ', datetime(?4)), 0)",
         rusqlite::params![
             outbox_id,
             new.message_id,
@@ -871,6 +877,316 @@ fn find_message_at_position(
     )
     .optional()
     .map_err(StorageError::Db)
+}
+
+/// One queue entry that is due to be dispatched.
+///
+/// Carries the stored envelope rather than a parsed one, because what a transport sends must be what was
+/// stored: a dispatcher that re-serialized the message could send something the durable record does not
+/// describe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueMessage {
+    pub message_id: String,
+    pub project_id: String,
+    pub session_id: String,
+    pub correlation_id: String,
+    pub causation_id: Option<String>,
+    pub message_type: String,
+    pub channel: String,
+    pub sequence: i64,
+    pub envelope_json: String,
+    /// Attempts recorded so far, from `outbox.attempts`. The dispatch decision is taken from this, not from a
+    /// counter in memory, so a restart cannot reset a message's budget.
+    pub attempts: i64,
+    pub next_attempt_at: String,
+}
+
+/// The outcome of one delivery attempt, as the dispatcher observed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeliveryAttempt {
+    /// The attempt number this was, counting from 1.
+    pub attempt_no: i64,
+    pub started_at: String,
+    pub finished_at: String,
+    /// A short machine-readable outcome for `message_attempts.outcome`.
+    pub outcome: String,
+    /// The registry code of the failure, or `None` when the attempt succeeded.
+    pub error_code: Option<String>,
+    /// Human-readable detail for the failure, or `None` when the attempt succeeded.
+    pub error_detail: Option<String>,
+}
+
+/// What the dispatcher is allowed to claim next.
+///
+/// A due entry is `dispatch_state = 'PENDING'` and `next_attempt_at` at or before `now`. Ordering is by
+/// `next_attempt_at` then `rowid`, so the oldest due entry goes first and ties are broken by insertion order
+/// rather than by whatever order the planner happens to return.
+fn due_outbound_in(conn: &Connection, now: &str, limit: i64) -> Result<Vec<DueMessage>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT m.message_id, m.project_id, m.session_id, m.correlation_id, m.causation_id,
+                    m.message_type, m.channel, m.sequence, m.envelope_json, o.attempts, o.next_attempt_at
+             FROM outbox o JOIN messages m ON m.message_id = o.message_id
+             WHERE o.dispatch_state IN ('PENDING', 'FAILED')
+               AND o.next_attempt_at <= ?1
+               AND m.delivery_state = 'QUEUED'
+             ORDER BY o.next_attempt_at, o.rowid
+             LIMIT ?2",
+        )
+        .map_err(StorageError::Db)?;
+    let rows = stmt
+        .query_map(rusqlite::params![now, limit], |r| {
+            Ok(DueMessage {
+                message_id: r.get(0)?,
+                project_id: r.get(1)?,
+                session_id: r.get(2)?,
+                correlation_id: r.get(3)?,
+                causation_id: r.get(4)?,
+                message_type: r.get(5)?,
+                channel: r.get(6)?,
+                sequence: r.get(7)?,
+                envelope_json: r.get(8)?,
+                attempts: r.get(9)?,
+                next_attempt_at: r.get(10)?,
+            })
+        })
+        .map_err(StorageError::Db)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(StorageError::Db)
+}
+
+/// Record an attempt that did not hand the message over, and schedule the next one.
+///
+/// **This does not advance `messages.delivery_state`.** The `message_delivery` machine declares no transition
+/// for a failed handover, and the accepted constraint is that transport failures never move the message: it
+/// stays `QUEUED` until it either dispatches or expires. There is therefore also no event to append, because the
+/// event log records declared transitions and this is not one; `message_attempts` is the durable record of what
+/// was tried.
+///
+/// The next attempt time is computed by SQLite from the current one plus `backoff_seconds`, so the bus needs no
+/// date arithmetic and the column keeps one spelling.
+fn record_failed_attempt_in(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    attempt: &DeliveryAttempt,
+    backoff_seconds: i64,
+) -> Result<()> {
+    insert_attempt(tx, message_id, attempt)?;
+    tx.execute(
+        "UPDATE outbox
+         SET attempts = ?2,
+             dispatch_state = 'FAILED',
+             next_attempt_at = strftime('%Y-%m-%dT%H:%M:%SZ', datetime(?4, '+' || ?3 || ' seconds'))
+         WHERE message_id = ?1",
+        rusqlite::params![
+            message_id,
+            attempt.attempt_no,
+            backoff_seconds,
+            attempt.finished_at
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// Record an attempt that handed the message over, and advance `QUEUED -> DISPATCHED`.
+///
+/// The transition is the declared one: event `MESSAGE_DISPATCHED`, command `ADVANCE_MESSAGE_DELIVERY`, state
+/// mutation to `DISPATCHED`, outbox effect on the queue entry, epoch effect `NONE`.
+///
+/// It is a separate transaction from the handover, which is what `docs/MCF-V2-IMPLEMENTATION-DESIGN.md`
+/// requires: "After send, delivery state is updated separately; a crash may cause duplicate delivery and must be
+/// safe." A crash between the two leaves the message `QUEUED` and it is sent again, which is why the receiver
+/// side has to be idempotent rather than why the sender should pretend the send did not happen.
+fn record_dispatched_in(
+    tx: &rusqlite::Transaction<'_>,
+    due: &DueMessage,
+    attempt: &DeliveryAttempt,
+) -> Result<()> {
+    insert_attempt(tx, &due.message_id, attempt)?;
+    let event_id = transition_event_id(&due.message_id, "MESSAGE_DISPATCHED");
+    tx.execute(
+        "UPDATE messages SET delivery_state = 'DISPATCHED' WHERE message_id = ?1",
+        rusqlite::params![due.message_id],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE outbox SET attempts = ?2, dispatch_state = 'DISPATCHED', next_attempt_at = NULL
+         WHERE message_id = ?1",
+        rusqlite::params![due.message_id, attempt.attempt_no],
+    )
+    .map_err(StorageError::Db)?;
+    append_event_in(
+        tx,
+        &NewEvent {
+            event_id,
+            project_id: Some(due.project_id.clone()),
+            session_id: Some(due.session_id.clone()),
+            event_type: "MESSAGE_DISPATCHED".to_string(),
+            correlation_id: Some(due.correlation_id.clone()),
+            causation_id: due.causation_id.clone(),
+            // The transition record declares `epoch_effect: NONE` for every message_delivery edge, so the event
+            // carries the epoch it was written under and does not change the project's.
+            epoch: None,
+            payload_json: transition_payload_fields(
+                &due.message_id,
+                &due.message_type,
+                due.sequence,
+            )?,
+            created_at: attempt.finished_at.clone(),
+        },
+    )
+}
+
+/// Terminate a message whose attempt budget is exhausted, through the declared `QUEUED -> EXPIRED` edge.
+///
+/// The edge's event is `MESSAGE_EXPIRED` and its command is `EXPIRE_MESSAGE`. A `dead_letters` row records the
+/// final error and the attempt count, because "dead-letter records retain original message identity, final
+/// error, attempts and relevant causal references" and because the alternative - expiring silently - would lose
+/// the reason.
+///
+/// This is deliberately **not** the `DEAD_LETTER` state. That state is reached by `PROCESSING -> REJECTED ->
+/// DEAD_LETTER`, which is a receiver refusing a message it received; a sender that never managed to hand one
+/// over has not been refused.
+fn expire_message_in(
+    tx: &rusqlite::Transaction<'_>,
+    due: &DueMessage,
+    finished_at: &str,
+) -> Result<()> {
+    let event_id = transition_event_id(&due.message_id, "MESSAGE_EXPIRED");
+    tx.execute(
+        "UPDATE messages SET delivery_state = 'EXPIRED' WHERE message_id = ?1",
+        rusqlite::params![due.message_id],
+    )
+    .map_err(StorageError::Db)?;
+    tx.execute(
+        "UPDATE outbox SET attempts = ?2, dispatch_state = 'ABANDONED', next_attempt_at = NULL
+         WHERE message_id = ?1",
+        rusqlite::params![due.message_id, due.attempts.max(0)],
+    )
+    .map_err(StorageError::Db)?;
+    let final_error = final_error_json(tx, &due.message_id)?;
+    tx.execute(
+        "INSERT INTO dead_letters (dead_letter_id, message_id, project_id, final_error_json, attempts,
+                                   created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            format!("dl_{}", due.message_id),
+            due.message_id,
+            due.project_id,
+            final_error,
+            due.attempts.max(0),
+            finished_at,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    append_event_in(
+        tx,
+        &NewEvent {
+            event_id,
+            project_id: Some(due.project_id.clone()),
+            session_id: Some(due.session_id.clone()),
+            event_type: "MESSAGE_EXPIRED".to_string(),
+            correlation_id: Some(due.correlation_id.clone()),
+            causation_id: due.causation_id.clone(),
+            epoch: None,
+            payload_json: transition_payload_fields(
+                &due.message_id,
+                &due.message_type,
+                due.sequence,
+            )?,
+            created_at: finished_at.to_string(),
+        },
+    )
+}
+
+fn insert_attempt(
+    tx: &rusqlite::Transaction<'_>,
+    message_id: &str,
+    attempt: &DeliveryAttempt,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO message_attempts (attempt_id, message_id, attempt_no, started_at, finished_at, outcome,
+                                       error_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            format!("att_{}_{}", message_id, attempt.attempt_no),
+            message_id,
+            attempt.attempt_no,
+            attempt.started_at,
+            attempt.finished_at,
+            attempt.outcome,
+            error_json(attempt)?,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// The attempt's failure as canonical JSON, or `NULL` when the attempt succeeded.
+///
+/// `message_attempts.error_json` is nullable, so a success stores no error rather than an empty object: "there
+/// was no error" and "the error was nothing" are different statements and only the first is true here.
+fn error_json(attempt: &DeliveryAttempt) -> Result<Option<String>> {
+    match &attempt.error_code {
+        None => Ok(None),
+        Some(code) => Ok(Some(canonical::jcs_object(&[
+            ("code", canonical::JcsValue::Str(code)),
+            (
+                "detail",
+                canonical::JcsValue::Str(attempt.error_detail.as_deref().unwrap_or("")),
+            ),
+        ])?)),
+    }
+}
+
+/// The final error of an expired message, as canonical JSON.
+///
+/// `dead_letters.final_error_json` is `NOT NULL`, so an expiry always has something to say. What it should say
+/// is **why the message died**, and that is the last recorded failure, read back from `message_attempts`. A
+/// message that expired with no recorded failure at all - which the dispatcher cannot produce, because expiry
+/// follows a failed attempt - is recorded as an explicit absence rather than as an empty document.
+///
+/// The attempt count is not repeated inside the document because `dead_letters.attempts` is a column of its own,
+/// and two copies of one fact are two facts that can disagree.
+fn final_error_json(tx: &rusqlite::Transaction<'_>, message_id: &str) -> Result<String> {
+    if let Some(recorded) = last_recorded_error(tx, message_id)? {
+        return Ok(recorded);
+    }
+    Ok(canonical::jcs_object(&[
+        ("code", canonical::JcsValue::Str("UNRECORDED")),
+        ("detail", canonical::JcsValue::Str("")),
+    ])?)
+}
+
+/// The most recent recorded failure for a message, exactly as it was stored.
+fn last_recorded_error(tx: &rusqlite::Transaction<'_>, message_id: &str) -> Result<Option<String>> {
+    tx.query_row(
+        "SELECT error_json FROM message_attempts
+         WHERE message_id = ?1 AND error_json IS NOT NULL
+         ORDER BY attempt_no DESC LIMIT 1",
+        rusqlite::params![message_id],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(StorageError::Db)
+}
+
+/// The payload of a dispatch-lifecycle event.
+///
+/// The transition records declare `required_fields: ["project_id", "correlation_id"]`, and both are carried by
+/// the envelope, the chain scope and the `events` row rather than duplicated into the payload. What the payload
+/// names is what the event is about: the message, what kind it was, and the position it claimed.
+fn transition_payload_fields(
+    message_id: &str,
+    message_type: &str,
+    sequence: i64,
+) -> Result<String> {
+    Ok(canonical::jcs_object(&[
+        ("message_id", canonical::JcsValue::Str(message_id)),
+        ("message_type", canonical::JcsValue::Str(message_type)),
+        ("sequence", canonical::JcsValue::Int(sequence)),
+    ])?)
 }
 
 impl Storage {
@@ -1060,6 +1376,45 @@ impl Storage {
         operation_id: &str,
     ) -> Result<Option<EnqueuedMessage>> {
         find_outbound_by_operation_in(&self.conn, project_id, operation_id)
+    }
+
+    /// The queue entries that are due at `now`, oldest first, at most `limit` of them.
+    ///
+    /// A read, not a claim: two dispatchers running at once would both see the same entries and both send them.
+    /// That is deliberate and it is safe, because duplicate delivery is the condition the durable inbox exists
+    /// to absorb - the design says a crash "may cause duplicate delivery and must be safe" - and because a claim
+    /// would need a lease column this schema does not have. What is *not* safe is a second dispatcher's attempt
+    /// row racing the first's; each attempt is written in its own transaction under the attempt number the
+    /// decision produced, and `message_attempts.attempt_id` is the primary key, so a collision is refused rather
+    /// than silently merged.
+    pub fn due_outbound(&self, now: &str, limit: i64) -> Result<Vec<DueMessage>> {
+        due_outbound_in(&self.conn, now, limit)
+    }
+
+    /// Record a failed delivery attempt and schedule the next one. The message stays `QUEUED`.
+    pub fn record_failed_attempt(
+        &mut self,
+        message_id: &str,
+        attempt: &DeliveryAttempt,
+        backoff_seconds: i64,
+    ) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        record_failed_attempt_in(&tx, message_id, attempt, backoff_seconds)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Record a successful handover and advance the message `QUEUED -> DISPATCHED`.
+    pub fn record_dispatched(&mut self, due: &DueMessage, attempt: &DeliveryAttempt) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        record_dispatched_in(&tx, due, attempt)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Terminate an exhausted message through `QUEUED -> EXPIRED`, with a dead letter.
+    pub fn expire_message(&mut self, due: &DueMessage, finished_at: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        expire_message_in(&tx, due, finished_at)?;
+        tx.commit().map_err(StorageError::Db)
     }
 
     /// Authoritative project readback, including the current brief.

@@ -54,6 +54,8 @@ const APP_TSX = "apps/desktop/src/App.tsx";
 const REGISTRY = "schemas/error-v1/registry.json";
 const VALIDATION_RS = "crates/workspace/src/validation.rs";
 const BUS_ERROR_RS = "crates/bus/src/error.rs";
+const BUS_POLICIES = "schemas/mcf-v2/bus-policies.json";
+const BUS_POLICY_RS = "crates/bus/src/policy.rs";
 const GENERATED_RS = "apps/desktop/src-tauri/src/generated/bridge.rs";
 const GENERATED_TS = "apps/desktop/src/generated/bridge.ts";
 const PAYLOAD_TYPES = "schemas/tauri-bridge-v1/payload-types.json";
@@ -222,6 +224,36 @@ const MUTATIONS = [
     check: GATE,
     edits: [{ file: BUS_ERROR_RS, find: '=> "DUPLICATE_CONFLICT"', replace: '=> "SEQUENCE_COLLISION"' }],
     expect: ["which schemas/error-v1/registry.json does not register"],
+  },
+
+  // --- DEC-058: the bus's retry/dispatch policy, against the machine it terminates through and against the
+  // crate's shipped defaults.
+  {
+    id: "dec058-a",
+    what: "bus-policies.json: the declared termination path is not an edge the message_delivery machine has",
+    check: GATE,
+    edits: [
+      {
+        file: BUS_POLICIES,
+        find: '"on_attempt_budget_exhausted":"QUEUED_TO_EXPIRED"',
+        replace: '"on_attempt_budget_exhausted":"QUEUED_TO_DEAD_LETTER"',
+      },
+    ],
+    expect: ["terminal.on_attempt_budget_exhausted", "any other value needs a decision record"],
+  },
+  {
+    id: "dec058-b",
+    what: "crates/bus: the shipped default stops matching the policy file",
+    check: GATE,
+    edits: [{ file: BUS_POLICY_RS, find: "pub const MAX_ATTEMPTS: i64 = 5;", replace: "pub const MAX_ATTEMPTS: i64 = 7;" }],
+    expect: ["MAX_ATTEMPTS is 7 but bus-policies.json dispatch.max_attempts is 5", "must agree"],
+  },
+  {
+    id: "dec058-c",
+    what: "bus-policies.json: the first delay already exceeds the cap, so the multiplier does nothing",
+    check: GATE,
+    edits: [{ file: BUS_POLICIES, find: '"cap_seconds":300', replace: '"cap_seconds":1' }],
+    expect: ["backoff.base_seconds (2) exceeds cap_seconds (1)"],
   },
 
   // --- DEC-056: the wire SHAPE. Five of these must COMPILE, so that a non-zero exit is the conformance test

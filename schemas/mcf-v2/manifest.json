@@ -34,7 +34,8 @@
     "event-payloads.schema.json",
     "message-payloads.registry.json",
     "event-payloads.registry.json",
-    "common-event.schema.json"
+    "common-event.schema.json",
+    "bus-policies.json"
   ],
   "owners": {
     "protocol": "crates/protocol",
@@ -70,6 +71,7 @@
     "message-payloads.registry.json",
     "event-payloads.registry.json",
     "registry.json",
-    "common-event.schema.json"
+    "common-event.schema.json",
+    "bus-policies.json"
   ]
 }

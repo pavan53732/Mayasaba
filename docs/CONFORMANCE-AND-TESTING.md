@@ -127,6 +127,40 @@ Must prove:
 - the expression index the idempotency lookup depends on exists, because an index that silently failed to apply
   would leave the query correct and slow and nothing else would notice.
 
+## Durable bus dispatch tests (M2, DEC-058)
+
+The dispatcher's two dangerous failures are retrying forever and giving up wrongly, so these tests read the
+tables rather than the report. `crates/bus/tests/dispatch.rs` runs them through a real bus, a real database, a
+fixed clock and a scripted transport.
+
+Must prove:
+
+- the decision is a pure function of the recorded attempt count and the policy: below the budget it sends and
+  numbers the attempt from one, at or above it expires and reports the real count, and a count the column's type
+  admits but nothing writes is read as "none yet" rather than as a message that can never be sent;
+- backoff grows, is capped, is **deterministic** (the same stored state gives the same answer twice), survives a
+  multiplier of one, and cannot produce a delay outside its own bounds even from a hostile policy;
+- a due message is handed over and advances `QUEUED -> DISPATCHED` with a `MESSAGE_DISPATCHED` event, and what
+  was handed over is byte-for-byte what was stored, because a dispatcher that re-serialized could send something
+  the durable record does not describe;
+- a refused handover leaves `delivery_state` at `QUEUED` — `DISPATCHED` means handed over, never tried — records
+  the attempt with its registry code, sets `dispatch_state = FAILED` and a future `next_attempt_at`, and appends
+  **no** event, because the machine declares no transition for a failed transport attempt;
+- a message is not due again until its backoff has elapsed, and when it is, the delay has grown with the count;
+- exhausting the budget terminates through the declared `QUEUED -> EXPIRED` edge with a `MESSAGE_EXPIRED` event
+  and a `dead_letters` row, and the message is **not** in `DEAD_LETTER`, which belongs to a receiver's refusal;
+- the dead letter records the last *real* failure and the attempt count, not the bookkeeping that discovered the
+  budget was gone;
+- `batch_size` bounds one pass, and repeated passes work the backlog through;
+- the first due time is normalized to UTC, so an envelope `created_at` carrying an offset cannot misorder it, and
+  the message is due at the normalized instant and not before;
+- a failure to *persist* what happened stops the pass and rolls the transition back, because continuing would
+  send messages whose record the bus cannot keep;
+- a dispatched message is never sent twice by a later pass;
+- the transport failure vocabulary is the registry's own three codes, and `TRANSPORT_FAILURE` is not among them;
+- the crate's shipped defaults are the numbers `schemas/mcf-v2/bus-policies.json` declares, and the contract gate
+  reads both and requires them to agree.
+
 ## Project intent and user-contribution tests
 
 Must prove:
@@ -330,6 +364,16 @@ Adding `crates/bus/src/error.rs` to the gate's declared `mappingSites` is a new 
 | `dec055-h` | `crates/bus`: the mapping produces a code the registry does not declare | `SEQUENCE_COLLISION` is named by the bus and registered nowhere: `which schemas/error-v1/registry.json does not register` |
 
 The same pair exists for `crates/workspace/src/validation.rs` as `dec055-f` and `dec055-e`; the point of adding the bus site is that a mapping the gate cannot see is a mapping nothing checks, so a second mapping site without a proof would have quietly reduced the coverage the first one provides.
+
+### Bus policy proofs (DEC-058)
+
+`schemas/mcf-v2/bus-policies.json` is configuration, so the checks on it are not about its numbers: they are about the numbers being usable, about the crate's shipped defaults being the same numbers, and about the termination path the policy declares being an edge the machine actually has. Three mutations cover the three ways that can break.
+
+| # | Mutation | Expected and observed failure |
+|---|---|---|
+| `dec058-a` | `bus-policies.json`: the declared termination path is not an edge the `message_delivery` machine has | The policy names a path the contract forbids: `terminal.on_attempt_budget_exhausted`, `any other value needs a decision record` |
+| `dec058-b` | `crates/bus`: the shipped default stops matching the policy file | The two artifacts that both claim the value disagree: `MAX_ATTEMPTS is 7 but bus-policies.json dispatch.max_attempts is 5`, `must agree` |
+| `dec058-c` | `bus-policies.json`: the first delay already exceeds the cap, so the multiplier does nothing | The backoff is unusable as declared: `backoff.base_seconds (2) exceeds cap_seconds (1)` |
 
 ## Bridge two-way gate mutation proofs (DEC-053)
 
