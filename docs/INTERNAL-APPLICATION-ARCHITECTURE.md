@@ -27,6 +27,18 @@ MCF-v2 remains the only canonical communication contract between Mayasaba and ag
 15. User-selected local artifacts may be worked on within task scope; public-web retrieval is read-only and limited to user-requested research.
 16. External side-effect actions and general control of unrelated applications are outside product scope.
 
+### Intake input categories
+
+The Initial Intake Composer carries three classes of user-provided data that must not be conflated:
+
+- **Project identity** — the project name.
+- **Workspace authorization input** — a user-selected local Windows folder. This is a candidate authorization input, not an authorization; existence, locality and policy are separate checks (DEC-048).
+- **Project intent** — free-text content persisted as `ProjectBrief` version 1.
+
+Optional attachments are context/evidence references and are never authoritative project state (DEC-049). Their presence does not modify the `ProjectBrief`, requirements, decisions or epoch.
+
+React may own draft versions of all of these. Only Rust-owned services may persist authoritative project state, and only the owning service may decide that any of them is material.
+
 ## 3. Internal system topology
 
 ~~~text

@@ -65,7 +65,28 @@ Submitting an answer calls the existing `answer_user_question` command. Show the
 
 ## Intake and free-text contribution
 
-The intake surface is the Control Room's Initial Intake Composer, shown when creating a new project. The user states the project idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version and displayed back as project truth, not as a chat message. Show the brief version and mark the version that became the analysis anchor when DISCOVERY closes.
+### Initial Intake Composer
+
+The Initial Intake Composer is the project-creation surface. It has three distinct inputs, and conflating them is the failure mode to avoid:
+
+1. **Project name** — the human-readable project identifier.
+2. **Local workspace** — a user-selected Windows folder that becomes the project's initial authorized workspace root. This is an authorization boundary, not descriptive metadata.
+3. **Project intent** — free-text description of what the user wants Mayasaba to accomplish.
+
+The workspace control uses native Windows folder selection as the primary interaction. Manual path entry may be offered, but a typed path is a *candidate*, not evidence that the path exists, is local, or is authorized: those are separate checks performed before persistence. No placeholder, hint or prefilled value may render in a way that resembles an authorized workspace.
+
+Project intent becomes `ProjectBrief` version 1 when `create_project` commits. Before commit it is local draft state only. After commit the Control Room renders the authoritative persisted projection returned by Rust — never a project reconstructed from the submitted form.
+
+The composer may include a local-context attachment control. Attachments are user-selected files or folders retained as supporting context and evidence with explicit source provenance. They are not project truth: they do not replace or mutate the `ProjectBrief`, and their presence does not by itself change requirements, decisions, architecture or epoch. An owning service must explicitly accept a material change caused by an attachment's contents before any epoch advances. An attachment must never be presented as uploaded, indexed, analyzed or accepted until the controller has returned that authoritative state.
+
+The submission surface must make these states distinguishable, and must never invent project state while creation is pending:
+
+- **Draft** — editable local UI state, nothing persisted.
+- **Submitting** — command in flight; the draft is retained; no project lifecycle field is displayed as authoritative.
+- **Created** — the persisted projection returned by the controller.
+- **Rejected** — draft retained alongside a machine-readable error code and message.
+
+After creation, free-text input is recorded as a `UserContribution` and displayed with its advisory classification and its outcome. Display the outcome the owning service actually produced, not the advisory label: a contribution the service found non-material must not appear to have changed project truth. When a contribution does change truth, show the resulting epoch, the affected scope and the context regeneration; when it does not, show it as timeline/commentary.
 
 After creation, free-text input is recorded as a `UserContribution` and displayed with its advisory classification and its outcome. Display the outcome the owning service actually produced, not the advisory label: a contribution the service found non-material must not appear to have changed project truth. When a contribution does change truth, show the resulting epoch, the affected scope and the context regeneration; when it does not, show it as timeline/commentary.
 

@@ -31,9 +31,17 @@ The same workspace, task, evidence and review surfaces cover non-software artifa
 
 Show the user-selected local workspace and task-scoped allowed paths. Do not treat the whole PC as a default scan scope. For user-requested research, display public-source retrieval as read-only and present locally saved citations/report artifacts. External side effects and general control of unrelated applications are not available actions.
 
-## Project intent and intake
+## Project creation and intake
 
-The user states the project idea and selects the local workspace at intake. The stated intent is persisted as the first `ProjectBrief` version and shown as project truth, not as a chat message. Display the brief and mark the version that became the immutable analysis anchor when DISCOVERY closes.
+Project creation begins in the Initial Intake Composer. The user enters a project name, selects a Windows-local workspace folder, and describes the project intent. They may additionally attach local files or folders as supporting context.
+
+The selected workspace is the project's initial filesystem boundary. A typed path is not treated as authorized merely because it is syntactically valid: path existence, locality and policy authorization are separate checks, and the native folder-selection flow is the primary interaction rather than manual entry.
+
+The project intent is persisted as `ProjectBrief` version 1 and displayed as project truth after successful creation. Before that commit it is local draft state only.
+
+Attached files and folders are supporting context and evidence with source provenance. They do not replace the `ProjectBrief` and do not become project truth solely by being attached.
+
+The Control Room distinguishes draft, submitting, created and rejected states, and never invents or infers project state while creation is pending. Mark the brief version that became the immutable analysis anchor when DISCOVERY closes.
 
 Free-text input after creation is recorded as a `UserContribution`. Show its advisory classification alongside the outcome the owning service actually produced, so a non-material contribution is never displayed as having changed project truth. When a contribution changes truth, show the resulting epoch and affected scope.
 

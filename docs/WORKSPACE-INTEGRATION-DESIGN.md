@@ -8,6 +8,12 @@ This document implements the workspace concepts defined by `INTEGRATION-AUTHORIT
 - agent workspace: isolated task-owned working scope
 - checkpoint workspace/state: recovery reference
 
+## Workspace selection at project creation
+
+At project creation the user selects one local Windows folder as the initial workspace root. Native folder selection is the primary interaction; a manually entered path and a user-selected folder are equivalent only after the same existence, locality and authorization checks succeed (DEC-048).
+
+The root is the broadest project-level filesystem boundary. It does not automatically grant unrestricted access to every operation inside the folder. Task execution subsequently derives narrower task-scoped allowed paths from controller state, policy and task requirements.
+
 ## Git projects
 Preferred structure:
 ```

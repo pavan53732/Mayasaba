@@ -51,6 +51,8 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-045 | Only the transaction performing the `DISCOVERY → INDEPENDENT_ANALYSIS` transition establishes the analysis anchor, and it establishes it from the brief current in that same transaction | HARD_LOCK |
 | DEC-046 | For one analysis lineage every agent receives the same tuple of (brief version id, project epoch, context snapshot id, state digest) | HARD_LOCK |
 | DEC-047 | `create_project` is not specified as idempotent; a client-supplied retry key, its uniqueness scope, replay behaviour and response semantics require a separate decision before retry safety can be claimed | SOFT_DECISION |
+| DEC-048 | A workspace is an authorization boundary; native Windows folder selection is the primary intake interaction, and a manually typed path is a candidate requiring the same validation | HARD_LOCK |
+| DEC-049 | Initial-intake attachments are supporting context and evidence with source provenance, never project truth by attachment alone | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -313,6 +315,33 @@ Whether two projects may target the same `local_path` is a separate and still-un
 Nothing in the architecture or in `schema.sql` makes `local_path` unique, so the slice asserts the current
 rule — two projects on one path are permitted — rather than quietly adding a constraint in a test. That
 question needs its own decision.
+
+## DEC-048 and DEC-049 records
+
+### DEC-048 workspace selection is an authorization act, not a string field
+
+Raised by reviewing the shipped intake composer against the product contract. The implemented control was a
+free-text path input whose placeholder was `C:\work\my-project`, which rendered in a way that resembled an
+authorized workspace. That is the same defect class this repository has spent a series of commits removing at
+every other layer: presentation implying authority it does not have.
+
+| Field | Value |
+|---|---|
+| Previous behavior | Workspace was entered as free text. The contract described a user-selected folder, but the UI presented a path string with no distinction between "typed" and "selected", and the placeholder looked like a real value. |
+| New behavior | A workspace is an authorization boundary. Native Windows folder selection is the primary intake interaction. Manual entry remains possible but is a candidate, subject to the same existence, locality and policy checks before authorization. No placeholder, hint or prefilled value may render as though it were an authorized workspace. |
+| Reason | A syntactically valid path is not an authorized one. Collapsing the two lets the UI imply an authorization decision that only PolicyService and an owning service can make. |
+| Compatibility impact | Document and UX only. `create_projectRequest.local_path` is unchanged and still a string; what changes is that the string must be validated as a candidate rather than trusted as a selection. |
+| Implementation status | The native picker is NOT implemented. `apps/desktop/src-tauri/capabilities/` does not exist, so granting a dialog permission needs a new capability. The composer offers manual entry and states in its own helper text that a typed path is a candidate and that native selection is not yet implemented. That is a visible gap, not a silent one. |
+
+### DEC-049 intake attachments are context, not truth
+
+| Field | Value |
+|---|---|
+| Previous behavior | No attachment concept existed anywhere in the contract, the data model, or the UI. |
+| New behavior | Attachments are supporting project context and evidence with explicit source provenance. They do not replace or mutate the `ProjectBrief` and do not become project truth merely by being attached. Only an owning service accepting a material change caused by an attachment's contents may advance the epoch. An attachment must not be presented as uploaded, indexed or analysed until the controller returns that state. |
+| Reason | A user will naturally supply requirements, references and existing source. Ingesting that material automatically would let an uninterpreted document become authoritative, which is the failure mode the classifier advisory-versus-authoritative split exists to prevent. |
+| Compatibility impact | Conceptual only. No entity, table, column or command is added by this decision. `DATA-MODEL.md` records `ProjectContextAttachment` as explicitly **not yet durable**. |
+| Implementation status | Not implemented, and deliberately so. The attachment control is absent from the composer because there is no attachment contract, no validation of whether an attached path is inside the authorized workspace, and no owning service. Adding a paperclip before those exist would produce a control that accepts input nothing validates. The storage model — reference the original local path, copy it, or ingest and index it — is undecided and must be settled by the attachment slice rather than by this record. |
 
 ## DEC-043 to DEC-046 records
 

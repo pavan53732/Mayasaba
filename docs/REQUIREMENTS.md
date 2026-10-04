@@ -2,8 +2,18 @@
 
 ## Functional requirements
 
-### FR-001 Project/workspace creation
-The user can create a workspace, select a local Windows path, describe a software or local-artifact task, and start the applicable Mayasaba workflow. The described intent is persisted as the first version of a `ProjectBrief` and is project truth, not a chat message.
+### FR-001 Project creation and workspace selection
+The user can create a project by providing a project name, selecting a Windows-local workspace, and describing the initial project intent. The project, `ProjectBrief` version 1, the initial epoch and the `PROJECT_CREATED` event are persisted atomically, so a project can never exist without its intent anchor.
+
+The selected workspace is the project's initial filesystem boundary. Native Windows folder selection is the primary interaction; manual path entry passes identical validation before authorization. Blank project names and whitespace-only project intent are rejected before anything is persisted. Successful creation returns the authoritative persisted projection, which the Control Room renders in place of the submitted draft.
+
+The system supports optional local context attachments without treating them as authoritative project intent: an attachment retains source provenance and never mutates the `ProjectBrief` implicitly.
+
+Acceptance:
+- a workspace selection establishes the initial boundary and the persisted workspace matches the selected canonical path;
+- blank names and whitespace-only intent are rejected with no partial persistence;
+- the returned projection is rendered rather than the submitted draft;
+- the Control Room distinguishes draft, submitting, created and rejected states, and invents no project state while creation is pending.
 
 ### FR-001a Project intent and brief versioning
 The user's stated project intent is versioned and immutable per version. The brief version current when DISCOVERY closes is the analysis anchor for that lineage; later versions do not rewrite the historical meaning of snapshots or council rounds that consumed an earlier version.

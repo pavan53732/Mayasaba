@@ -51,6 +51,16 @@ UserContribution
 Barrier
 ProjectStatus
 
+### ProjectContextAttachment — concept only, NOT YET DURABLE
+
+A user-selected local file or directory associated with an intake request or a later project contribution, retained as supporting context and evidence.
+
+This is recorded as a concept only. It has **no table, no column and no command**, and the gate does not expect it in `schema.sql`. It is documented here so an implementation agent does not invent a competing shape, not because it is implemented.
+
+Intended properties, for the attachment slice to confirm rather than inherit: attachment identifier, project identifier, source path, kind (`FILE` or `DIRECTORY`), source scope, capture timestamp, provenance, optional content hash, lifecycle status.
+
+Authority: attachments are contextual inputs, not project truth. Their presence does not modify `ProjectBrief`, requirements, decisions or epoch unless an owning service explicitly accepts a material state change caused by their contents (DEC-049). The storage model — reference the original local path, copy it, or ingest and index it — is undecided and belongs to the attachment slice.
+
 ## Important relationships
 
 - project → many epochs, sessions, tasks, rounds and events

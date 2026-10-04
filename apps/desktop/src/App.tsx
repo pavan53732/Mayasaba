@@ -87,7 +87,8 @@ function Composer(props: {
     <section aria-label="Initial Intake Composer">
       <h2>New project</h2>
       <p style={{ color: "#6b7280", marginTop: -4 }}>
-        State what you want built and select the local workspace. This becomes the first ProjectBrief version.
+        Choose the local workspace Mayasaba is authorized to work in, then describe what you want
+        accomplished.
       </p>
 
       <label style={field}>
@@ -105,22 +106,30 @@ function Composer(props: {
         <input
           value={draft.localPath}
           disabled={pending}
-          placeholder="C:\\work\\my-project"
           onChange={(e) => onChange({ ...draft, localPath: e.target.value })}
           style={input}
         />
       </label>
+      <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>
+        A folder Mayasaba may operate within. A path typed here is a candidate, not an authorized
+        workspace: locality, existence and policy are checked before anything is persisted. Native folder
+        selection is the intended primary interaction and is not implemented yet.
+      </p>
 
       <label style={field}>
-        What do you want built?
+        Describe the project
         <textarea
           value={draft.initialBrief}
           disabled={pending}
-          rows={5}
+          rows={6}
           onChange={(e) => onChange({ ...draft, initialBrief: e.target.value })}
           style={{ ...input, height: "auto", resize: "vertical" }}
         />
       </label>
+      <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>
+        This becomes <strong>ProjectBrief version 1</strong> — the canonical record of your project intent.
+        It stays a local draft until the project is created.
+      </p>
 
       <button onClick={onSubmit} disabled={!canSubmit} style={button}>
         {pending ? "Creating…" : "Create project"}
@@ -216,3 +225,4 @@ const notice: React.CSSProperties = {
   borderRadius: 6,
   fontSize: 13,
 };
+const hint: React.CSSProperties = { color: "#6b7280", fontSize: 12, lineHeight: 1.5 };

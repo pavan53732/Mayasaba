@@ -8,13 +8,21 @@ For a user-requested research task, Mayasaba may read public web sources and sav
 
 Mayasaba is not a fifth AI brain. The three agents retain their own intelligence, model/provider choice, tools, authentication, sessions and reasoning. They are architecturally separate sessions, not three independent implementations: Kilo Code CLI is a fork of OpenCode CLI, so Kilo and OpenCode must not be treated as independent corroboration of each other. Model/provider diversity across the three remains real.
 
+### Project creation intake
+
+Project creation begins by selecting a Windows-local workspace folder that Mayasaba is authorized to operate within. The workspace is a filesystem and authorization boundary, not descriptive metadata. The initial project intent is entered separately and persisted as `ProjectBrief` version 1.
+
+The Control Room may allow manual entry of a local path, but native Windows folder selection is the primary interaction. A typed path is a candidate rather than an authorization: path existence, locality and policy authorization are separate checks performed before anything is persisted. A successful selection is normalized to the canonical local path representation.
+
+The initial intent may reference attached local files or folders. Attachments are supporting project context with explicit source provenance; they do not replace or mutate the `ProjectBrief` and do not become project truth merely by being attached.
+
 ## 2. Hard product boundaries
 
 - Windows only.
 - All Mayasaba-controlled execution occurs on the user's Windows PC.
 - No cloud VM, hosted workspace or remote executor.
 - No mandatory Mayasaba login/account.
-- A user-selected local workspace path and task-scoped allowed paths define the filesystem boundary; Mayasaba does not scan the whole PC by default.
+- A user-selected local workspace path and task-scoped allowed paths define the filesystem boundary; Mayasaba does not scan the whole PC by default. A workspace begins as a user-selected local Windows folder. Mayasaba must not treat an arbitrary typed path as implicitly authorized merely because it is syntactically valid: path existence, locality and policy authorization are separate checks.
 - User-requested public-web research may read public sources; this is read-only retrieval, not permission for external side effects.
 - Mayasaba does not send email/messages, publish posts, submit forms, make purchases, change accounts, or generally control unrelated desktop applications.
 - The supported agent set is exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI (DEC-029).

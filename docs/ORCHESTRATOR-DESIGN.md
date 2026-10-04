@@ -62,7 +62,16 @@ Repair/recovery may re-enter the applicable phase. BLOCKED, PAUSED, FAILED and R
 
 ## Intake
 
-PROJECT_CREATED is entered from the Control Room intake surface, where the user states the idea and selects the local workspace. The stated intent is persisted as the first `ProjectBrief` version; it is project truth, not a chat message.
+PROJECT_CREATED is entered from the Control Room intake surface, where the user names the project, selects the local workspace and describes the project intent. The stated intent is persisted as the first `ProjectBrief` version; it is project truth, not a chat message.
+
+The intake request carries four things, which must not be collapsed:
+
+- **project name** — identity;
+- **selected local workspace** — the initial filesystem scope, subject to PolicyService validation. A typed path is a candidate, not an authorization (DEC-048);
+- **`ProjectBriefDraft`** — which becomes `ProjectBrief` version 1 only when `create_project` commits;
+- **optional local context attachments** — supporting references that remain context until an owning service explicitly consumes them (DEC-049).
+
+The orchestrator must not infer that an attached document represents a requirement, decision or architecture artifact merely because its text resembles one. Attachment content is never implicitly converted into requirements, decisions, architecture or any other project truth, and never advances the epoch on its own.
 
 DISCOVERY then runs before any agent analyzes the brief. It establishes the brief baseline, performs objective local/workspace discovery, and judges whether the brief is complete enough to begin. The brief version current when DISCOVERY closes is the immutable analysis anchor delivered to every agent in the ContextPack for the resulting lineage.
 
