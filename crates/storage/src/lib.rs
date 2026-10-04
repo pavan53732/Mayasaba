@@ -10,7 +10,14 @@
 
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
+
+use crate::chain::{ChainEvent, ChainScope, ChainVerification, EventHashFields, GENESIS_PREV_HASH};
+
+/// RFC 8785 JCS canonicalization, shared by the DEC-025 state digest and the DEC-034 event chain.
+pub mod canonical;
+/// The DEC-034 per-project event hash chain.
+pub mod chain;
 
 /// The canonical schema, embedded at compile time. Byte-identical to `schemas/sqlite-v1/schema.sql`.
 pub const SCHEMA_SQL: &str = include_str!("../../../schemas/sqlite-v1/schema.sql");
@@ -30,6 +37,23 @@ pub enum StorageError {
     /// this crate or the vocabulary changed without a migration. Reporting it beats returning a default that
     /// would look like a recorded fact.
     Malformed { column: String, detail: String },
+    /// An event names neither a project nor a session, so it belongs to no hash chain (DEC-034).
+    ///
+    /// Refused rather than stored unchained: an event outside every chain is an event whose alteration
+    /// nothing can detect, so accepting one would leave a class of durable history outside the immutability
+    /// rule while `verify_event_chain` still reported success.
+    UnscopedEvent,
+    /// A value could not be reduced to its RFC 8785 canonical form, so no digest over it is well defined.
+    Canonical(crate::canonical::CanonicalError),
+    /// A second message already occupies the same `(session_id, channel, sequence)`.
+    ///
+    /// The table's `UNIQUE` constraint is the enforcement; this variant is the *named* report of it, so a
+    /// caller is not handed a raw SQLite constraint string and forced to parse it to learn what happened.
+    SequenceConflict {
+        session_id: String,
+        channel: String,
+        sequence: i64,
+    },
 }
 
 impl std::fmt::Display for StorageError {
@@ -44,6 +68,20 @@ impl std::fmt::Display for StorageError {
                     "stored value in `{column}` cannot be read back: {detail}"
                 )
             }
+            StorageError::UnscopedEvent => write!(
+                f,
+                "event names neither a project_id nor a session_id, so it belongs to no hash chain"
+            ),
+            StorageError::Canonical(e) => write!(f, "{e}"),
+            StorageError::SequenceConflict {
+                session_id,
+                channel,
+                sequence,
+            } => write!(
+                f,
+                "sequence {sequence} on channel `{channel}` for session `{session_id}` is already taken; \
+                 (session_id, channel, sequence) is unique"
+            ),
         }
     }
 }
@@ -139,6 +177,31 @@ pub struct ProjectRecord {
 
 pub struct Storage {
     conn: Connection,
+}
+
+/// An `events` row to append, with its chain link computed here rather than supplied.
+///
+/// `prev_hash` and `event_hash` are deliberately absent: they are derived, not authored. A caller that could
+/// pass them could persist a link that does not belong to its chain, which is exactly the corruption DEC-034
+/// exists to detect - and it would be indistinguishable from a genuine edit after the fact.
+///
+/// `sequence` is required, not optional. DEC-034 orders a chain by `sequence`, so an event with no sequence
+/// has no position in one. The column is nullable, and [`Storage::verify_event_chain`] reports a null there
+/// rather than guessing, but nothing this crate writes can create one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewEvent {
+    pub event_id: String,
+    /// The project whose chain this event extends. `None` chains by `session_id` instead.
+    pub project_id: Option<String>,
+    pub session_id: Option<String>,
+    pub event_type: String,
+    pub sequence: i64,
+    pub correlation_id: Option<String>,
+    pub causation_id: Option<String>,
+    pub epoch: Option<i64>,
+    /// JSON text, hashed verbatim. See `chain::EventHashFields::payload_json` for why it is not re-encoded.
+    pub payload_json: String,
+    pub created_at: String,
 }
 
 /// A blast radius, as `council_mode_selections.inputs_json` records it.
@@ -365,6 +428,76 @@ impl RecoveryReport {
     }
 }
 
+/// Append `new` to its chain inside `tx`, computing the link from the chain's current tail.
+///
+/// A free function rather than a method because it takes the caller's transaction. `create_project` and the
+/// bus's outbox write both need the event to commit with their own state change, and neither can borrow the
+/// `Connection` again while its transaction is open.
+fn append_event_in(tx: &rusqlite::Transaction<'_>, new: &NewEvent) -> Result<()> {
+    let scope = ChainScope::of(new.project_id.as_deref(), new.session_id.as_deref())?;
+    let prev_hash = chain_tail(tx, &scope)?;
+    let event_hash = chain::event_hash(&EventHashFields {
+        prev_hash: &prev_hash,
+        event_id: &new.event_id,
+        project_id: new.project_id.as_deref(),
+        session_id: new.session_id.as_deref(),
+        event_type: &new.event_type,
+        sequence: Some(new.sequence),
+        correlation_id: new.correlation_id.as_deref(),
+        causation_id: new.causation_id.as_deref(),
+        epoch: new.epoch,
+        payload_json: &new.payload_json,
+        created_at: &new.created_at,
+    })?;
+
+    tx.execute(
+        "INSERT INTO events (event_id, project_id, session_id, event_type, sequence, correlation_id,
+                             causation_id, epoch, payload_json, prev_hash, event_hash, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        rusqlite::params![
+            new.event_id,
+            new.project_id,
+            new.session_id,
+            new.event_type,
+            new.sequence,
+            new.correlation_id,
+            new.causation_id,
+            new.epoch,
+            new.payload_json,
+            prev_hash,
+            event_hash,
+            new.created_at,
+        ],
+    )
+    .map_err(StorageError::Db)?;
+    Ok(())
+}
+
+/// The `event_hash` of the last positioned event in `scope`'s chain, or the genesis hash when it is empty.
+///
+/// `sequence IS NOT NULL` matches the walk in `chain::verify`: an event with no sequence has no position in an
+/// ordered chain, so it cannot be a predecessor. Ordering by `sequence` with `rowid` as the tiebreaker is the
+/// same order DEC-034 defines, so the link this returns is the one verification will expect.
+fn chain_tail(tx: &rusqlite::Transaction<'_>, scope: &ChainScope) -> Result<String> {
+    let sql = match scope {
+        ChainScope::Project(_) => {
+            "SELECT event_hash FROM events WHERE project_id = ?1 AND sequence IS NOT NULL
+             ORDER BY sequence DESC, rowid DESC LIMIT 1"
+        }
+        // `project_id IS NULL` is not redundant with the scope: without it, a session chain would inherit the
+        // tail of a project chain whenever the two identifiers happened to be spelled the same.
+        ChainScope::Session(_) => {
+            "SELECT event_hash FROM events WHERE project_id IS NULL AND session_id = ?1
+             AND sequence IS NOT NULL ORDER BY sequence DESC, rowid DESC LIMIT 1"
+        }
+    };
+    let tail: Option<String> = tx
+        .query_row(sql, rusqlite::params![scope.value()], |r| r.get(0))
+        .optional()
+        .map_err(StorageError::Db)?;
+    Ok(tail.unwrap_or_else(|| GENESIS_PREV_HASH.to_string()))
+}
+
 impl Storage {
     /// Open the database and apply the canonical schema.
     ///
@@ -442,25 +575,27 @@ impl Storage {
         )
         .map_err(StorageError::Db)?;
 
-        tx.execute(
-            "INSERT INTO events (event_id, project_id, event_type, sequence, epoch, payload_json, prev_hash, event_hash, created_at)
-             VALUES (?1, ?2, 'PROJECT_CREATED', 1, 0, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
-                new.event_id,
-                new.project_id,
-                format!(
+        // The genesis event of the project's chain. It goes through the same chain writer every later event
+        // uses, so the first link is hashed by DEC-034's rule rather than carrying a placeholder: a sentinel
+        // here would leave the one link no later event can repair permanently unverifiable.
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: new.event_id.clone(),
+                project_id: Some(new.project_id.clone()),
+                session_id: None,
+                event_type: "PROJECT_CREATED".to_string(),
+                sequence: 1,
+                correlation_id: None,
+                causation_id: None,
+                epoch: Some(0),
+                payload_json: format!(
                     r#"{{"brief_id":"{}","epoch":0,"local_path":"{}"}}"#,
                     new.brief_id, new.local_path
                 ),
-                // events.prev_hash is NOT NULL, so the genesis event carries a sentinel rather than NULL. The
-                // per-project SHA-256 chain of DEC-034 begins properly when that lands; this slice records a
-                // deterministic placeholder rather than pretending the chain is already enforced.
-                "genesis",
-                format!("genesis:{}", new.event_id),
-                new.created_at,
-            ],
-        )
-        .map_err(StorageError::Db)?;
+                created_at: new.created_at.clone(),
+            },
+        )?;
 
         tx.commit().map_err(StorageError::Db)?;
 
@@ -471,6 +606,56 @@ impl Storage {
             phase: "DISCOVERY".to_string(),
             status: "ACTIVE".to_string(),
         })
+    }
+
+    /// Append one event to its chain, in its own transaction.
+    ///
+    /// The chain link is computed here from the current tail, so the caller supplies only the event's own
+    /// fields. See [`append_event_in`] for the form that participates in a caller's transaction, which is what
+    /// the transactional outbox requires: an event that is not committed with the state change it records is
+    /// not a record of that change.
+    pub fn append_event(&mut self, new: &NewEvent) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        append_event_in(&tx, new)?;
+        tx.commit().map_err(StorageError::Db)
+    }
+
+    /// Recompute every event chain and report where it first stops verifying (DEC-034).
+    ///
+    /// This reads the whole `events` table, because that is what "recompute the chain from persisted rows"
+    /// means. It reports; it never repairs.
+    pub fn verify_event_chain(&self) -> Result<ChainVerification> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT rowid, event_id, project_id, session_id, event_type, sequence,
+                        correlation_id, causation_id, epoch, payload_json, created_at, prev_hash, event_hash
+                 FROM events ORDER BY rowid",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(ChainEvent {
+                    rowid: r.get(0)?,
+                    event_id: r.get(1)?,
+                    project_id: r.get(2)?,
+                    session_id: r.get(3)?,
+                    event_type: r.get(4)?,
+                    sequence: r.get(5)?,
+                    correlation_id: r.get(6)?,
+                    causation_id: r.get(7)?,
+                    epoch: r.get(8)?,
+                    payload_json: r.get(9)?,
+                    created_at: r.get(10)?,
+                    prev_hash: r.get(11)?,
+                    event_hash: r.get(12)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        let events = rows
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)?;
+        chain::verify(&events)
     }
 
     /// Authoritative project readback, including the current brief.
@@ -651,6 +836,34 @@ impl Storage {
                 kind: "ORPHANED_PROJECT_ROWS",
                 detail: format!(
                     "{orphans} brief or epoch row(s) reference a project that does not exist"
+                ),
+            });
+        }
+
+        // Durable history is a recovery question: "has the record been altered?" is exactly what a startup
+        // scan should answer, and the chain is the only thing that can answer it. Reported here rather than
+        // left to a separate call so a clean recovery report means history verified too.
+        let chain = self.verify_event_chain()?;
+        if let Some(first) = chain.first_divergence() {
+            let position = match first.sequence {
+                Some(sequence) => format!("sequence {sequence}"),
+                None => "no sequence".to_string(),
+            };
+            let hashes = match (&first.expected_hash, &first.stored_hash) {
+                (Some(expected), Some(stored)) => {
+                    format!("; chain requires {expected}, row carries {stored}")
+                }
+                _ => String::new(),
+            };
+            issues.push(RecoveryIssue {
+                kind: "EVENT_CHAIN_BROKEN",
+                detail: format!(
+                    "event {} ({position}) fails {}: {} of {} event(s) across {} chain(s) did not verify{hashes}",
+                    first.event_id,
+                    first.kind.code(),
+                    chain.divergences.len(),
+                    chain.events,
+                    chain.chains,
                 ),
             });
         }

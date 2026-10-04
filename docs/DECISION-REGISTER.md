@@ -181,6 +181,43 @@ Classification: ADDITIVE. Date: 2026-10-03. Adds one decision; supersedes none. 
 | Tests affected | Chain fixtures recorded in `MEMORY-CONTEXT.md`: a valid chain verifies; a mutated field breaks verification at that event and every later event; a deleted event breaks the chain at its successor; a reordered pair breaks the chain; two projects chain independently; events with a null project_id chain by session. |
 | Known limitation | A plain hash chain detects accidental corruption, partial edits, deletion and reordering. It does not detect a deliberate rewrite that recomputes every subsequent hash, because no key is involved. Keyed authentication would require a managed secret, which the security rules place outside ordinary configuration; that trade was declined for a single-user local application and is recorded here explicitly rather than left implied. |
 
+### DEC-034 implementation status, stated plainly
+
+DEC-034 declared the chain on 2026-10-03 and it was **not implemented**. `create_project` wrote
+`prev_hash = "genesis"` and `event_hash = "genesis:<event_id>"` — a deterministic placeholder that its own
+comment described as a placeholder, and whose genesis value contradicted the 64-zero value this record
+specifies. No SHA-256 existed anywhere in the workspace, and `SQLITE-DATA-ARCHITECTURE.md`'s required invariant
+"event_hash equals the recomputed chain hash" was checked by nothing. The defect was found while starting M2:
+`MCF-V2-IMPLEMENTATION-DESIGN.md` requires a domain transaction to write its state mutation, its immutable event
+and its outbound record atomically, so the bus cannot append a correctly chained event while the chain does not
+exist.
+
+Implemented 2026-10-05 as the prerequisite for M2, and added to M2's "SQLite event log" item. What exists now:
+`crates/storage/src/canonical.rs` implements the RFC 8785 JCS subset the declared field set contains and the
+SHA-256 over it; `crates/storage/src/chain.rs` implements the chain rule and its verification;
+`Storage::append_event` is the only way a chain link is written, so `prev_hash` and `event_hash` cannot be
+supplied by a caller; `create_project` routes its genesis event through that same writer; and `Storage::recover`
+reports a break as `EVENT_CHAIN_BROKEN`, because "has durable history been altered?" is a recovery question.
+
+Three points this record left open, and the reading taken:
+
+- **`payload_json` is hashed as a JSON string containing the stored text**, not re-parsed and re-serialized. The
+  stored text is the authoritative value, and re-serializing would make an intact row's hash depend on a JSON
+  writer's key order and number formatting, so two readers could disagree about a row neither had altered.
+- **A chain is ordered by `sequence`, with `rowid` breaking ties.** `SQLITE-DATA-ARCHITECTURE.md` and
+  `MEMORY-CONTEXT.md` both say "ordered by `sequence`", and `events` declares neither uniqueness nor `NOT NULL`
+  on that column, so ties are possible and a row may carry none. A row with no `sequence` has no declared
+  position in an ordered chain, so verification reports it (`EVENT_UNSEQUENCED`) rather than placing it. Because
+  the order is derived rather than stored, physically reordering rows is not corruption at all; the detectable
+  form of "reordering" is a changed `sequence`.
+- **Each link is compared against the recomputed hash of its predecessor**, not the predecessor's stored
+  `event_hash`. This is what makes corruption cascade, and therefore what makes this record's own claim — that a
+  mutation breaks "that event and every later event" — true rather than approximately true.
+
+Reconciliation for an existing database: none is required, because DEC-034 records that no Mayasaba database has
+been created. A database created before this change would now report its genesis link as `EVENT_CHAIN_BROKEN`
+rather than being silently accepted, which is the intended behaviour for a link that does not satisfy the rule.
+
 ## DEC-035 workspace admission record
 
 Classification: ADDITIVE. Date: 2026-10-03. Adds one decision; supersedes none. HARD_LOCK.

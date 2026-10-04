@@ -87,8 +87,14 @@ Chain rules:
 - the first event of a project chain uses a genesis `prev_hash` of 64 zero characters;
 - `event_hash` is the SHA-256 of the JCS-canonicalized input `{prev_hash, event_id, project_id, session_id, event_type, sequence, correlation_id, causation_id, epoch, payload_json, created_at}`;
 - `prev_hash` equals the `event_hash` of the immediately preceding event in the same project chain, ordered by `sequence`;
+- `sequence` is not unique or `NOT NULL` in `events`, so ties are broken by `rowid` (SQLite's insertion order) and a row carrying no `sequence` is reported as unpositioned rather than placed in the chain;
+- each link is compared against the **recomputed** hash of its predecessor, so a mutated event breaks its own link and every later link rather than only its own;
+- `payload_json` is hashed as a JSON string containing the stored text, verbatim, rather than re-parsed and re-serialized;
 - events whose `project_id` is null form their own chain, keyed by `session_id`;
 - verification recomputes the chain from persisted rows and fails at the first mismatch, naming the divergent `event_id` and `sequence`.
+
+The chain is written and checked by `crates/storage`: `append_event` is the only writer of a chain link, so
+`prev_hash` and `event_hash` cannot be supplied by a caller, and `recover` reports a break as `EVENT_CHAIN_BROKEN`.
 
 Limitation: a plain hash chain detects accidental corruption, partial edits, deletion and reordering. It does not detect a deliberate rewrite that recomputes every subsequent hash, because no key is involved. Adding keyed authentication would require a managed secret, which the security rules place outside ordinary configuration; that trade was declined for a single-user local application and is recorded in DEC-034.
 

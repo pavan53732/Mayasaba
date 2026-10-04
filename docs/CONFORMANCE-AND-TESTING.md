@@ -62,6 +62,30 @@ Must simulate:
 - epoch change
 - partial council participation
 
+## Durable event chain tests (DEC-034)
+
+The chain is only worth having if it is recomputed from what was actually persisted, so these tests read the
+stored rows rather than trusting the writer's return value. `crates/storage/tests/event_chain.rs` runs them
+through a real database; `crates/storage/src/chain.rs` runs the same rule against synthetic rows.
+
+Must prove:
+
+- a project's genesis link names the 64-zero `prev_hash`, and its stored `event_hash` equals the hash the
+  declared rule recomputes from the stored row — not merely a value written alongside it;
+- each appended event names the previous link's hash, so the chain is a chain and not a run of independent
+  hashes;
+- a mutated field breaks that event's link and every later link, because each link is compared against the
+  recomputed hash of its predecessor;
+- a deleted event breaks the chain at its successor;
+- a changed `sequence` breaks the chain; a physically reordered row does not, because the chain order is
+  derived from `sequence` rather than from storage order;
+- two projects chain independently, and a project and a session that share an identifier stay separate chains;
+- an event carrying no `sequence` is reported as unpositioned rather than silently placed in the chain;
+- an event naming neither a project nor a session is refused and persists nothing;
+- a startup recovery scan reports a broken chain as `EVENT_CHAIN_BROKEN`, so a tampered database cannot report
+  itself clean;
+- a failed append leaves the chain exactly as it was.
+
 ## Project intent and user-contribution tests
 
 Must prove:

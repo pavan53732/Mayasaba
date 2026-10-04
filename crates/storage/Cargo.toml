@@ -6,3 +6,5 @@ edition.workspace = true
 [dependencies]
 mayasaba-protocol = { path = "../protocol" }
 rusqlite.workspace = true
+# SHA-256 over the RFC 8785 JCS canonical form (DEC-025, DEC-034). See the workspace manifest's comment.
+sha2.workspace = true
