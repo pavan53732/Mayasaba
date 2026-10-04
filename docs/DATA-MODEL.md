@@ -19,6 +19,12 @@ AgentSession
 AgentCapability
 CouncilSession
 CouncilRound
+CouncilModeSelection
+CouncilRoundRole
+CouncilClaimGrade
+CouncilBudgetLedger
+CouncilDecisionOutcome
+CouncilOutcomeAgentLink
 Message
 MessageAttempt
 MessageReceipt

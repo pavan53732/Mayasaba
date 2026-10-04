@@ -5,6 +5,7 @@
   "runtime_probe_authoritative": true,
   "agents": {
     "HERMES_AGENT": {
+      "lineage_group": "HERMES",
       "executable": "hermes",
       "launch": [
         "chat",
@@ -70,6 +71,7 @@
       "output_contract": "chat -q --format stream-json emits newline-delimited JSON on stdout (record types include system/init, text, tool_use, tool_result and a terminal result carrying exit_code). Diagnostics and the session-id line go to stderr. The adapter must reconcile the terminal result exit_code with observed process state and must not infer session identity from stdout alone."
     },
     "KILO_CODE": {
+      "lineage_group": "OPENCODE_FORK",
       "executable": "kilo",
       "launch": [
         "run",
@@ -184,6 +186,7 @@
       "output_contract": "run --format json emits a raw newline-delimited JSON event stream (observed types include step_start, step_finish, text, tool_use, reasoning and error). There is no session-level start/end record, and tool call plus result are fused into a single tool_use record. The adapter must normalize the event sequence, must not assume a single result object, and must not treat the process exit code as the sole completion signal."
     },
     "OPEN_CODE": {
+      "lineage_group": "OPENCODE_FORK",
       "executable": "opencode",
       "launch": [
         "run",

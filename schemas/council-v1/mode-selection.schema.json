@@ -1,0 +1,40 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://mayasaba.local/schemas/council-v1/mode-selection.schema.json",
+  "title":"Mayasaba Council Mode Selection",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["selection_id","project_id","decision_class","mode","inputs","reasons","selector_version","override_source","created_at"],
+  "properties":{
+    "selection_id":{"type":"string","format":"uuid"},
+    "project_id":{"type":"string","format":"uuid"},
+    "round_id":{"type":["string","null"],"format":"uuid"},
+    "decision_class":{"enum":["ARCHITECTURE","STACK_TECHNOLOGY","IRREVERSIBLE","SECURITY","DATA_LOSS","ROUTINE"]},
+    "mode":{"enum":["SOLO","REVIEW","FULL"]},
+    "inputs":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["blast_radius","prior_validation_failures","open_disputes"],
+      "properties":{
+        "blast_radius":{
+          "type":"object",
+          "additionalProperties":false,
+          "required":["scope_roots","affected_file_count"],
+          "properties":{
+            "scope_roots":{"type":"array","minItems":1,"items":{"type":"string"}},
+            "affected_file_count":{"type":"integer","minimum":0},
+            "crosses_workspace_boundary":{"type":"boolean"}
+          }
+        },
+        "prior_validation_failures":{"type":"integer","minimum":0},
+        "open_disputes":{"type":"integer","minimum":0}
+      }
+    },
+    "reasons":{"type":"array","minItems":1,"items":{"type":"string"}},
+    "selector_version":{"type":"string","minLength":1},
+    "override_source":{"enum":["NONE","USER"]},
+    "supersedes_selection_id":{"type":["string","null"],"format":"uuid"},
+    "created_at":{"type":"string","format":"date-time"}
+  },
+  "description":"A controller-produced record, one per material decision point, including SOLO, which opens no round. `mode` is computed from `inputs` and the configured thresholds; it is never supplied by an agent. `reasons` lists every input that contributed. `override_source` is USER only when an explicit user override replaced the computed mode, and the override may raise or lower rigor because the user is the authority (DEC-013); it is recorded rather than refused, and it is never silent. A material decision point is one whose `decision_class` is not ROUTINE. Escalation upward between rounds appends a superseding record, so `supersedes_selection_id` forms an append-only chain."
+}

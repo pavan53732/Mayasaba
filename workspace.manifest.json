@@ -191,6 +191,9 @@
     "schemas/council-v1/question.schema.json",
     "schemas/council-v1/answer.schema.json",
     "schemas/council-v1/escalation.schema.json",
+    "schemas/council-v1/mode-selection.schema.json",
+    "schemas/council-v1/council-policies.json",
+    "schemas/council-v1/decision-outcome.schema.json",
     "schemas/workspace-v1/admission.schema.json"
   ],
   "rule": "This graph and the service/bridge/schema mappings are authoritative until implementation manifests exist; implementation Cargo/npm/Tauri manifests and generated bridge types must conform to them.",

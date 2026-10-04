@@ -654,3 +654,110 @@ CREATE INDEX IF NOT EXISTS idx_paths_project ON project_paths(project_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_message ON message_receipts(message_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_state ON message_receipts(project_id, receipt_state);
 CREATE INDEX IF NOT EXISTS idx_contributions_project ON user_contributions(project_id, created_at);
+
+-- --- Council decision-quality records (DEC-052).
+-- New tables only. crates/storage applies this file with CREATE TABLE IF NOT EXISTS on every open and has no
+-- migration runner, so a database created from an earlier revision gains these tables on its next open and no
+-- existing column is ever altered. These are the first CHECK constraints in this file: the mode, role, grade,
+-- budget-kind, outcome-status and source vocabularies they close were previously free text or absent.
+-- `council_decision_outcomes` is also the first table to reference `decisions(decision_id)`.
+
+CREATE TABLE IF NOT EXISTS council_mode_selections (
+  selection_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  round_id TEXT,
+  decision_class TEXT NOT NULL CHECK(decision_class IN ('ARCHITECTURE','STACK_TECHNOLOGY','IRREVERSIBLE','SECURITY','DATA_LOSS','ROUTINE')),
+  mode TEXT NOT NULL CHECK(mode IN ('SOLO','REVIEW','FULL')),
+  inputs_json TEXT NOT NULL,
+  reasons_json TEXT NOT NULL,
+  selector_version TEXT NOT NULL,
+  override_source TEXT NOT NULL CHECK(override_source IN ('NONE','USER')),
+  supersedes_selection_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id),
+  FOREIGN KEY(supersedes_selection_id) REFERENCES council_mode_selections(selection_id)
+);
+
+-- A mode selection is recorded for every material decision point, including SOLO, which opens no round; that is
+-- why round_id is nullable. Escalation appends a superseding row rather than updating the previous one.
+CREATE INDEX IF NOT EXISTS idx_council_mode_project ON council_mode_selections(project_id, created_at);
+
+CREATE TABLE IF NOT EXISTS council_round_roles (
+  round_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('PROPOSER','SKEPTIC','VERIFIER')),
+  assigned_reason TEXT NOT NULL,
+  assigned_at TEXT NOT NULL,
+  PRIMARY KEY(round_id, agent_id, role),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id),
+  FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS council_claim_grades (
+  claim_id TEXT PRIMARY KEY,
+  position_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  grade TEXT NOT NULL CHECK(grade IN ('ASSUMPTION','CITED','VERIFIED')),
+  load_bearing INTEGER NOT NULL CHECK(load_bearing IN (0,1)),
+  basis_json TEXT NOT NULL,
+  computed_at TEXT NOT NULL,
+  FOREIGN KEY(position_id) REFERENCES council_positions(position_id),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_council_claim_grade_position ON council_claim_grades(position_id);
+
+CREATE TABLE IF NOT EXISTS council_budget_ledger (
+  entry_id TEXT PRIMARY KEY,
+  council_session_id TEXT,
+  round_id TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('ROUND_OPENED','PAUSED','RESUMED','SPIKE_EXECUTED','TOKENS_REPORTED','BUDGET_EXHAUSTED','SEALED')),
+  amount INTEGER,
+  availability TEXT NOT NULL CHECK(availability IN ('REPORTED','UNAVAILABLE')),
+  detail_json TEXT,
+  recorded_at TEXT NOT NULL,
+  FOREIGN KEY(council_session_id) REFERENCES council_sessions(council_session_id),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id)
+);
+
+-- Append-only. A paused interval is a PAUSED row and its matching RESUMED row, so wall-clock can exclude the
+-- interval without ever rewriting an entry. `availability` is UNAVAILABLE where an adapter reports no token
+-- usage: the amount is then NULL and no number is invented.
+CREATE INDEX IF NOT EXISTS idx_council_budget_round ON council_budget_ledger(round_id, recorded_at);
+
+CREATE TABLE IF NOT EXISTS council_decision_outcomes (
+  outcome_record_id TEXT PRIMARY KEY,
+  decision_id TEXT NOT NULL,
+  council_session_id TEXT,
+  round_id TEXT,
+  mode TEXT NOT NULL CHECK(mode IN ('SOLO','REVIEW','FULL')),
+  decision_class TEXT NOT NULL CHECK(decision_class IN ('ARCHITECTURE','STACK_TECHNOLOGY','IRREVERSIBLE','SECURITY','DATA_LOSS','ROUTINE')),
+  status TEXT NOT NULL CHECK(status IN ('HELD','AMENDED','REVERSED','UNRESOLVED')),
+  validation_evidence_id TEXT,
+  source TEXT NOT NULL CHECK(source IN ('VALIDATION_RESULT','REOPEN_DECISION','USER_SUPERSESSION')),
+  supersedes_outcome_id TEXT,
+  recorded_at TEXT NOT NULL,
+  CHECK(status <> 'HELD' OR validation_evidence_id IS NOT NULL),
+  FOREIGN KEY(decision_id) REFERENCES decisions(decision_id),
+  FOREIGN KEY(council_session_id) REFERENCES council_sessions(council_session_id),
+  FOREIGN KEY(round_id) REFERENCES council_rounds(round_id),
+  FOREIGN KEY(validation_evidence_id) REFERENCES evidence(evidence_id),
+  FOREIGN KEY(supersedes_outcome_id) REFERENCES council_decision_outcomes(outcome_record_id)
+);
+
+-- HELD is the only status that asserts the decision survived, so the table requires evidence for it and for
+-- nothing else. Supporting evidence is referenced directly rather than through evidence_links, which links
+-- evidence to artifacts only. Append-only: a reversal or amendment supersedes rather than updates.
+CREATE INDEX IF NOT EXISTS idx_council_outcome_decision ON council_decision_outcomes(decision_id, recorded_at);
+
+CREATE TABLE IF NOT EXISTS council_outcome_agent_links (
+  outcome_record_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  position_id TEXT,
+  stance TEXT NOT NULL,
+  PRIMARY KEY(outcome_record_id, agent_id),
+  FOREIGN KEY(outcome_record_id) REFERENCES council_decision_outcomes(outcome_record_id),
+  FOREIGN KEY(agent_id) REFERENCES agents(agent_id),
+  FOREIGN KEY(position_id) REFERENCES council_positions(position_id)
+);

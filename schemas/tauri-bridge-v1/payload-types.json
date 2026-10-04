@@ -58,6 +58,35 @@
         "status":{"type":"string"},
         "created_at":{"type":"string","description":"RFC3339 UTC."}
       }
+    },
+    "get_council_roundRequest":{
+      "title":"Read one council round together with its decision-quality records",
+      "description":"The existing query, extended rather than duplicated: DEC-052 requires outcome data to be observable read-only, and a second query would have been a second read surface for one concept. The response carries the controller-computed records (mode selection, round roles, claim grades, budget state) and the append-only outcome records. All of it is informational: no field here may influence routing, thresholds, mode selection or authority.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["round_id"],
+      "properties":{
+        "round_id":{"type":"string","minLength":1},
+        "include_outcomes":{"type":"boolean","description":"Include the decision-outcome records for decisions taken from this round. Suppressing them is a presentation choice, never a state change, because the record is append-only."}
+      }
+    },
+    "get_council_roundResponse":{
+      "title":"A council round with its controller-computed quality records",
+      "description":"Every quality record here is computed or assigned by the controller and persisted by CouncilService. None of it is agent-supplied, and none of it grants authority.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["round_id","project_id","state","mode_selection","round_roles","claim_grades","budget","outcomes","offline_agent_ids"],
+      "properties":{
+        "round_id":{"type":"string","minLength":1},
+        "project_id":{"type":"string","minLength":1},
+        "state":{"enum":["OPEN","RESPONSES_COLLECTING","CRITIQUE","REBUTTAL","REVISION","DISAGREEMENT_REVIEW","CLOSING","SEALED"]},
+        "mode_selection":{"type":["object","null"],"description":"The ModeSelection record for this decision point. Null when the decision point is non-material and no record was required. A SOLO decision point has a record and no round, so it is reported rather than omitted."},
+        "round_roles":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["agent_id","role","assigned_reason"],"properties":{"agent_id":{"type":"string"},"role":{"enum":["PROPOSER","SKEPTIC","VERIFIER"]},"assigned_reason":{"type":"string","description":"Why this agent holds this role, including LINEAGE_UNAVOIDABLE when the skeptic could not be drawn from a different lineage group than the leading proposal's author."}}}},
+        "claim_grades":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["claim_id","position_id","grade","load_bearing"],"properties":{"claim_id":{"type":"string"},"position_id":{"type":"string"},"grade":{"enum":["ASSUMPTION","CITED","VERIFIED"]},"load_bearing":{"type":"boolean"}}}},
+        "budget":{"type":"object","additionalProperties":false,"required":["tokens_availability"],"description":"Derived from council_budget_ledger. Wall-clock excludes paused intervals and records them separately; a token figure whose adapter reported nothing is UNAVAILABLE rather than estimated, and tokens_used is then null.","properties":{"tokens_availability":{"enum":["REPORTED","UNAVAILABLE"]},"tokens_used":{"type":["integer","null"]},"wall_clock_seconds_excluding_pauses":{"type":["integer","null"]},"paused_seconds":{"type":["integer","null"]},"spikes_used":{"type":["integer","null"]},"exhausted":{"type":"boolean"},"exhausted_budget":{"type":["string","null"]}}},
+        "outcomes":{"type":"array","description":"Append-only, derived only from controller facts: a validation result, the reopen_decision command, or decision supersession. HELD carries a validation evidence reference.","items":{"type":"object","additionalProperties":false,"required":["outcome_record_id","decision_id","status","source","recorded_at"],"properties":{"outcome_record_id":{"type":"string"},"decision_id":{"type":"string"},"status":{"enum":["HELD","AMENDED","REVERSED","UNRESOLVED"]},"source":{"enum":["VALIDATION_RESULT","REOPEN_DECISION","USER_SUPERSESSION"]},"validation_evidence_id":{"type":["string","null"]},"recorded_at":{"type":"string"}}}},
+        "offline_agent_ids":{"type":"array","items":{"type":"string"},"description":"Participants currently paused as offline or dropped. A paused interval is excluded from the wall-clock budget and recorded; silence is never agreement."}
+      }
     }
   },
   "$defs":{

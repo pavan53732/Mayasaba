@@ -587,10 +587,25 @@ for(const name of canonicalAgents){
 // pass, so the map names the control even when nothing else in the file would reveal its absence.
 const FORK_AGENTS=["KILO_CODE","OPEN_CODE"];
 const REQUIRED_CONTROLS={
-  HERMES_AGENT:["executable","launch","resume","version","transport","permission_enforcement","output_contract"],
-  KILO_CODE:["executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection"],
-  OPEN_CODE:["executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection","version_gate","required_environment_by_line","required_flags_by_line","determinism_flags_by_line","forbidden_commands_by_line","scope_hazards_2x","remote_forbidden_subcommands"],
+  HERMES_AGENT:["lineage_group","executable","launch","resume","version","transport","permission_enforcement","output_contract"],
+  KILO_CODE:["lineage_group","executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection"],
+  OPEN_CODE:["lineage_group","executable","launch","resume","version","transport","permission_enforcement","output_contract","required_environment","required_config","required_config_injection","version_gate","required_environment_by_line","required_flags_by_line","determinism_flags_by_line","forbidden_commands_by_line","scope_hazards_2x","remote_forbidden_subcommands"],
 };
+// --- Lineage partition. Council corroboration counts distinct LINEAGE GROUPS rather than agents, because Kilo
+// Code CLI is a fork of OpenCode CLI and their agreement is not independent evidence (ARCHITECTURE.md section
+// 2, COUNCIL-ENGINE.md Purpose). That fact lived only in prose, so a corroboration rule could not be computed
+// from the contract and a hand-written table in code would have been the drift this repository keeps removing.
+// `lineage_group` is therefore a required adapter control, and the partition is pinned: the fork pair share a
+// group and Hermes stands alone, so the structure the prose describes is the structure the contract carries.
+// Pinning the group NAMES also means a rename cannot silently split or merge a lineage.
+const CANONICAL_LINEAGES={HERMES_AGENT:"HERMES",KILO_CODE:"OPENCODE_FORK",OPEN_CODE:"OPENCODE_FORK"};
+for(const [name,want] of Object.entries(CANONICAL_LINEAGES)){
+  const got=contract.agents[name]?.lineage_group;
+  if(got!==want) fail(`Contract ${name}.lineage_group is ${JSON.stringify(got)}, expected ${JSON.stringify(want)} from the documented lineage (ARCHITECTURE.md section 2: Kilo Code CLI is a fork of OpenCode CLI)`);
+}
+const lineageGroups=new Set(Object.values(CANONICAL_LINEAGES));
+if(lineageGroups.size<2) fail(`The agent set declares ${lineageGroups.size} lineage group(s); council corroboration requires at least 2, so either the contract or the CORROBORATION rule is wrong`);
+if(CANONICAL_LINEAGES.KILO_CODE===CANONICAL_LINEAGES.HERMES_AGENT) fail(`The fork pair and the independent agent must not share a lineage group; corroboration between them would be counted as independent`);
 for(const [name,def] of Object.entries(contract.agents)){
   const required=REQUIRED_CONTROLS[name];
   if(!required) fail(`Contract agent ${name} has no REQUIRED_CONTROLS entry; add one when the agent set changes`);
@@ -703,7 +718,13 @@ const coreBlock=dataModel.split(/^##\s+Core entities\s*$/m)[1]?.split(/^##\s+/m)
 const coreEntities=coreBlock.split(/\r?\n/).map(l=>l.trim()).filter(l=>/^[A-Z][A-Za-z]*$/.test(l));
 if(coreEntities.length<10) fail(`DATA-MODEL.md Core entities block parsed to ${coreEntities.length} entities; the document structure changed and this check can no longer read it`);
 const sqlText=readText("schemas/sqlite-v1/schema.sql");
-const sqlTables=new Set([...sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)/g)].map(m=>m[1]));
+// Extracted with `--` line comments removed. The extraction below is a regex over raw text, so a comment that
+// merely MENTIONS `CREATE TABLE IF NOT EXISTS` was read as a table definition: a header comment beginning
+// "applies this file with CREATE TABLE IF NOT EXISTS on every open" produced a phantom table named `on`, and
+// the check then demanded it be documented. Comments are not schema, so they are stripped before any
+// structural extraction. Reproduced before this fix and re-verified after it.
+const sqlCode=sqlText.replace(/--[^\n]*/g,"");
+const sqlTables=new Set([...sqlCode.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)/g)].map(m=>m[1]));
 const snake=(n)=>n.replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase();
 // English pluralisation is irregular and a naive rule produces false positives, which is the same reason
 // prose regexes are not trusted above. One general rule plus an explicit override for words it cannot
@@ -1057,6 +1078,75 @@ if(recoveryProblems.length) fail(recoveryProblems.length+" recovery vocabulary p
 const undeclaredRecoveryEvents=(recoveryEventList??[]).filter(e=>!events.includes(e)&&!bridge.properties.event_type.enum.includes(e));
 if(undeclaredRecoveryEvents.length) console.log(`Recovery events declared in neither the MCF event enum nor the Tauri UI event enum (reported, not blocking; registering them is a recovery-subsystem decision): ${undeclaredRecoveryEvents.join(", ")}`);
 
+// --- Council decision-quality contracts (DEC-052) against each other and against the DDL.
+// Three vocabularies describe the same closed sets after this decision: the JSON Schemas under
+// schemas/council-v1/, the SQLite CHECK constraints on the six new tables, and the mode plan in
+// council-policies.json. Before these checks they were three independent lists that happened to agree -
+// precisely the arrangement that let other vocabularies in this repository drift apart unnoticed. Each is now
+// compared to a single expected set, and the DDL's CHECK text is read back out of schema.sql rather than
+// assumed, so a contract change that forgets the table fails here.
+const modeSelectionSchema=read("schemas/council-v1/mode-selection.schema.json");
+const decisionOutcomeSchema=read("schemas/council-v1/decision-outcome.schema.json");
+const councilPolicies=read("schemas/council-v1/council-policies.json");
+const COUNCIL_MODES=["SOLO","REVIEW","FULL"];
+const COUNCIL_DECISION_CLASSES=["ARCHITECTURE","STACK_TECHNOLOGY","IRREVERSIBLE","SECURITY","DATA_LOSS","ROUTINE"];
+const COUNCIL_OUTCOME_STATUSES=["HELD","AMENDED","REVERSED","UNRESOLVED"];
+const COUNCIL_OUTCOME_SOURCES=["VALIDATION_RESULT","REOPEN_DECISION","USER_SUPERSESSION"];
+const COUNCIL_ROLES=["PROPOSER","SKEPTIC","VERIFIER"];
+const COUNCIL_GRADES=["ASSUMPTION","CITED","VERIFIED"];
+const councilProblems=[];
+// Named sameVocab, not sameSet: the agent-set check above already binds that name to a different predicate.
+const sameVocab=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&b.every(x=>a.includes(x));
+const expectEnum=(schema,at,expected,label)=>{
+  const got=at(schema);
+  if(!sameVocab(got,expected)) councilProblems.push(`${label} is ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+};
+expectEnum(modeSelectionSchema,s=>s.properties.mode.enum,COUNCIL_MODES,"mode-selection.schema.json mode");
+expectEnum(modeSelectionSchema,s=>s.properties.decision_class.enum,COUNCIL_DECISION_CLASSES,"mode-selection.schema.json decision_class");
+expectEnum(modeSelectionSchema,s=>s.properties.override_source.enum,["NONE","USER"],"mode-selection.schema.json override_source");
+expectEnum(decisionOutcomeSchema,s=>s.properties.mode.enum,COUNCIL_MODES,"decision-outcome.schema.json mode");
+expectEnum(decisionOutcomeSchema,s=>s.properties.decision_class.enum,COUNCIL_DECISION_CLASSES,"decision-outcome.schema.json decision_class");
+expectEnum(decisionOutcomeSchema,s=>s.properties.status.enum,COUNCIL_OUTCOME_STATUSES,"decision-outcome.schema.json status");
+expectEnum(decisionOutcomeSchema,s=>s.properties.source.enum,COUNCIL_OUTCOME_SOURCES,"decision-outcome.schema.json source");
+if(decisionOutcomeSchema.properties?.informational_only?.const!==true) councilProblems.push("decision-outcome.schema.json must pin informational_only to const true; outcome data must never become an authority");
+// The DDL's own vocabulary, parsed out of its CHECK clause. A missing clause is a failure, not a skip: free
+// text is what these columns were before, and the CHECK is the only thing that closes them at rest.
+const ddlVocab=(table,column)=>{
+  const block=sqlText.match(new RegExp("CREATE TABLE IF NOT EXISTS "+table+" \\(([\\s\\S]*?)\\n\\);","m"));
+  if(!block) return null;
+  const clause=block[1].match(new RegExp(column+" TEXT NOT NULL CHECK\\("+column+" IN \\(([^)]*)\\)\\)"));
+  return clause?[...clause[1].matchAll(/'([^']+)'/g)].map(m=>m[1]):null;
+};
+for(const [table,column,expected] of [
+  ["council_mode_selections","mode",COUNCIL_MODES],
+  ["council_mode_selections","decision_class",COUNCIL_DECISION_CLASSES],
+  ["council_mode_selections","override_source",["NONE","USER"]],
+  ["council_round_roles","role",COUNCIL_ROLES],
+  ["council_claim_grades","grade",COUNCIL_GRADES],
+  ["council_decision_outcomes","mode",COUNCIL_MODES],
+  ["council_decision_outcomes","decision_class",COUNCIL_DECISION_CLASSES],
+  ["council_decision_outcomes","status",COUNCIL_OUTCOME_STATUSES],
+  ["council_decision_outcomes","source",COUNCIL_OUTCOME_SOURCES],
+]){
+  const got=ddlVocab(table,column);
+  if(got===null){ councilProblems.push(`schema.sql ${table}.${column} has no CHECK(${column} IN (...)) constraint; an unconstrained column is a vocabulary nobody enforces`); continue; }
+  if(!sameVocab(got,expected)) councilProblems.push(`schema.sql ${table}.${column} permits ${JSON.stringify(got)}, but the contract says ${JSON.stringify(expected)}`);
+}
+if(!/CHECK\(status <> 'HELD' OR validation_evidence_id IS NOT NULL\)/.test(sqlText)) councilProblems.push("schema.sql council_decision_outcomes must require validation_evidence_id when status is HELD");
+if(!/FOREIGN KEY\(decision_id\) REFERENCES decisions\(decision_id\)/.test(sqlText)) councilProblems.push("schema.sql council_decision_outcomes must reference decisions(decision_id); no council record was linked to a decision before this one");
+if(!/FOREIGN KEY\(validation_evidence_id\) REFERENCES evidence\(evidence_id\)/.test(sqlText)) councilProblems.push("schema.sql council_decision_outcomes must reference evidence(evidence_id) directly, because evidence_links links evidence to artifacts only");
+// The policy artifact must agree with the schemas it governs.
+const planModes=Object.keys(councilPolicies.mode_plan??{}).filter(k=>k!=="rule");
+if(!sameVocab(planModes,COUNCIL_MODES)) councilProblems.push(`council-policies.json mode_plan names ${JSON.stringify(planModes)}, expected ${JSON.stringify(COUNCIL_MODES)}`);
+if(councilPolicies.mode_plan?.SOLO?.requires_round!==false) councilProblems.push("council-policies.json must declare that SOLO opens no round");
+if(typeof councilPolicies.mode_plan?.rule!=="string"||!/spine/.test(councilPolicies.mode_plan.rule)) councilProblems.push("council-policies.json must state that modes do not change the round's state path, because a phase-skipping mode would need a new off-spine edge");
+const minLineages=councilPolicies.evidence?.minimum_lineage_groups_for_corroboration;
+if(!(typeof minLineages==="number"&&minLineages>=2)) councilProblems.push(`council-policies.json minimum_lineage_groups_for_corroboration is ${JSON.stringify(minLineages)}; fewer than 2 lets one lineage corroborate itself`);
+if(councilPolicies.evidence?.block_convergence_on_load_bearing_assumption!==true) councilProblems.push("council-policies.json must block convergence on a load-bearing assumption");
+if(typeof councilPolicies.escalation!=="string"||councilPolicies.escalation.length===0) councilProblems.push("council-policies.json declares no escalation rule; exhaustion must produce an outcome rather than silent acceptance");
+if(typeof councilPolicies.reporting?.minimum_sample_for_percentage!=="number") councilProblems.push("council-policies.json declares no minimum sample for percentage reporting");
+if(councilProblems.length) fail(councilProblems.length+" council decision-quality contract problem(s):\n  - "+councilProblems.join("\n  - "));
+
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
 // crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -
@@ -1100,6 +1190,9 @@ const coverageVerified=new Set([
   "schemas/mcf-v2/identity.schema.json",
   "schemas/recovery-v1/recovery-events.json",
   "schemas/recovery-v1/recovery.schema.json",
+  "schemas/council-v1/mode-selection.schema.json",
+  "schemas/council-v1/council-policies.json",
+  "schemas/council-v1/decision-outcome.schema.json",
   "schemas/agent-adapter-v1/native-event.schema.json",
   "schemas/agent-adapter-v1/native-to-mcf.registry.json",
   "schemas/agent-adapter-v1/native-transport-contract.json",

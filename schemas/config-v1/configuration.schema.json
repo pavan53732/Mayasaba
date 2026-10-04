@@ -8,7 +8,53 @@
     "schema_version":{"const":"1.0.0"},
     "ui":{"type":"object"},"agents":{"type":"object"},"runtime":{"type":"object"},
     "communication":{"type":"object","properties":{"ack_timeout_seconds":{"type":"integer","minimum":1},"retry_limit":{"type":"integer","minimum":0},"backoff_base_ms":{"type":"integer","minimum":1}}},
-    "council":{"type":"object","properties":{"max_rounds":{"type":"integer","minimum":1,"default":5},"converge_on_fixpoint":{"type":"boolean","default":true}}},
+    "council":{
+      "type":"object",
+      "properties":{
+        "max_rounds":{"type":"integer","minimum":1,"default":5},
+        "converge_on_fixpoint":{"type":"boolean","default":true},
+        "role_rotation_seed":{"type":"string","minLength":1,"default":"council-v1"},
+        "mode_selection":{
+          "type":"object",
+          "properties":{
+            "blast_radius_file_count_review":{"type":"integer","minimum":0},
+            "blast_radius_file_count_full":{"type":"integer","minimum":0},
+            "prior_validation_failures_review":{"type":"integer","minimum":0},
+            "prior_validation_failures_full":{"type":"integer","minimum":0},
+            "open_disputes_review":{"type":"integer","minimum":0},
+            "open_disputes_full":{"type":"integer","minimum":0},
+            "routine_class_default_mode":{"enum":["SOLO","REVIEW"]},
+            "routine_class_max_mode":{"enum":["SOLO","REVIEW"]},
+            "high_risk_classes_default_mode":{"enum":["SOLO","REVIEW","FULL"]}
+          }
+        },
+        "budgets":{
+          "type":"object",
+          "properties":{
+            "max_rounds_per_council":{"type":"integer","minimum":1},
+            "max_wall_clock_seconds_per_round":{"type":"integer","minimum":1},
+            "max_wall_clock_seconds_per_council":{"type":"integer","minimum":1},
+            "max_tokens_per_round":{"type":"integer","minimum":1},
+            "max_tokens_per_council":{"type":"integer","minimum":1},
+            "max_spikes_per_round":{"type":"integer","minimum":0},
+            "max_spikes_per_council":{"type":"integer","minimum":0}
+          }
+        },
+        "evidence":{
+          "type":"object",
+          "properties":{
+            "block_convergence_on_load_bearing_assumption":{"type":"boolean","default":true},
+            "minimum_lineage_groups_for_corroboration":{"type":"integer","minimum":1,"default":2}
+          }
+        },
+        "reporting":{
+          "type":"object",
+          "properties":{
+            "minimum_sample_for_percentage":{"type":"integer","minimum":1,"default":5}
+          }
+        }
+      }
+    },
     "workspace":{"type":"object","properties":{"project_root_only":{"type":"boolean"},"require_git_isolation":{"type":"boolean"}}},
     "execution":{"type":"object","properties":{"default_timeout_seconds":{"type":"integer","minimum":1},"cancel_grace_seconds":{"type":"integer","minimum":0}}},
     "policy":{"type":"object"},"validation":{"type":"object"},"evidence":{"type":"object"},"logging":{"type":"object"}

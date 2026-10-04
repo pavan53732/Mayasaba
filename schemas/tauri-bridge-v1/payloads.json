@@ -225,7 +225,11 @@
     "get_council_round": {
       "owner": "CouncilService",
       "request": "get_council_roundRequest",
-      "response": "get_council_roundResponse"
+      "response": "get_council_roundResponse",
+      "request_fields": [
+        {"name":"round_id","type":"string","required":true},
+        {"name":"include_outcomes","type":"boolean","required":false}
+      ]
     },
     "list_requirements": {
       "owner": "RequirementService",
