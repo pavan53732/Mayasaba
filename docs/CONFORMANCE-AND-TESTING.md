@@ -245,9 +245,19 @@ Any mismatch the gate detects is a verification failure, not a warning.
 
 There is no hosted CI; see the DEC-036 record in `docs/DECISION-REGISTER.md`. Running the gate before handoff and commit is required, not optional.
 
+## Mutation tests for the checks themselves (DEC-057)
+
+A check that has never been shown to fail is an assertion, not a check. `npm run verify:contracts:mutations` runs `tools/contracts/mutations.mjs`, which reintroduces the drift each check exists to catch — one mutation at a time, applied to the working tree, run, and restored — and requires the check to fail **and to name the specific disagreement the mutation introduced**. Exiting non-zero is not enough on its own: that would also accept a crash, a mistyped anchor, or an unrelated failure, so each mutation declares the substrings its failure must contain, quoted from the check's own messages. A reworded message fails the mutation suite until the mutation is re-read rather than being matched by something vaguer.
+
+Controls run in the opposite direction and must stay **green**, because a check that fires on prose or on a contract description gets turned off rather than fixed. The unmutated tree is verified green before any mutation, so a mutation's failure is attributable to the mutation.
+
+It is safe to run because it refuses to start when a tracked file is modified — untracked files are permitted, since `git checkout` cannot touch them — and restores every file it touches with `git checkout -- <file>`. It restores on SIGINT and on an uncaught exception as well as normally, and it verifies at the end that the tree is clean and HEAD is unchanged. If it is interrupted in a way that defeats all of that, the recovery is `git checkout -- .`, which is the right command here precisely because the harness refused to start with a modified tracked file.
+
+It is deliberately **not** part of `npm run verify:contracts` and **not** wired to the pre-commit hook: it mutates the tree, and the Rust mutations each pay a recompile. It is a tool to run when a check changes, not on every commit. `--filter <substring>` runs a subset by mutation id.
+
 ## Bridge two-way gate mutation proofs (DEC-053)
 
-A check that has never been shown to fail is an assertion, not a check. The two-way bridge gate was therefore mutation-tested in eight directions, each applied to the working tree, run, and reverted. Every mutation made the gate exit non-zero and name the specific disagreement; the unmutated tree exits zero; the tree was byte-identical after each revert.
+A check that has never been shown to fail is an assertion, not a check. The two-way bridge gate was therefore mutation-tested in eight directions, each applied to the working tree, run, and reverted. Every mutation made the gate exit non-zero and name the specific disagreement; the unmutated tree exits zero; the tree was byte-identical after each revert. These eight are now mutations `dec053-a` … `dec053-h` in `tools/contracts/mutations.mjs`, so they can be re-run rather than only read (DEC-057).
 
 | # | Mutation | Expected and observed failure |
 |---|---|---|
@@ -266,7 +276,7 @@ What the proofs do **not** establish, stated so the green is not over-read: the 
 
 ## Wire-shape and handler-argument mutation proofs (DEC-056)
 
-The conformance test and the argument-name check were mutation-tested in eight directions, each applied to the working tree, run, and reverted from a backup copy. Every mutation made the test or the gate exit non-zero and name the specific disagreement; the unmutated tree exits zero.
+The conformance test and the argument-name check were mutation-tested in eight directions, each applied to the working tree, run, and reverted from a backup copy. Every mutation made the test or the gate exit non-zero and name the specific disagreement; the unmutated tree exits zero. These eight are now mutations `dec056-a` … `dec056-h` in `tools/contracts/mutations.mjs`, where they are restored with git rather than from a copy, so the file's mtime moves forward and cargo cannot mistake a restored file for a fresh one (DEC-057).
 
 | # | Mutation | Expected and observed failure |
 |---|---|---|

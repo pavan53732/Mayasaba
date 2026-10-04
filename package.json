@@ -3,6 +3,7 @@
   "private":true,
   "scripts":{
     "verify:contracts":"node tools/contracts/verify.mjs",
+    "verify:contracts:mutations":"node tools/contracts/mutations.mjs",
     "codegen:bridge":"node tools/codegen/generate-bridge.mjs",
     "codegen:protocol":"node tools/codegen/generate-protocol.mjs",
     "codegen":"npm run codegen:bridge && npm run codegen:protocol",

@@ -289,9 +289,9 @@ for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e
 //   implementation -> contract   is a FAILURE. A registered handler or a transport call that names an
 //                                operation the contract does not declare is drift with no defence: the
 //                                contract is the authority (AGENTS.md section 5), so the code is wrong.
-//   contract -> implementation   is REPORTED. The contract deliberately leads implementation - it declares 58
+//   contract -> implementation   is REPORTED. The contract deliberately leads implementation - it declares 59
 //                                operations and 4 exist - so "declared and unimplemented" cannot be a failure
-//                                without either deleting 54 declarations or introducing a second registry of
+//                                without either deleting 55 declarations or introducing a second registry of
 //                                "pending" operations, which would be a competing source of truth (DEC-017).
 //                                It is reported with its count and names on every run so the gap stays visible
 //                                instead of being silently absorbed by a green gate.
@@ -347,7 +347,18 @@ const bridgeProblems=[];
 
 // --- Rust side: which handlers are registered, and which functions are actually commands.
 const rustCode=stripCommentsForScan(readText(BRIDGE_RUST));
-const handlerList=/generate_handler!\s*\[([\s\S]*?)\]/.exec(rustCode);
+// The macro name also appears inside string literals in this file - the shell's own tests name it in their
+// assertion messages - and `stripCommentsForScan` deliberately preserves string literals, so a single
+// first-match lookup can read a phantom list out of quoted prose. Every candidate is therefore collected and
+// the first whose contents are all handler names is used; if none is, the check fails closed. Without this, a
+// registration list the gate could not parse could be replaced by one quoted in a string, and the gate would
+// then validate the whole bridge against a list that no `generate_handler!` call contains.
+const handlerCandidates=[...rustCode.matchAll(/generate_handler!\s*\[([\s\S]*?)\]/g)];
+const isHandlerList=(body)=>{
+  const names=body.split(",").map(s=>s.trim()).filter(Boolean);
+  return names.length>0&&names.every(n=>/^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$/.test(n));
+};
+const handlerList=handlerCandidates.find(m=>isHandlerList(m[1]));
 if(!handlerList) fail(
   `Could not find a generate_handler![...] list in ${BRIDGE_RUST}.\n`+
   `The bridge gate reads this file to compare registered handlers against the contract, so a registration list `+

@@ -238,6 +238,14 @@ This runs `tools/contracts/verify.mjs`, which checks the MCF registry and protoc
 
 The payload types the contract declares are checked separately, by the shell's own test suite rather than by the gate: `cargo test -p mayasaba-desktop` runs a conformance test that serializes each implemented operation's response struct and validates it against its declared type in `schemas/tauri-bridge-v1/payload-types.json`, so a renamed, added, removed or recased wire field fails by name.
 
+The checks have tests of their own. `npm run verify:contracts:mutations` reintroduces, one at a time, the drift each check exists to catch, and requires the check to fail and to name that specific disagreement:
+
+~~~text
+npm run verify:contracts:mutations
+~~~
+
+It mutates the working tree, so it refuses to start when a tracked file is modified and restores with git; it is deliberately not part of `npm run verify:contracts` or the pre-commit hook, because it is a tool to run when a check changes rather than on every commit (DEC-057).
+
 The gate is wired to a version-controlled pre-commit hook, so it is not merely available but run:
 
 ~~~text
