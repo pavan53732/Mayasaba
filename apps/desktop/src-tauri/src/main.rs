@@ -9,6 +9,7 @@
 use std::sync::Mutex;
 
 use mayasaba_core::project_service::{CreateProjectRequest, ProjectService, ProjectValidationError};
+use mayasaba_workspace::WorkspaceRejection;
 use serde::Serialize;
 use tauri::State;
 
@@ -56,6 +57,43 @@ impl From<ProjectValidationError> for CommandError {
     }
 }
 
+/// The outcome of validating a workspace candidate.
+///
+/// `AUTHORIZED` means the folder exists, is local, and is a directory Rust could canonicalize. It does not
+/// mean every operation inside it is permitted: task-scoped paths, policy and leases remain narrower
+/// (DEC-048).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceCheck {
+    status: &'static str,
+    canonical_path: Option<String>,
+    requested_path: String,
+    code: Option<String>,
+    message: Option<String>,
+}
+
+#[tauri::command]
+fn validate_workspace(path: String) -> WorkspaceCheck {
+    // Selection is not authorization, so this is a real check rather than an echo. A path that does not exist
+    // must never come back AUTHORIZED, and nothing is created to make it pass.
+    match mayasaba_core::project_service::validate_workspace(&path) {
+        Ok(ok) => WorkspaceCheck {
+            status: "AUTHORIZED",
+            canonical_path: Some(ok.canonical_path),
+            requested_path: ok.requested_path,
+            code: None,
+            message: None,
+        },
+        Err(rejection) => WorkspaceCheck {
+            status: "INVALID",
+            canonical_path: None,
+            requested_path: path,
+            code: Some(rejection.code().to_string()),
+            message: Some(rejection.to_string()),
+        },
+    }
+}
+
 #[tauri::command]
 fn create_project(
     service: State<'_, Mutex<ProjectService>>,
@@ -77,6 +115,14 @@ fn create_project(
 
     let outcome = service.create_project(&request).map_err(|e| match e {
         mayasaba_core::project_service::CreateProjectError::Validation(v) => v.into(),
+        mayasaba_core::project_service::CreateProjectError::Workspace(WorkspaceRejection::Empty) => CommandError {
+            code: "EMPTY_FIELD",
+            message: WorkspaceRejection::Empty.to_string(),
+        },
+        mayasaba_core::project_service::CreateProjectError::Workspace(w) => CommandError {
+            code: w.code(),
+            message: w.to_string(),
+        },
         other => CommandError { code: "STORAGE_FAILURE", message: other.to_string() },
     })?;
 
@@ -104,8 +150,9 @@ fn main() {
         .expect("Mayasaba could not open its durable store; see AGENTS.md section 20");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
-        .invoke_handler(tauri::generate_handler![create_project])
+        .invoke_handler(tauri::generate_handler![create_project, validate_workspace])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
 }

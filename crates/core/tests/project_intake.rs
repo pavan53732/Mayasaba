@@ -9,10 +9,19 @@ use mayasaba_core::project_service::{
     CreateProjectError, CreateProjectOutcome, CreateProjectRequest, ProjectService, ProjectValidationError,
 };
 
+/// A real local directory, because `create_project` now validates the workspace and refuses fabricated paths.
+/// Tests that pass a path which does not exist are asserting the rejection path, not creation.
+fn workspace_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("mayasaba-intake-{}-{}", std::process::id(), tag));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create workspace dir");
+    dir
+}
+
 fn request() -> CreateProjectRequest {
     CreateProjectRequest {
         name: "Mayasaba".to_string(),
-        local_path: r"C:\work\mayasaba".to_string(),
+        local_path: workspace_dir("default").to_string_lossy().into_owned(),
         initial_brief_body: "Build a local-first control plane for coordinating CLI coding agents.".to_string(),
         brief_source: None,
     }
@@ -127,15 +136,42 @@ fn two_projects_may_share_a_local_path_because_the_contract_does_not_forbid_it()
     // test asserts the *current* rule rather than inventing one. Whether two projects may target the same
     // workspace is an undecided product question and needs a contract decision, not a constraint added
     // quietly in a test.
+    let shared = workspace_dir("shared");
     let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000001");
 
-    service.create_project(&request()).expect("first project");
+    let mut first = request();
+    first.local_path = shared.to_string_lossy().into_owned();
+    service.create_project(&first).expect("first project");
+
     let mut second = request();
     second.name = "Second".to_string();
-    second.local_path = r"C:\work\mayasaba".to_string();
+    second.local_path = shared.to_string_lossy().into_owned();
     service.create_project(&second).expect("second project on the same path is currently permitted");
 
     assert_eq!(service.storage().count("projects").unwrap(), 2);
+}
+
+#[test]
+fn a_fabricated_workspace_path_is_refused_before_anything_is_persisted() {
+    // The workspace is validated, not trusted. A path that does not exist cannot become a project workspace,
+    // and selecting it must not quietly create it either.
+    let mut service = ProjectService::in_memory().expect("service").with_fixed_clock("1700000003");
+
+    let mut bad = request();
+    bad.local_path = std::env::temp_dir()
+        .join(format!("mayasaba-intake-missing-{}", std::process::id()))
+        .to_string_lossy()
+        .into_owned();
+    assert!(!std::path::Path::new(&bad.local_path).exists());
+
+    let result = service.create_project(&bad);
+    assert!(
+        matches!(result, Err(CreateProjectError::Workspace(_))),
+        "a nonexistent workspace must be refused as a workspace rejection, got {result:?}"
+    );
+
+    assert_eq!(service.storage().count("projects").unwrap(), 0, "a refused workspace must not persist anything");
+    assert!(!std::path::Path::new(&bad.local_path).exists(), "validation must not create the folder");
 }
 
 #[test]

@@ -34,6 +34,89 @@ export interface Draft {
 
 export const EMPTY_DRAFT: Draft = { name: "", localPath: "", initialBrief: "" };
 
+/**
+ * Workspace selection state.
+ *
+ * Selection is not authorization. `candidate` means the user picked or typed something that has not been
+ * checked; only `authorized` came back from Rust having verified the folder exists, is local, and is a
+ * directory. Create requires `authorized`, so an unverified string can never become a project workspace root.
+ *
+ * The same reasoning as the project-truth boundary applies one level down: the UI may represent a candidate,
+ * but only Rust establishes the workspace.
+ */
+export type WorkspaceState =
+  | { kind: "empty" }
+  /** A picker is open. `retain` is what cancelling restores, so an abandoned browse cannot discard a workspace the user already chose. */
+  | { kind: "selecting"; retain: string | null }
+  | { kind: "candidate"; requestedPath: string }
+  | { kind: "invalid"; requestedPath: string; code: string; message: string }
+  | { kind: "authorized"; requestedPath: string; canonicalPath: string };
+
+export type WorkspaceAction =
+  | { type: "browse" }
+  | { type: "selected"; path: string }
+  | { type: "cancelled" }
+  | { type: "checking" }
+  | { type: "authorized"; canonicalPath: string }
+  | { type: "rejected"; code: string; message: string }
+  | { type: "edit"; requestedPath: string };
+
+export const emptyWorkspace: WorkspaceState = { kind: "empty" };
+
+export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
+  switch (action.type) {
+    case "browse":
+      // Guard a second dialog while one is already open.
+      if (state.kind === "selecting") return state;
+      return {
+        kind: "selecting",
+        retain: state.kind === "authorized" ? state.canonicalPath : null,
+      };
+
+    case "selected":
+      // A selection is only a candidate until Rust validates it.
+      return { kind: "candidate", requestedPath: action.path };
+
+    case "cancelled":
+      // Cancelling the picker changes nothing. A previously authorized workspace is not discarded by an
+      // abandoned browse.
+      if (state.kind !== "selecting") return state;
+      return state.retain === null
+        ? emptyWorkspace
+        : { kind: "authorized", requestedPath: state.retain, canonicalPath: state.retain };
+
+    case "checking":
+      if (state.kind !== "candidate") return state;
+      return state;
+
+    case "authorized":
+      return {
+        kind: "authorized",
+        requestedPath: state.kind === "candidate" ? state.requestedPath : action.canonicalPath,
+        canonicalPath: action.canonicalPath,
+      };
+
+    case "rejected":
+      return {
+        kind: "invalid",
+        requestedPath: state.kind === "candidate" ? state.requestedPath : "",
+        code: action.code,
+        message: action.message,
+      };
+
+    case "edit":
+      // Manual entry produces a candidate, never an authorization.
+      return action.requestedPath.trim() === ""
+        ? emptyWorkspace
+        : { kind: "candidate", requestedPath: action.requestedPath };
+  }
+}
+
+/** Only an authorized workspace may be submitted. */
+export function isAuthorized(state: WorkspaceState): state is { kind: "authorized"; requestedPath: string; canonicalPath: string } {
+  return state.kind === "authorized";
+}
+
 export type IntakeState =
   /** The composer holds unpersisted input. Nothing authoritative exists yet. */
   | { kind: "editing"; draft: Draft }

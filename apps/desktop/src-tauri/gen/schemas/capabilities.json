@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default capability for the Mayasaba window. Deliberately minimal: Mayasaba needs a local folder picker for workspace selection, and nothing else. Each granted permission is an authorization surface, so the set is kept as small as the product actually requires.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open"]}}

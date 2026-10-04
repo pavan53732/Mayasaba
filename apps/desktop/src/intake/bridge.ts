@@ -35,6 +35,38 @@ export interface CreateProjectRequest {
   initial_brief: string;
 }
 
+/** Mirrors WorkspaceCheck in the Tauri command. */
+export interface WorkspaceCheck {
+  status: "AUTHORIZED" | "INVALID";
+  canonicalPath: string | null;
+  requestedPath: string;
+  code: string | null;
+  message: string | null;
+}
+
+/**
+ * Validate a candidate workspace folder in Rust.
+ *
+ * The UI must not decide whether a path is a usable workspace. It sends the candidate and renders whatever
+ * Rust answers, which is why this returns a check result rather than a boolean the UI interprets.
+ */
+export async function validateWorkspace(path: string): Promise<WorkspaceCheck> {
+  const result = await transport("validate_workspace", { path });
+  return result as WorkspaceCheck;
+}
+
+/**
+ * Open the native Windows folder picker.
+ *
+ * Returns null when the user cancels. The dialog plugin is resolved lazily so importing this module outside a
+ * Tauri runtime does not fail.
+ */
+export async function pickFolder(): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({ directory: true, multiple: false, title: "Select the local workspace for this project" });
+  return typeof selected === "string" ? selected : null;
+}
+
 /**
  * Create a project and return the authoritative projection the service committed.
  *

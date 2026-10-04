@@ -1,14 +1,18 @@
 import { useCallback, useMemo, useReducer, useState } from "react";
 
-import { createProject } from "./intake/bridge";
+import { createProject, pickFolder, validateWorkspace } from "./intake/bridge";
 import {
   EMPTY_DRAFT,
   initialState,
   intakeReducer,
   isSubmitting,
+  emptyWorkspace,
+  isAuthorized,
+  workspaceReducer,
   type CommandError,
   type Draft,
   type ProjectView,
+  type WorkspaceState,
 } from "./intake/state";
 
 // Mayasaba Control Room: the Initial Intake Composer.
@@ -24,16 +28,39 @@ import {
 export default function App() {
   const [state, dispatch] = useReducer(intakeReducer, initialState);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, emptyWorkspace);
 
   const pending = isSubmitting(state);
   const created = state.kind === "created" ? state.project : null;
   const error: CommandError | null = state.kind === "rejected" ? state.error : null;
+  const authorized = isAuthorized(workspace);
+
+  const onBrowse = useCallback(async () => {
+    dispatchWorkspace({ type: "browse" });
+    const picked = await pickFolder();
+    if (picked === null) {
+      dispatchWorkspace({ type: "cancelled" });
+      return;
+    }
+    dispatchWorkspace({ type: "selected", path: picked });
+    // Selection is not authorization. Rust decides whether the folder is usable.
+    const check = await validateWorkspace(picked);
+    if (check.status === "AUTHORIZED" && check.canonicalPath) {
+      dispatchWorkspace({ type: "authorized", canonicalPath: check.canonicalPath });
+    } else {
+      dispatchWorkspace({
+        type: "rejected",
+        code: check.code ?? "WORKSPACE_NOT_ACCESSIBLE",
+        message: check.message ?? "That folder could not be used as a workspace.",
+      });
+    }
+  }, []);
 
   const onSubmit = useCallback(async () => {
     dispatch({ type: "submit" });
     const result = await createProject({
       name: draft.name,
-      local_path: draft.localPath,
+      local_path: authorized ? workspace.canonicalPath : draft.localPath,
       initial_brief: draft.initialBrief,
     });
 
@@ -43,11 +70,17 @@ export default function App() {
       return;
     }
     dispatch({ type: "rejected", error: result });
-  }, [draft]);
+  }, [draft, authorized, workspace]);
 
+  // Create requires an authorized workspace. A candidate or an invalid path cannot be submitted, so a
+  // string the UI merely holds can never become a project workspace root.
   const canSubmit = useMemo(
-    () => !pending && draft.name.trim() !== "" && draft.localPath.trim() !== "" && draft.initialBrief.trim() !== "",
-    [pending, draft],
+    () =>
+      !pending &&
+      authorized &&
+      draft.name.trim() !== "" &&
+      draft.initialBrief.trim() !== "",
+    [pending, authorized, draft],
   );
 
   return (
@@ -58,11 +91,14 @@ export default function App() {
       </p>
 
       {created ? (
-        <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
+        <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatchWorkspace({ type: "edit", requestedPath: "" }); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
       ) : (
         <Composer
           draft={draft}
           onChange={setDraft}
+          workspace={workspace}
+          onBrowse={onBrowse}
+          onEditWorkspace={(requestedPath) => dispatchWorkspace({ type: "edit", requestedPath })}
           pending={pending}
           canSubmit={canSubmit}
           onSubmit={onSubmit}
@@ -76,12 +112,17 @@ export default function App() {
 function Composer(props: {
   draft: Draft;
   onChange: (draft: Draft) => void;
+  workspace: WorkspaceState;
+  onBrowse: () => void;
+  onEditWorkspace: (requestedPath: string) => void;
   pending: boolean;
   canSubmit: boolean;
   onSubmit: () => void;
   error: CommandError | null;
 }) {
-  const { draft, onChange, pending, canSubmit, onSubmit, error } = props;
+  const { draft, onChange, workspace, onBrowse, onEditWorkspace, pending, canSubmit, onSubmit, error } = props;
+  const selecting = workspace.kind === "selecting";
+  const authorized = isAuthorized(workspace);
 
   return (
     <section aria-label="Initial Intake Composer">
@@ -101,20 +142,21 @@ function Composer(props: {
         />
       </label>
 
-      <label style={field}>
-        Local workspace
-        <input
-          value={draft.localPath}
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, localPath: e.target.value })}
-          style={input}
-        />
-      </label>
-      <p style={{ ...hint, marginTop: -8, marginBottom: 14 }}>
-        A folder Mayasaba may operate within. A path typed here is a candidate, not an authorized
-        workspace: locality, existence and policy are checked before anything is persisted. Native folder
-        selection is the intended primary interaction and is not implemented yet.
-      </p>
+      <div style={field}>
+        <span>Local workspace</span>
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <input
+            value={workspace.kind === "authorized" ? workspace.canonicalPath : workspace.kind === "candidate" || workspace.kind === "invalid" ? workspace.requestedPath : ""}
+            disabled={pending || selecting}
+            onChange={(e) => onEditWorkspace(e.target.value)}
+            style={{ ...input, marginTop: 0 }}
+          />
+          <button type="button" onClick={onBrowse} disabled={pending || selecting} style={browseButton}>
+            {selecting ? "Opening…" : "Browse…"}
+          </button>
+        </div>
+        <WorkspaceStatus workspace={workspace} />
+      </div>
 
       <label style={field}>
         Describe the project
@@ -134,6 +176,9 @@ function Composer(props: {
       <button onClick={onSubmit} disabled={!canSubmit} style={button}>
         {pending ? "Creating…" : "Create project"}
       </button>
+      {!authorized ? (
+        <p style={hint}>Select a local folder to continue. A path must be verified before it can be a workspace.</p>
+      ) : null}
 
       {pending ? (
         <p role="status" style={notice}>
@@ -150,6 +195,38 @@ function Composer(props: {
       ) : null}
     </section>
   );
+}
+
+/** Shows what Rust decided about the workspace. It never infers authorization from the text in the field. */
+function WorkspaceStatus({ workspace }: { workspace: WorkspaceState }) {
+  switch (workspace.kind) {
+    case "authorized":
+      return (
+        <p style={{ ...hint, marginTop: 6, marginBottom: 0, color: "#166534" }}>
+          Local folder verified: <code>{workspace.canonicalPath}</code>
+        </p>
+      );
+    case "candidate":
+      return (
+        <p style={{ ...hint, marginTop: 6, marginBottom: 0 }}>
+          Checking this folder… it is not a workspace until Mayasaba verifies it.
+        </p>
+      );
+    case "invalid":
+      return (
+        <p role="alert" style={{ ...hint, marginTop: 6, marginBottom: 0, color: "#b91c1c" }}>
+          <strong>{workspace.code}</strong> — {workspace.message}
+        </p>
+      );
+    case "selecting":
+      return <p style={{ ...hint, marginTop: 6, marginBottom: 0 }}>Choose a folder…</p>;
+    case "empty":
+      return (
+        <p style={{ ...hint, marginTop: 6, marginBottom: 0 }}>
+          A folder Mayasaba may operate within. Nothing is authorized until it is verified.
+        </p>
+      );
+  }
 }
 
 /**
@@ -226,3 +303,13 @@ const notice: React.CSSProperties = {
   fontSize: 13,
 };
 const hint: React.CSSProperties = { color: "#6b7280", fontSize: 12, lineHeight: 1.5 };
+const browseButton: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 6,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 14,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};

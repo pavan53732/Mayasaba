@@ -328,10 +328,14 @@ every other layer: presentation implying authority it does not have.
 | Field | Value |
 |---|---|
 | Previous behavior | Workspace was entered as free text. The contract described a user-selected folder, but the UI presented a path string with no distinction between "typed" and "selected", and the placeholder looked like a real value. |
-| New behavior | A workspace is an authorization boundary. Native Windows folder selection is the primary intake interaction. Manual entry remains possible but is a candidate, subject to the same existence, locality and policy checks before authorization. No placeholder, hint or prefilled value may render as though it were an authorized workspace. |
-| Reason | A syntactically valid path is not an authorized one. Collapsing the two lets the UI imply an authorization decision that only PolicyService and an owning service can make. |
+| New behavior | Folder selection establishes the user's *intended* project workspace boundary. Rust subsequently validates and persists that boundary, and only the canonical path is stored. Task-level permissions remain narrower and policy-controlled: authorization of a workspace root is not authorization of every operation inside it. A manually entered path is a candidate subject to the same existence, locality and canonicalization checks. No placeholder, hint or prefilled value may render as though it were an authorized workspace. |
+| Reason | A syntactically valid path is not an authorized one, and an authorized root is not unrestricted access. Collapsing either pair lets the UI imply decisions that only PolicyService and an owning service can make, and would let "browse folder" be read as "grant full recursive access forever", which contradicts the task-scoped path model. |
 | Compatibility impact | Document and UX only. `create_projectRequest.local_path` is unchanged and still a string; what changes is that the string must be validated as a candidate rather than trusted as a selection. |
-| Implementation status | The native picker is NOT implemented. `apps/desktop/src-tauri/capabilities/` does not exist, so granting a dialog permission needs a new capability. The composer offers manual entry and states in its own helper text that a typed path is a candidate and that native selection is not yet implemented. That is a visible gap, not a silent one. |
+| Implementation status | Implemented. `tauri-plugin-dialog` is registered and `apps/desktop/src-tauri/capabilities/default.json` grants exactly `core:default` and `dialog:allow-open` — a folder picker and nothing else, because each granted permission is an authorization surface. `validate_workspace_candidate` lives in `crates/workspace`, which owns the workspace concept, and `create_project` re-validates rather than trusting the caller. The Control Room models the workspace as empty / selecting / candidate / invalid / authorized, and only `authorized` enables Create: the UI can represent a candidate, but only Rust establishes the workspace. |
+
+Rejections are typed and machine-readable: `WORKSPACE_EMPTY`, `WORKSPACE_DOES_NOT_EXIST`, `WORKSPACE_NOT_A_DIRECTORY`, `WORKSPACE_NOT_LOCAL`, `WORKSPACE_NOT_ACCESSIBLE`. A nonexistent folder is refused and is **not** created — selection must not hide a side effect; making a directory is a separate decision with its own UX and authorization.
+
+Not covered by this slice: indexing, recursive scanning, Git detection, workspace discovery, permissions dashboards, and task-scope generation.
 
 ### DEC-049 intake attachments are context, not truth
 

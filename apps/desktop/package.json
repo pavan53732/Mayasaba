@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
-    "test": "node --experimental-strip-types --test src/intake/state.test.ts"
+    "test": "node --experimental-strip-types --test src/intake/state.test.ts src/intake/workspace.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
     "mayasaba": "file:../..",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

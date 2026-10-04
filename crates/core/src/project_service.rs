@@ -14,6 +14,16 @@
 use std::path::Path;
 
 use mayasaba_storage::{CreatedProject, NewProject, ProjectRecord, Storage};
+use mayasaba_workspace::{validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation};
+
+/// Validate a user-selected folder as a candidate workspace root, without persisting anything.
+///
+/// This is the step that makes selection an authorization act rather than a string. The Control Room calls it
+/// when the user picks a folder and shows the outcome; `create_project` validates again, so a caller that
+/// skips this still cannot persist an unchecked path.
+pub fn validate_workspace(candidate: &str) -> Result<WorkspaceValidation, WorkspaceRejection> {
+    validate_workspace_candidate(candidate)
+}
 
 /// Request as declared by `create_projectRequest` in `schemas/tauri-bridge-v1/payload-types.json`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,13 +106,19 @@ impl ProjectService {
     pub fn create_project(&mut self, req: &CreateProjectRequest) -> Result<CreateProjectOutcome, CreateProjectError> {
         Self::validate(req)?;
 
+        // The workspace is re-validated here, not trusted from the caller. The Control Room validates a
+        // candidate when the user selects it so it can show feedback, but a client that skips that step must
+        // still not be able to persist an unchecked path. Only the canonical form is persisted, so the stored
+        // workspace root is the normalized path rather than whatever spelling the UI happened to send.
+        let workspace = validate_workspace_candidate(&req.local_path)?;
+
         let created_at = (self.now)();
         let nonce = next_nonce();
 
         let new = NewProject {
             project_id: format!("prj_{}", Self::digest(&format!("project:{nonce}"))),
             name: req.name.trim().to_string(),
-            local_path: req.local_path.trim().to_string(),
+            local_path: workspace.canonical_path,
             brief_id: format!("brf_{}", Self::digest(&format!("brief:{nonce}"))),
             brief_body: req.initial_brief_body.trim().to_string(),
             brief_source: req.brief_source.clone().unwrap_or_else(|| "INITIAL_INTAKE_COMPOSER".to_string()),
@@ -179,7 +195,14 @@ fn epoch_seconds() -> String {
 #[derive(Debug)]
 pub enum CreateProjectError {
     Validation(ProjectValidationError),
+    Workspace(WorkspaceRejection),
     Storage(mayasaba_storage::StorageError),
+}
+
+impl From<WorkspaceRejection> for CreateProjectError {
+    fn from(e: WorkspaceRejection) -> Self {
+        CreateProjectError::Workspace(e)
+    }
 }
 
 impl From<ProjectValidationError> for CreateProjectError {
@@ -198,6 +221,7 @@ impl std::fmt::Display for CreateProjectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CreateProjectError::Validation(e) => write!(f, "{e}"),
+            CreateProjectError::Workspace(e) => write!(f, "{e}"),
             CreateProjectError::Storage(e) => write!(f, "{e}"),
         }
     }
