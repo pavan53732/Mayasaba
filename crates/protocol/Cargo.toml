@@ -1,1 +1,6 @@
-[package]\nname = "mayasaba-protocol"\nversion.workspace = true\nedition.workspace = true\n\n[dependencies]\n
+[package]
+name = "mayasaba-protocol"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

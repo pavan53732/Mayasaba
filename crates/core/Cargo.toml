@@ -1,1 +1,20 @@
-[package]\nname = "mayasaba-core"\nversion.workspace = true\nedition.workspace = true\n\n[dependencies]\nmayasaba-protocol = { path = "../protocol" }\nmayasaba-bus = { path = "../bus" }\nmayasaba-agents = { path = "../agents" }\nmayasaba-council = { path = "../council" }\nmayasaba-tasks = { path = "../tasks" }\nmayasaba-workspace = { path = "../workspace" }\nmayasaba-execution = { path = "../execution" }\nmayasaba-validation = { path = "../validation" }\nmayasaba-evidence = { path = "../evidence" }\nmayasaba-policy = { path = "../policy" }\nmayasaba-storage = { path = "../storage" }\ntokio.workspace = true\nserde.workspace = true\nserde_json.workspace = true\n
+[package]
+name = "mayasaba-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-protocol = { path = "../protocol" }
+mayasaba-bus = { path = "../bus" }
+mayasaba-agents = { path = "../agents" }
+mayasaba-council = { path = "../council" }
+mayasaba-tasks = { path = "../tasks" }
+mayasaba-workspace = { path = "../workspace" }
+mayasaba-execution = { path = "../execution" }
+mayasaba-validation = { path = "../validation" }
+mayasaba-evidence = { path = "../evidence" }
+mayasaba-policy = { path = "../policy" }
+mayasaba-storage = { path = "../storage" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true

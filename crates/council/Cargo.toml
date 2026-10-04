@@ -1,1 +1,8 @@
-[package]\nname = "mayasaba-council"\nversion.workspace = true\nedition.workspace = true\n\n[dependencies]\nmayasaba-protocol = { path = "../protocol" }\nmayasaba-storage = { path = "../storage" }\n
+[package]
+name = "mayasaba-council"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mayasaba-protocol = { path = "../protocol" }
+mayasaba-storage = { path = "../storage" }

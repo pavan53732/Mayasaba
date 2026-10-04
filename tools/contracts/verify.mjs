@@ -855,6 +855,18 @@ if(serviceDrift.length) fail(`Service registry and workspace manifest disagree o
 
 if(conformanceProblems.length) fail(conformanceProblems.length+" registry/schema conformance problem(s):\n  - "+conformanceProblems.join("\n  - "));
 
+// --- Generated Rust must match the contract it claims to encode.
+// crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
+// crate is not regenerated, the crate silently encodes a different protocol from the one the gate validates -
+// which would be the first place in this repository where two artifacts both claim authority and disagree.
+// The generator's --check mode re-derives the file from machines[] and registry.json and compares bytes.
+//
+// Compilation is deliberately NOT claimed here: no Rust toolchain is configured in this environment, so
+// `cargo build` cannot run. What this check proves is that the committed bytes are what the current contract
+// implies. Whether that Rust compiles is unverified and is stated as such rather than implied.
+const genCheck=(()=>{ try{ return execFileSync("node",["tools/codegen/generate-protocol.mjs","--check"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]}); }catch(e){ return "FAILED: "+(e.stderr||e.message).toString().trim(); } })();
+if(genCheck.startsWith("FAILED")) fail("crates/protocol generated code is stale or missing.\n"+genCheck+"\nRun: npm run codegen:protocol");
+
 // --- Gate coverage self-report.
 // This gate was strengthened across DEC-036..DEC-043 and each fix found real defects, which is also how it
 // stayed silent about whole layers. It had never read schema.sql, so the durable layer was unverified while
@@ -926,3 +938,25 @@ for(const [name,def] of Object.entries(wm.crates)){
   const cargo=fs.readFileSync(path.join(root,def.path,"Cargo.toml"),"utf8");
   for(const dep of actual) if(!cargo.includes(dep)) fail("Manifest missing declared dependency: "+name+" -> "+dep);
 }
+// Four crate manifests - agents, bus, core and protocol - contained a literal backslash-n instead of real
+// newlines, so TOML parsed them as one garbage line and cargo could not build them. The check above is a
+// substring test, so it passed: the dependency names were present as text inside an unparseable file. A
+// substring test cannot tell a working manifest from a broken one, so the structural requirements are
+// checked directly. This is the same shape as the registry conformance gaps - a check that reads a file
+// without validating that the file means anything.
+const manifestProblems=[];
+for(const [name,def] of Object.entries(wm.crates)){
+  const cargo=readText(def.path+"/Cargo.toml");
+  if(!cargo.includes("\n")) manifestProblems.push(`${name}: Cargo.toml has no real newline; it holds a literal \\n and is not valid TOML`);
+  if(cargo.includes("\\n")) manifestProblems.push(`${name}: Cargo.toml contains a literal \\n sequence`);
+  for(const key of ["[package]","name =","version.workspace = true","edition.workspace = true","[dependencies]"]){
+    if(!cargo.includes(key)) manifestProblems.push(`${name}: Cargo.toml is missing required entry "${key}"`);
+  }
+  const declaredName=(cargo.match(/^name\s*=\s*"([^"]+)"/m)??[])[1];
+  if(declaredName!==`mayasaba-${name}`) manifestProblems.push(`${name}: Cargo.toml declares package name "${declaredName}", expected "mayasaba-${name}"`);
+  for(const dep of (def.depends||[])){
+    if(!new RegExp(`^mayasaba-${dep}\\s*=`, "m").test(cargo)) manifestProblems.push(`${name}: dependency mayasaba-${dep} is not declared as a Cargo dependency entry`);
+    if(!cargo.includes(`path = "../${dep}"`)) manifestProblems.push(`${name}: dependency mayasaba-${dep} does not declare the workspace-local path ../${dep}`);
+  }
+}
+if(manifestProblems.length) fail(manifestProblems.length+" Rust crate manifest problem(s):\n  - "+manifestProblems.join("\n  - "));

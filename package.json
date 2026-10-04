@@ -4,6 +4,8 @@
   "scripts":{
     "verify:contracts":"node tools/contracts/verify.mjs",
     "codegen:bridge":"node tools/codegen/generate-bridge.mjs",
+    "codegen:protocol":"node tools/codegen/generate-protocol.mjs",
+    "codegen":"npm run codegen:bridge && npm run codegen:protocol",
     "dev":"npm --prefix apps/desktop run dev",
     "build":"npm --prefix apps/desktop run build"
   }
