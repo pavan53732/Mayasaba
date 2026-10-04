@@ -74,7 +74,7 @@ fn a_project_without_its_brief_is_reported() {
     // whose intent is unknown.
     let dir = existing_dir("nobrief").join("NoBrief");
     std::fs::create_dir_all(&dir).unwrap();
-    let mut storage = Storage::open_in_memory().expect("open");
+    let storage = Storage::open_in_memory().expect("open");
 
     storage
         .conn()
@@ -103,7 +103,7 @@ fn a_project_without_its_brief_is_reported() {
 fn epoch_summary_drift_is_reported() {
     // The summary column and the epoch history disagree, so a context digest computed from one would be
     // wrong for the other. This is exactly the kind of silent inconsistency that is worse than a crash.
-    let mut storage = healthy("drift");
+    let storage = healthy("drift");
     storage
         .conn()
         .execute(
@@ -130,7 +130,7 @@ fn orphaned_rows_are_reported() {
     // Foreign keys are per-connection, so rows written by a build that had them off survive a reopen with
     // them on. This test reproduces exactly that: it turns FKs off, writes the bad row, and then recovery -
     // running with FKs enforced, as the real application does - must still notice it.
-    let mut storage = Storage::open_in_memory().expect("open");
+    let storage = Storage::open_in_memory().expect("open");
     storage
         .conn()
         .execute_batch("PRAGMA foreign_keys = OFF")
@@ -163,7 +163,7 @@ fn orphaned_rows_are_reported() {
 fn recovery_reports_and_never_repairs() {
     // A silent repair would let a reader believe the database says something it does not. Recovery is
     // read-only: the bad state must still be there afterwards, for an owning service to decide about.
-    let mut storage = Storage::open_in_memory().expect("open");
+    let storage = Storage::open_in_memory().expect("open");
     storage
         .conn()
         .execute(
@@ -192,7 +192,7 @@ fn recovery_reports_and_never_repairs() {
 fn several_problems_are_all_reported_not_just_the_first() {
     // A scan that stops at the first problem would force an operator to restart repeatedly to discover the
     // rest, and would hide the scale of the damage.
-    let mut storage = Storage::open_in_memory().expect("open");
+    let storage = Storage::open_in_memory().expect("open");
     for id in ["prj_a", "prj_b", "prj_c"] {
         storage
             .conn()

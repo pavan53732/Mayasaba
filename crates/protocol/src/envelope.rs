@@ -216,7 +216,7 @@ pub fn validate_envelope(value: &Value) -> Result<Envelope, EnvelopeRejection> {
     // checked by the rule named for it below.
     for &(field, allowed) in vocab::FIELD_TYPES {
         if let Some(held) = obj.get(field) {
-            if !allowed.iter().any(|kind| holds_type(held, *kind)) {
+            if !allowed.iter().any(|kind| holds_type(held, kind)) {
                 return Err(EnvelopeRejection::WrongJsonType {
                     field,
                     got: json_type_name(held),
