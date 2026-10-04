@@ -239,6 +239,6 @@ The local contract gate — `npm run verify:contracts`, which runs `tools/contra
 
 Any mismatch the gate detects is a verification failure, not a warning.
 
-> **Operational note:** the gate is a manual local command — no hook or wrapper runs it. A mismatch is only caught when the developer runs the gate; a forgotten run is undetected. Running it before handoff and commit is required, not optional.
+> **Operational note:** the gate is a local command, and it is wired to a pre-commit hook rather than run by a service. `git config core.hooksPath .githooks` enables it, but that is a per-clone opt-in that git cannot enforce, so a fresh clone commits without the gate until it is set, and `git commit --no-verify` bypasses it on any commit. When the pointer is unset the verifier prints the fact in its summary line — `Pre-commit gate: NOT enabled (core.hooksPath unset)` — as information rather than a failure, so a deliberate opt-out is visible and is not itself treated as an error.
 
-This gate runs locally; there is no hosted CI. See the DEC-036 record in `docs/DECISION-REGISTER.md`.
+There is no hosted CI; see the DEC-036 record in `docs/DECISION-REGISTER.md`. Running the gate before handoff and commit is required, not optional.

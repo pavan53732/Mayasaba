@@ -547,6 +547,15 @@ The deterministic logic in `crates/council`, the storage APIs that persist the n
 tests named above are implemented in the phases that follow this record and are not claimed here. Where the
 record describes behaviour, it describes the intended normative semantics.
 
+As of `1d4cff3` (2026-10-05): the pure decision logic **is** implemented in `crates/council` — mode selection,
+evidence grading, the convergence precondition, lineage-group corroboration, round roles, synthesis coverage
+and review, budget accounting, and append-only outcome construction — and the six additive tables are
+persisted through `crates/storage`, with the conformance suite in `crates/council/tests/council_quality.rs`
+and `crates/storage/tests/council_tables.rs`. What is **not** implemented is the council runtime: nothing here
+orchestrates a round, spawns an agent, routes an escalation, or reads a budget clock in production, because
+that belongs to the bus and orchestrator milestones. This note records implementation status only; the
+decision's substance and its HARD_LOCK status are unchanged.
+
 Known limitations and open items, recorded rather than fixed
 
 1. `council_outcomes.outcome_type` still has no SQLite `CHECK` constraint. DEC-033 deferred it and this record
