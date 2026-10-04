@@ -7,6 +7,12 @@ const contentRead=new Set();
 let gateCoverage={verified:0,canonical:0,unverified:0};
 const read=(p)=>{contentRead.add(p);return JSON.parse(fs.readFileSync(path.join(root,p),"utf8"))};
 const readText=(p)=>{contentRead.add(p);return fs.readFileSync(path.join(root,p),"utf8")};
+// Parses without recording coverage. The readability sweep below opens every canonical JSON file, so if its
+// reads counted as coverage evidence the coverage self-check could never fire: every declared file would look
+// "read by a check" merely because it was parsed, and deleting a real invariant check would go unnoticed.
+// Coverage has to mean "an invariant was enforced against these contents", so the sweep reads through this
+// door instead.
+const readUncounted=(p)=>JSON.parse(fs.readFileSync(path.join(root,p),"utf8"));
 const exists=(p)=>fs.existsSync(path.join(root,p));
 const fail=(m)=>{throw new Error(m)};
 
@@ -892,7 +898,7 @@ const canonicalAll=manifestForCoverage.schema_sources ?? [];
 const unreadable=[];
 for(const f of canonicalAll){
   if(f.endsWith(".sql")||f.endsWith(".md")){ if(!exists(f)) unreadable.push(f); continue; }
-  try{ read(f); }catch(e){ unreadable.push(`${f} (${e.message})`); }
+  try{ readUncounted(f); }catch(e){ unreadable.push(`${f} (${e.message})`); }
 }
 if(unreadable.length) fail(`Canonical artifact(s) declared in workspace.manifest.json:schema_sources are unreadable:\n  - ${unreadable.join("\n  - ")}`);
 
@@ -921,6 +927,77 @@ const canonicalDirs=read("workspace.manifest.json").schema_sources ?? [];
 const unregistered=[...new Set(fs.readdirSync(path.join(root,"schemas"),{withFileTypes:true}).filter(d=>d.isDirectory()).map(d=>`schemas/${d.name}`))]
   .filter(dir=>!canonicalDirs.some(f=>f.startsWith(`${dir}/`))&&!declaredNonCanonical.has(dir));
 if(unregistered.length) fail(`Schema director(y|ies) exist that are absent from workspace.manifest.json:schema_sources:\n  - ${unregistered.join("\n  - ")}\nRegister every canonical file in schema_sources, or declare the directory non-canonical in verify.mjs with a reason. An unregistered schema directory is an authority nobody reviews.`);
+
+// --- Repeated entries in a canonical schema's own `required` or `enum` array.
+// `envelope.schema.json` listed `authorization_context` twice in its conditional `required`: seven entries, six
+// unique. JSON Schema requires the elements of `required` to be unique, so the file was not a conformant schema
+// at all - and nothing read it. It was absent from schema_sources, so neither the consumer-coverage check nor
+// this file's readability sweep opened it. No generated diff could reveal it either, because the generator
+// dedupes that list before emitting a constant, so the staleness check stayed green over it.
+//
+// A duplicate is invisible to every set comparison: membership is identical whether a name appears once or
+// twice. That is why the message and event lists needed an explicit repeat test, and why this one does too. It
+// runs over every canonical JSON rather than only the envelope, because the real defect class is "a canonical
+// artifact that nothing reads", and the envelope was merely the instance that happened to be found.
+const repeatedArrayEntries=[];
+const checkUniqueArrays=(node,at,file)=>{
+  if(Array.isArray(node)){ node.forEach((v,i)=>checkUniqueArrays(v,at?`${at}[${i}]`:`[${i}]`,file)); return; }
+  if(node&&typeof node==="object"){
+    for(const [key,value] of Object.entries(node)){
+      const where=at?`${at}.${key}`:key;
+      if((key==="required"||key==="enum")&&Array.isArray(value)){
+        const repeats=[...new Set(value.filter((v,i)=>value.indexOf(v)!==i))];
+        if(repeats.length) repeatedArrayEntries.push(`${file}:${where} repeats ${repeats.map(r=>JSON.stringify(r)).join(", ")}`);
+      }
+      checkUniqueArrays(value,where,file);
+    }
+  }
+};
+for(const f of canonicalAll){
+  if(!f.endsWith(".json")) continue;
+  checkUniqueArrays(readUncounted(f),"",f);
+}
+if(repeatedArrayEntries.length) fail(`${repeatedArrayEntries.length} repeated entry/entries in a canonical schema's own required/enum array:\n  - ${repeatedArrayEntries.join("\n  - ")}\nJSON Schema requires the elements of "required" to be unique. A repeated entry is drift in a canonical artifact, and a set comparison cannot see it.`);
+
+// --- The envelope's generated constants must agree with the schema they encode, checked here in-process.
+// The generator's own --check mode is not sufficient on its own. That mode compares committed bytes against a
+// re-derivation from the same schema, so it proves staleness, not correctness: a generator edited to read the
+// wrong field, or to omit one, re-derives consistently and passes it. This compares the raw contract against the
+// emitted constants, which is what catches a wrong or dropped generator input. It also makes this gate a genuine
+// in-process consumer of envelope.schema.json and identity.schema.json rather than merely a lister of them.
+//
+// The repeated-entry check above is what catches a duplicate in the conditional `required`; this block compares
+// against the deduped set deliberately, because that is what the generator emits. The two checks cover different
+// halves of the same defect: a repeated entry in the contract, and a generator that misreads the contract.
+const envelopeSchema=read("schemas/mcf-v2/envelope.schema.json");
+const identitySchema=read("schemas/mcf-v2/identity.schema.json");
+const envelopeRs=readText("crates/protocol/src/generated/envelope.rs");
+const generatedList=(name)=>{
+  const m=envelopeRs.match(new RegExp("pub const "+name+": &\\[&str\\] = &\\[([^\\]]*)\\]","s"));
+  if(!m) return null;
+  return m[1].trim()===""?[]:JSON.parse("["+m[1]+"]");
+};
+const constantProblems=[];
+const sameList=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>v===b[i]);
+const expectConstant=(name,expected)=>{
+  const got=generatedList(name);
+  if(got===null){ constantProblems.push(`generated/envelope.rs declares no ${name}`); return; }
+  if(!sameList(got,expected)) constantProblems.push(`${name} is ${JSON.stringify(got)}, but the contract implies ${JSON.stringify(expected)}`);
+};
+const envelopeConditional=envelopeSchema.allOf?.[0]??{};
+expectConstant("REQUIRED_FIELDS",envelopeSchema.required);
+expectConstant("OPTIONAL_FIELDS",Object.keys(envelopeSchema.properties).filter(k=>!envelopeSchema.required.includes(k)));
+expectConstant("MATERIAL_ACTION_MESSAGE_TYPES",envelopeConditional.if?.properties?.message_type?.enum??[]);
+expectConstant("MATERIAL_REQUIRED_FIELDS",[...new Set(envelopeConditional.then?.required??[])]);
+expectConstant("AUTHORIZATION_CONTEXT_REQUIRED_FIELDS",envelopeSchema.properties.authorization_context.required);
+expectConstant("AUTHORIZATION_CONTEXT_FIELDS",Object.keys(envelopeSchema.properties.authorization_context.properties));
+expectConstant("SECURITY_REQUIRED_FIELDS",envelopeSchema.properties.security.required);
+expectConstant("SECURITY_FIELDS",Object.keys(envelopeSchema.properties.security.properties));
+expectConstant("IDENTITY_REQUIRED_FIELDS",identitySchema.required);
+expectConstant("IDENTITY_FIELDS",Object.keys(identitySchema.properties));
+expectConstant("CHANNELS",envelopeSchema.properties.channel.enum);
+expectConstant("PHASES",envelopeSchema.properties.phase.enum);
+if(constantProblems.length) fail(constantProblems.length+" generated envelope constant(s) disagree with the contract:\n  - "+constantProblems.join("\n  - ")+"\nRun: npm run codegen:protocol, then check the generator with the same edit.");
 
 // --- Generated Rust must match the contract it claims to encode.
 // crates/protocol/src/generated/machines.rs is the typed surface of MCF-v2. If the contract changes and the
@@ -961,6 +1038,8 @@ const coverageVerified=new Set([
   "schemas/mcf-v2/message-payloads.registry.json",
   "schemas/mcf-v2/event-payloads.registry.json",
   "schemas/mcf-v2/event-to-ui.registry.json",
+  "schemas/mcf-v2/envelope.schema.json",
+  "schemas/mcf-v2/identity.schema.json",
   "schemas/agent-adapter-v1/native-event.schema.json",
   "schemas/agent-adapter-v1/native-to-mcf.registry.json",
   "schemas/agent-adapter-v1/native-transport-contract.json",

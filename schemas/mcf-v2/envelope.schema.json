@@ -25,8 +25,7 @@
     "requires_response",
     "blocking",
     "payload",
-    "security",
-    "operation_id"
+    "security"
   ],
   "properties": {
     "protocol_version": {
@@ -314,17 +313,37 @@
         }
       },
       "then": {
-"required": [
-            "task_id",
-            "context_snapshot_id",
-            "state_digest",
-            "idempotency_key",
-            "authorization_context",
-            "operation_id"
-          ],
+        "required": [
+          "task_id",
+          "context_snapshot_id",
+          "state_digest",
+          "idempotency_key",
+          "authorization_context",
+          "operation_id"
+        ],
         "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "context_snapshot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state_digest": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          },
           "authorization_context": {
             "type": "object"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       }

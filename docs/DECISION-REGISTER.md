@@ -54,6 +54,7 @@ This file is a human-readable register of currently locked design decisions. It 
 | DEC-048 | A workspace is an authorization boundary; native Windows folder selection is the primary intake interaction, and a manually typed path is a candidate requiring the same validation | HARD_LOCK |
 | DEC-049 | Initial-intake attachments are supporting context and evidence with source provenance, never project truth by attachment alone | HARD_LOCK |
 | DEC-050 | The Initial Intake Composer takes no project-name field; the display name is derived by the owning service from the validated canonical workspace folder leaf, and `project_id` is never derived from a path | HARD_LOCK |
+| DEC-051 | `operation_id` is a conditional envelope field, required of material-action messages and optional otherwise; the envelope validator's field sets, nested field sets and per-field JSON types are generated from the contract rather than hand-copied | HARD_LOCK |
 
 ## DEC-029 supersession record
 
@@ -416,6 +417,61 @@ Without this, two agents entering the first independent round could observe diff
 `AGENT-INTEGRATION.md` requires that every agent receive the same analysis-anchor brief. The stronger and correct form of that requirement is a tuple, not a body of text: for one analysis lineage, every agent must receive the same `(brief version id, project epoch, context snapshot id, state digest)`.
 
 Delivering identical text is insufficient, because two agents can hold the same brief body while differing in the derived state it was interpreted against. The tuple is what must match. The context machinery already carries all four values, so this is a statement of the invariant the existing fields jointly express, not a new mechanism.
+
+## DEC-051 record
+
+### DEC-051 `operation_id` is conditional, and the envelope validator's contract surface is generated
+
+Classification: REFINEMENT. The MCF-v2 envelope contract is corrected; no message type, event, state machine,
+Tauri surface or SQLite shape changes.
+
+Found by auditing the Stage 5 envelope validator against `envelope.schema.json`. That module stated that "the
+validator and the contract cannot disagree about what is legal". Ten disagreements were reproducible against the
+built crate, in both directions. They are one defect class rather than ten: wherever the validator hand-copied a
+field set or a type from the contract, the copy had drifted — because nothing read `envelope.schema.json` at all.
+
+| Field | Value |
+|---|---|
+| Previous behavior | `envelope.schema.json` listed `authorization_context` **twice** in its conditional `required` (seven entries, six unique), which is not a conformant JSON Schema: the elements of `required` must be unique. It also carried `operation_id` in the **unconditional** `required` array while the conditional listed `operation_id` again, so one of the two placements had to be wrong and the commit that introduced both was internally inconsistent. The conditional narrowed only `authorization_context` to a non-nullable type, leaving the other five material fields nullable in the contract and required non-null only in Rust. The validator checked six of `authorization_context`'s seven required fields, never required `security.secret_refs`, never required `recipients[].actor_id`, enforced `additionalProperties:false` at the envelope level only, and accepted any three-part `schema_version` such as `2.x.y`. It also type-checked almost nothing: `blocking: "yes"` and `payload: "not an object"` were accepted. |
+| New behavior | The duplicate is removed. `operation_id` is a **conditional** field: required and non-null of material-action messages, optional otherwise. The conditional narrows all six of its fields to non-nullable types, so the contract itself states what Rust was enforcing alone. Every nested field set — `authorization_context`, `security`, and the identity shape shared by `sender` and each recipient — and every field's JSON type is generated into `generated/envelope.rs` from the contract. The validator enforces `additionalProperties:false` at every level, plus `enum`, `const`, `uniqueItems`, `minLength`, `minimum` and `pattern`. |
+| Reason | This record introduces no new product choice. It aligns the machine-readable schema with what DEC-027 and `MCF-V2-PROTOCOL.md` already state: `operation_id` is a conditional field, and material-action idempotency is keyed by `project_id + operation_id`. DEC-027 is unchanged. A schema that demands a field the protocol document classifies as conditional makes a legal non-material envelope illegal at the runtime boundary for no stated reason; the reverse direction — a validator accepting what the contract refuses — lets an envelope reach the bus without the `required_capabilities` PolicyService consumes, and lets a sender smuggle an unvalidated key past a nested `additionalProperties:false`. |
+| Compatibility impact | `REQUIRED_FIELDS` loses `operation_id` and `OPTIONAL_FIELDS` gains it, so a non-material envelope that omits `operation_id` is legal. Material-action envelopes are unaffected in substance: the six conditional fields were already required of them and are now additionally required non-null. No message type, event, transition, Tauri command or SQLite shape changes. No runtime consumer exists yet — the crate is the first slice — so there is no migration. |
+| Known limits | `format` annotations (`uuid`, `date-time`) are deliberately not enforced, because JSON Schema defines `format` as annotation-only by default and treating it as validation would reject envelopes the contract admits. A field whose contract is a `$ref`, a bare `enum` or a bare `const` carries no `type` and is therefore absent from the generated type table by construction, checked by the hand-written rule named for it. |
+
+What the gate could and could not see, each reproduced rather than asserted
+
+1. The duplicate was invisible to every check in the repository. `envelope.schema.json` was absent from
+   `workspace.manifest.json:schema_sources`, so neither the consumer-coverage check nor the readability sweep
+   opened it; the existing duplicate-entry tests covered the message and event registry lists, never a schema's
+   own `required`; and the generator dedupes that list before emitting a constant, so the generated-staleness
+   check stayed green over it. Reproduced: with the duplicate reintroduced, `verify.mjs` now fails naming the
+   exact path (`allOf[0].then.required repeats "idempotency_key"`) while `generate-protocol.mjs --check` still
+   reports "up to date".
+2. The gate now tests every canonical schema's own `required` and `enum` arrays for repeated entries, and
+   compares the envelope's emitted constants against the raw contract. The latter is not redundant with
+   `--check`: that mode compares the generator's output with a re-derivation from the same schema, so a generator
+   edited to omit a field regenerates consistently and passes it. Reproduced: with `REQUIRED_FIELDS` mutated to
+   drop `security` and the file regenerated, `--check` passes and the constant comparison fails.
+3. The readability sweep now parses through an uncounted read. It previously opened every canonical JSON with the
+   counted reader, so the coverage map's self-check — which fails when a declared artifact was not read during
+   the run — could not fire for any canonical file, because the sweep alone satisfied it. Reproduced by claiming
+   an unread canonical file as verified: the gate now fails where it previously passed.
+
+Corrections to the Stage 5 commit record
+
+That commit's body states the duplicate "would have been copied straight into the generated constant list". It
+would not have been: the generator emits that list through `[...new Set(...)]`, so the seventh entry was already
+collapsed before emission. The repair was correct and the stated consequence was not, and the distinction is
+material rather than pedantic — the same dedupe is exactly why the generated-staleness check could not see the
+duplicate at all. The same body counts "22 phases"; the generated `PHASES` array holds 23, being the 22 project
+lifecycle phases plus `UNSCOPED`. Commit messages are immutable history and are not rewritten here; this note is
+the correction, per the practice recorded in DEC-033 and DEC-035.
+
+Standing process rules, restated because this change used them
+
+Rust sources are edited with the editor, never by shell string replacement, which has damaged a Rust file three
+times. A file restored after a mutation is re-timed before rebuilding, because `Copy-Item` preserves the source's
+`LastWriteTime` and cargo will otherwise re-run a stale binary built from the mutation.
 
 ## Change procedure
 

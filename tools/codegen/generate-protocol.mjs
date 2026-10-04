@@ -196,8 +196,59 @@ const strArray = (values) => `&[${values.map((v) => JSON.stringify(v)).join(", "
 // hand-written list would drift silently, which is the failure this repository keeps removing elsewhere.
 const materialConditional = envelopeSchema.allOf?.[0] ?? {};
 const materialActionTypes = materialConditional.if?.properties?.message_type?.enum ?? [];
+// The conditional's `required` is deduped defensively, so a duplicate in the schema would NOT surface as a diff
+// in this generated file. That is why repeated entries in a canonical schema's `required` array are detected in
+// the contract gate instead, which checks every canonical schema for them.
 const materialRequired = [...new Set(materialConditional.then?.required ?? [])];
 const envelopeOptional = Object.keys(envelopeSchema.properties).filter((k) => !envelopeSchema.required.includes(k));
+
+// The envelope's nested objects are contracts in their own right: authorization_context and security each
+// declare their own `required` and `additionalProperties:false`, and one identity shape serves both the sender
+// and every recipient. Hand-copying those field lists into the validator is how the two drifted before:
+// authorization_context.required names seven fields and the validator checked six, so an envelope could
+// authorize a material action without ever stating its required capabilities.
+const authContextSchema = envelopeSchema.properties.authorization_context;
+const securitySchema = envelopeSchema.properties.security;
+const authContextRequired = authContextSchema.required ?? [];
+const authContextFields = Object.keys(authContextSchema.properties ?? {});
+const securityRequired = securitySchema.required ?? [];
+const securityFields = Object.keys(securitySchema.properties ?? {});
+const identityRequired = identitySchema.required ?? [];
+const identityFields = Object.keys(identitySchema.properties ?? {});
+
+// schema_version's `pattern` is a real assertion, unlike `format`, which JSON Schema treats as annotation only.
+// The validator implements the pattern structurally - numeric MINOR and PATCH, and the MAJOR the contract pins.
+// Deriving the MAJOR here keeps one source of truth; an unrecognised pattern shape stops generation loudly
+// rather than letting the validator accept a set the contract does not describe.
+const schemaVersionPattern = envelopeSchema.properties.schema_version.pattern;
+const versionShape = /^\^(\d+)\\\.\\d\+\\\.\\d\+\$$/.exec(schemaVersionPattern);
+if (!versionShape) {
+  throw new Error(
+    `envelope.schema.json:schema_version.pattern is ${JSON.stringify(schemaVersionPattern)}, which is not the ` +
+      "`^<major>\\.\\d+\\.\\d+$` shape implemented by is_schema_version() in crates/protocol/src/envelope.rs. " +
+      "Update that function to match the contract, and this derivation with it."
+  );
+}
+const schemaVersionMajor = versionShape[1];
+
+// A field -> JSON type table, so the validator never hand-copies which envelope field is a string, an integer or
+// a boolean. Only the JSON types this contract actually uses are named; an unmapped type is a generation error
+// rather than a silently unchecked field. Fields with no `type` at all - a `$ref`, a bare `enum`, a bare `const` -
+// are absent from the table by construction, and the hand-written rule named for each one enforces its vocabulary.
+const kindNames = { string: "Str", integer: "Int", number: "Num", boolean: "Bool", object: "Obj", array: "Arr", null: "Null" };
+const typedFields = [];
+for (const [name, spec] of Object.entries(envelopeSchema.properties)) {
+  const declared = Array.isArray(spec.type) ? spec.type : spec.type === undefined ? null : [spec.type];
+  if (declared === null) continue;
+  const kinds = declared.map((t) => kindNames[t]);
+  if (kinds.some((k) => k === undefined)) {
+    throw new Error(
+      `envelope.schema.json:properties.${name}.type declares ${JSON.stringify(declared)}, which this generator ` +
+        "does not map. Extend kindNames here and holds_type() in crates/protocol/src/envelope.rs together."
+    );
+  }
+  typedFields.push([name, kinds]);
+}
 
 const envelopeRs = `// GENERATED FILE - DO NOT EDIT.
 // Source: schemas/mcf-v2/envelope.schema.json, identity.schema.json, enums.schema.json
@@ -228,8 +279,38 @@ pub const REQUIRED_FIELDS: &[&str] = ${strArray(envelopeSchema.required)};
 /// Fields an envelope may carry. The schema sets additionalProperties:false, so anything else is rejected.
 pub const OPTIONAL_FIELDS: &[&str] = ${strArray(envelopeOptional)};
 
-/// Extra fields a material-action envelope must carry beyond the base set.
+/// The JSON type(s) each typed envelope field may hold, from the contract's own \`type\` keyword.
+///
+/// A field absent from this table declares no single \`type\` in the contract - it is a \`$ref\`, a bare \`enum\`
+/// or a bare \`const\` - so its vocabulary is enforced by the hand-written rule named for it instead. The names
+/// are resolved by holds_type() in envelope.rs.
+pub const FIELD_TYPES: &[(&str, &[&str])] = &[${typedFields.map(([n, ks]) => `(${JSON.stringify(n)}, &[${ks.map((k) => JSON.stringify(k)).join(", ")}])`).join(", ")}];
+
+/// Extra fields a material-action envelope must carry beyond the base set. The contract's conditional narrows
+/// each of these to a non-nullable type in \`then.properties\`, so presence alone is not enough: a null value
+/// does not satisfy it.
 pub const MATERIAL_REQUIRED_FIELDS: &[&str] = ${strArray(materialRequired)};
+
+/// Fields every authorization_context must carry, from the contract's own nested \`required\`.
+pub const AUTHORIZATION_CONTEXT_REQUIRED_FIELDS: &[&str] = ${strArray(authContextRequired)};
+
+/// Fields an authorization_context may carry. The contract sets additionalProperties:false on it.
+pub const AUTHORIZATION_CONTEXT_FIELDS: &[&str] = ${strArray(authContextFields)};
+
+/// Fields every security block must carry.
+pub const SECURITY_REQUIRED_FIELDS: &[&str] = ${strArray(securityRequired)};
+
+/// Fields a security block may carry. The contract sets additionalProperties:false on it.
+pub const SECURITY_FIELDS: &[&str] = ${strArray(securityFields)};
+
+/// Fields every actor identity must carry, applied to the sender and to every recipient alike.
+pub const IDENTITY_REQUIRED_FIELDS: &[&str] = ${strArray(identityRequired)};
+
+/// Fields an actor identity may carry. The contract sets additionalProperties:false on it.
+pub const IDENTITY_FIELDS: &[&str] = ${strArray(identityFields)};
+
+/// The MAJOR that schema_version must carry, derived from the contract's pattern.
+pub const SCHEMA_VERSION_MAJOR: &str = ${JSON.stringify(schemaVersionMajor)};
 
 /// Every legal delivery priority.
 pub const PRIORITIES: &[&str] = ${strArray(enumsSchema.$defs.priority.enum)};

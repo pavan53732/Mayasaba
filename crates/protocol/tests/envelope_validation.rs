@@ -239,9 +239,9 @@ fn an_envelope_asserting_it_carries_secrets_is_rejected() {
 
 #[test]
 fn a_material_action_without_authorization_is_rejected() {
-    // Each authorization field is required in turn. `operation_id` is also in the envelope's base required
-    // set, so removing it is caught by the base check before the material-action rule is reached - both are
-    // correct refusals, and the ordering is deliberate: base shape first, then the conditional.
+    // Each authorization field is required in turn. None of these six is in the envelope's unconditional
+    // required set - `operation_id`, the one that used to be, is conditional in the contract - so every removal
+    // is caught by the conditional's own rule rather than by the base shape check.
     for field in vocab::MATERIAL_REQUIRED_FIELDS {
         let mut v = valid_material();
         v.as_object_mut().unwrap().remove(*field);
@@ -310,4 +310,198 @@ fn the_generated_vocabulary_matches_the_contract_size() {
     assert!(vocab::PHASES.len() >= 20);
     assert!(vocab::MATERIAL_ACTION_MESSAGE_TYPES.len() >= 20);
     assert_eq!(vocab::PROTOCOL_VERSION, "MCF-2");
+}
+
+// ------------------------------------------- nested objects and the type table
+//
+// Each test below reproduces a divergence that existed between this validator and envelope.schema.json: the
+// contract required something the hand-written logic did not check, because the field list had been copied by
+// hand instead of generated. They are the regression guard for that whole class, not for one field.
+
+#[test]
+fn a_security_block_without_secret_refs_is_rejected() {
+    // security.required = ["classification","secret_refs"].
+    let mut v = valid();
+    v["security"] = json!({ "classification": "INTERNAL_PROJECT" });
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::MissingNestedField { object: "security", field: "secret_refs" })
+    );
+}
+
+#[test]
+fn an_authorization_context_without_required_capabilities_is_rejected() {
+    // authorization_context.required names seven fields. The validator previously checked six, so an envelope
+    // could authorize a material action without ever stating the capabilities PolicyService consumes.
+    let mut v = valid_material();
+    v["authorization_context"]
+        .as_object_mut()
+        .unwrap()
+        .remove("required_capabilities");
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::MissingNestedField {
+            object: "authorization_context",
+            field: "required_capabilities",
+        })
+    );
+}
+
+#[test]
+fn a_recipient_without_actor_id_is_rejected() {
+    // identity.required = ["actor_type","actor_id"], and a recipient is a full identity. The validator
+    // previously checked only actor_type on recipients while requiring actor_id on the sender.
+    let mut v = valid();
+    v["recipients"] = json!([{ "actor_type": "MAYASABA" }]);
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::MissingNestedField { object: "recipients[]", field: "actor_id" })
+    );
+}
+
+#[test]
+fn an_undefined_field_inside_a_nested_object_is_rejected() {
+    // additionalProperties:false is declared on identity, on authorization_context and on security, not only on
+    // the envelope. Ignoring an unknown nested field would let a sender smuggle meaning past the receiver.
+    let mut v = valid();
+    v["sender"] = json!({ "actor_type": "AGENT", "actor_id": "x", "smuggled": 1 });
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::UnknownNestedField { object: "sender", field: "smuggled".into() })
+    );
+
+    let mut v = valid_material();
+    v["authorization_context"]["smuggled"] = json!(1);
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::UnknownNestedField {
+            object: "authorization_context",
+            field: "smuggled".into(),
+        })
+    );
+
+    let mut v = valid();
+    v["security"] = json!({ "classification": "INTERNAL_PROJECT", "secret_refs": [], "smuggled": 1 });
+    assert_eq!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::UnknownNestedField { object: "security", field: "smuggled".into() })
+    );
+}
+
+#[test]
+fn a_schema_version_with_non_numeric_parts_is_rejected() {
+    // The contract's pattern is ^2\.\d+\.\d+$ - digits, not merely three dot-separated parts. `2.x.y` was
+    // previously accepted because only the part count and the major were checked.
+    for bad in ["2.x.y", "2.1.x", "2..0", "2.1.", "2.1.0.0", "2.-1.0"] {
+        let mut v = valid();
+        v["schema_version"] = json!(bad);
+        assert!(
+            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::InvalidValue { field: "schema_version", .. })),
+            "schema_version `{bad}` must be rejected"
+        );
+    }
+    let mut v = valid();
+    v["schema_version"] = json!("2.17.3");
+    validate_envelope(&v).expect("numeric MINOR and PATCH under the pinned MAJOR must be accepted");
+}
+
+#[test]
+fn a_material_action_may_not_null_its_authorization_fields() {
+    // The contract's `then` narrows every conditional field to a non-nullable type, so present-but-null is not
+    // satisfied. Only authorization_context was narrowed before; the other five were enforced here alone, which
+    // is the split that let the schema and the validator describe different languages.
+    for field in vocab::MATERIAL_REQUIRED_FIELDS {
+        let mut v = valid_material();
+        v[*field] = Value::Null;
+        assert!(
+            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::MissingAuthorizationContext(_))),
+            "a material action with `{field}` explicitly null must be refused"
+        );
+    }
+}
+
+#[test]
+fn operation_id_is_required_of_a_material_action_and_optional_otherwise() {
+    // DEC-027 keys material-action idempotency by project_id + operation_id, and MCF-V2-PROTOCOL.md classifies
+    // operation_id as a conditional field. It was previously in the envelope's unconditional required set,
+    // which made the validator reject every non-material envelope that omitted it.
+    assert!(
+        !vocab::REQUIRED_FIELDS.contains(&"operation_id"),
+        "operation_id is conditional, not unconditional"
+    );
+    assert!(vocab::OPTIONAL_FIELDS.contains(&"operation_id"));
+
+    let mut v = valid();
+    v.as_object_mut().unwrap().remove("operation_id");
+    validate_envelope(&v).expect("a non-material envelope need not carry operation_id");
+
+    let mut v = valid_material();
+    v.as_object_mut().unwrap().remove("operation_id");
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::MissingAuthorizationContext(_))
+    ));
+}
+
+#[test]
+fn a_field_of_the_wrong_json_type_is_rejected() {
+    // The type table is generated from each field's `type`, so a wrong type is caught for every field the
+    // contract types - not only for the handful that had a hand-written check.
+    for (field, bad) in [
+        ("blocking", json!("yes")),
+        ("requires_ack", json!(1)),
+        ("payload", json!("not an object")),
+        ("sequence", json!("1")),
+        ("recipients", json!("controller")),
+        ("created_at", json!(1234)),
+        ("task_id", json!(12)),
+    ] {
+        let mut v = valid();
+        v[field] = bad.clone();
+        assert!(
+            matches!(validate_envelope(&v).err(), Some(EnvelopeRejection::WrongJsonType { field: f, .. }) if f == field),
+            "`{field}` set to {bad} must be refused as the wrong JSON type"
+        );
+    }
+}
+
+#[test]
+fn a_nullable_field_still_accepts_null() {
+    // The other side of the type table: a field the contract declares nullable must not become required-non-null
+    // merely because it is typed. Over-rejecting is the same defect as under-rejecting.
+    let mut v = valid();
+    for field in ["causation_id", "task_id", "round_id", "context_snapshot_id", "state_digest", "idempotency_key", "expires_at", "operation_id"] {
+        v[field] = Value::Null;
+    }
+    v["authorization_context"] = Value::Null;
+    validate_envelope(&v).expect("every nullable field must accept null");
+}
+
+#[test]
+fn a_repeated_array_entry_is_rejected() {
+    // uniqueItems:true on secret_refs and required_capabilities.
+    let mut v = valid();
+    v["security"]["secret_refs"] = json!(["vault://a", "vault://a"]);
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::InvalidValue { field: "secret_refs", .. })
+    ));
+
+    let mut v = valid_material();
+    v["authorization_context"]["required_capabilities"] = json!(["fs.write", "fs.write"]);
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::InvalidValue { field: "required_capabilities", .. })
+    ));
+}
+
+#[test]
+fn an_empty_idempotency_key_is_rejected() {
+    // minLength:1 in the contract; an empty key is not a key.
+    let mut v = valid();
+    v["idempotency_key"] = json!("");
+    assert!(matches!(
+        validate_envelope(&v).err(),
+        Some(EnvelopeRejection::InvalidValue { field: "idempotency_key", .. })
+    ));
 }
