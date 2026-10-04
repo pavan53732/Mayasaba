@@ -122,10 +122,31 @@ Messages require durable IDs, project/session identity, delivery state, attempts
 ## Outbox
 
 Outbound state transitions use a transactional outbox where the state mutation and outbound record commit together.
+`outbox.dispatch_state` is `PENDING` or `FAILED` while an entry is still claimable and `DISPATCHED` or `ABANDONED`
+once it is not, so a failed handover leaves the entry claimable and a terminated message leaves it abandoned
+(DEC-058).
+
+An enqueue is idempotent on `project_id + operation_id`, and **only a live claim counts**: a message that has
+terminated no longer absorbs an enqueue for the same operation, because once an operation has terminated,
+re-enqueueing it is what replay is (DEC-065).
 
 ## Inbox
 
-Receiver-side deduplication is persisted before a side-effecting message is executed.
+Receiver-side deduplication is persisted before a side-effecting message is executed. `inbox.processing_state` is
+`PERSISTED`, `ACKED`, `PROCESSING`, `PROCESSED`, `RETRYING`, `EXPIRED` or `DEAD_LETTER` (DEC-059, DEC-062), and the
+terminal event is recorded on the row. An arriving message is born `DISPATCHED` - its sender dispatched it, so the
+receiver's part begins at `RECEIVED` - and a redelivery after a requeue is told apart from a duplicate by the
+delivery state (DEC-061).
+
+## Delivery states
+
+`messages.delivery_state` carries **one** machine for a message in both directions, and its vocabulary is the
+`message_delivery` machine's. **The four state columns - `messages.delivery_state`, `outbox.dispatch_state`,
+`inbox.processing_state` and `message_receipts.receipt_state` - carry no `CHECK` constraint**, and none can be
+added: the tables exist and the schema applies with `CREATE TABLE IF NOT EXISTS`, so there is no path to an
+existing database. The vocabulary is enforced by the bus and by the contract gate, which reads the delivery edges
+out of the Rust and holds them to the machine (DEC-066); a state name written where no edge is involved is not
+checked.
 
 ## Integrity constraints
 

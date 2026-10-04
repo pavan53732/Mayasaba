@@ -42,6 +42,17 @@
 - priority lanes
 - backpressure
 - dead letters
+
+**Status: implemented.** `crates/bus` and its `crates/storage` support implement the whole list above: the
+per-project SHA-256 event chain over RFC 8785 JCS that the event log rests on (DEC-034), the envelope-gated
+transactional outbox with live-claim idempotency (DEC-058, DEC-065), the pure dispatch decision with a policy file,
+a transport trait, bounded retry and backoff and dead letters (DEC-058), the durable inbox with persist-before-ACK
+and receipt-only ACK (DEC-059), the declared priority lanes in the contract's order (DEC-060), requeue (DEC-061),
+`RETRYING -> EXPIRED` (DEC-062), ordering gap detection (DEC-063), backpressure as measurement (DEC-064) and
+explicit controller-invoked replay (DEC-065). Two items are deliberately not done and are recorded rather than
+implied: backpressure does not **refuse** an enqueue, because the error registry has no code for transient capacity
+(DEC-064), and the bus ships no production clock, transport or identity source, because it performs no I/O
+(DEC-058, DEC-065).
 - explicit replay
 
 ## M3 — Agent gateway

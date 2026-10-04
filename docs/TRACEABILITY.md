@@ -30,6 +30,33 @@ Changes to requirements, decisions, or contracts identify affected tasks, contex
 ## Authority
 Traceability indexes relationships between authoritative objects. It is not a second source of truth.
 
+## M2 communication bus coverage
+
+The M2 slice (`crates/bus`, with its `crates/storage` support) is **IMPLEMENTED and VALIDATED**, not CERTIFIED:
+certification is the controller's, and no controller has certified it. Each requirement below reaches VALIDATED
+through the tests named, and each decision is a record in `docs/DECISION-REGISTER.md`.
+
+| Requirement | Decision | Evidence |
+| --- | --- | --- |
+| Durable event log with a per-project hash chain | DEC-034 | `crates/storage/tests/event_chain.rs`, `canonical.rs` |
+| Transactional outbox, envelope-gated, idempotent | DEC-058, DEC-065 | `crates/bus/tests/enqueue.rs` |
+| Pure dispatch decision, policy file, bounded retry, backoff, dead letters | DEC-058 | `crates/bus/tests/dispatch.rs` |
+| Durable inbox, persist-before-ACK, receipt-only ACK, NACK reason, duplicate delivery | DEC-059 | `crates/bus/tests/inbox.rs` |
+| Declared priority lanes in the contract's order | DEC-060 | `crates/bus/tests/dispatch.rs`, gate check |
+| Requeue, and event identity across a repeated transition | DEC-061 | `crates/bus/tests/inbox.rs` |
+| `RETRYING -> EXPIRED`, closing the last declared exit | DEC-062 | `crates/bus/tests/inbox.rs` |
+| Ordering gap detection | DEC-063 | `crates/bus/tests/inbox.rs` |
+| Backpressure as measurement | DEC-064 | `crates/bus/tests/dispatch.rs` |
+| Explicit controller-invoked replay | DEC-065 | `crates/bus/tests/replay.rs` |
+| The delivery code held to the declared machine | DEC-066 | `npm run verify:contracts`, mutation `dec066-a` |
+
+**Not addressed, and recorded as such rather than implied.** Backpressure does not refuse an enqueue, because the
+error registry has no code for transient capacity (DEC-064); no production clock, transport or identity source is
+shipped, because the bus performs no I/O (DEC-058, DEC-065); four of the machine's thirteen edges are not read by
+the gate, because they are inline SQL where the from-state is implied by a `WHERE` clause (DEC-066); and the
+authorization decision `docs/MCF-V2-IMPLEMENTATION-DESIGN.md` places "with the outbox record" has no column to live
+in, which is an open architecture gap awaiting a decision.
+
 
 ## Persistence implementation
 

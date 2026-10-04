@@ -70,6 +70,17 @@ Canonical MCF-v2 types, JSON Schema compatibility and protocol validation.
 ### crates/bus
 Durable local routing, queueing, priorities, ACK/NACK, idempotency, retries, ordering, dead-letter, outbox/inbox and replay.
 
+The declared `message_delivery` machine in `schemas/mcf-v2/transition-types.json` is the authority over this crate:
+every delivery state and every edge the code advances through must be one the machine declares, and the contract
+gate reads the Rust to enforce it (DEC-066). A transport failure never advances `messages.delivery_state`, so
+`DISPATCHED` means "handed to the transport" and never "the transport was tried"; an exhausted sender terminates
+through the declared `QUEUED -> EXPIRED` with a dead letter, and `DEAD_LETTER` is reserved for a receiver's
+`PROCESSING -> REJECTED -> DEAD_LETTER` (DEC-058, DEC-062).
+
+The crate performs no process, network or filesystem I/O, and reaches for no ambient state: the clock, the
+transport and the replay identity source are all injected, and the policy is an argument rather than a file read
+(DEC-058, DEC-065). Whoever wires the bus into the shell supplies all four.
+
 ### crates/agents
 Runtime detection, adapter sessions, capability negotiation and native-protocol translation.
 
