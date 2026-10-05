@@ -1254,6 +1254,29 @@ mod tests
     }
 
     #[test]
+    fn probe_version_parser_accepts_vendor_prefixes() {
+        assert_eq!((super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().major,
+                    super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().minor), (0,21));
+        assert_eq!(super::parse_version_from_probe("v1.18.34").unwrap().line(), "1.x");
+        assert_eq!(super::parse_version_from_probe("release 2.0.22-beta").unwrap().prerelease.as_deref(), Some("beta"));
+        assert!(super::parse_version_from_probe("no version here").is_none());
+    }
+
+    #[test]
+    fn any_adapter_routes_to_the_closed_agent_set() {
+        assert_eq!(AnyAgentAdapter::for_agent(AgentType::Hermes).agent_type(), AgentType::Hermes);
+        assert_eq!(AnyAgentAdapter::for_agent(AgentType::Kilo).agent_type(), AgentType::Kilo);
+        assert_eq!(AnyAgentAdapter::for_agent(AgentType::OpenCode).agent_type(), AgentType::OpenCode);
+    }
+
+    #[test]
+    fn discovery_options_have_a_bounded_default_probe_window() {
+        let options = ProbeOptions::default();
+        assert_eq!(options.timeout_ms, 10_000);
+        assert!(options.timeout_ms >= 100);
+    }
+
+    #[test]
     fn normalization_preserves_unknown_records() {
         let event = OpenCodeAdapter.normalize_event(
             r#"{"type":"step_start","sessionID":"native-1","part":{}}"#,
