@@ -243,3 +243,50 @@ fn append_only_trace_links_cover_task_attempt_provenance() {
         created_at: "2".to_string(),
     }).is_err(), "unknown provenance links must be rejected");
 }
+
+
+#[test]
+fn attempt_transition_is_compare_and_swap_and_heartbeat_is_fenced() {
+    use mayasaba_storage::NewTaskAttempt;
+    let storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.insert_task_attempt(&NewTaskAttempt {
+        attempt_id:"att_transition".into(), task_id:"task_1".into(), project_id:"prj_reliability".into(),
+        attempt_no:1, lease_id:"lease_1".into(), agent_id:"agent_1".into(), session_id:"sess_1".into(),
+        workspace_id:"ws_1".into(), fence_token:7, project_epoch:0, context_snapshot_id:"ctx_1".into(),
+        state:"CREATED".into(), checkpoint_id:None, failure_id:None,
+        started_at:None, heartbeat_at:Some("1".into()), ended_at:None, created_at:"1".into()
+    }).expect("attempt");
+    storage.transition_task_attempt("att_transition","CREATED","STARTED").expect("start");
+    assert!(storage.transition_task_attempt("att_transition","CREATED","RUNNING").is_err(), "CAS must reject a stale expected state");
+    storage.transition_task_attempt("att_transition","STARTED","RUNNING").expect("running");
+    storage.heartbeat_task_attempt("att_transition",7,"2").expect("heartbeat");
+    storage.conn().execute("UPDATE task_leases SET lease_version=8 WHERE lease_id='lease_1'",[]).expect("renew");
+    assert!(storage.heartbeat_task_attempt("att_transition",7,"3").is_err(), "stale fence cannot heartbeat after lease rollover");
+}
+
+#[test]
+fn certification_binding_supersession_is_append_only() {
+    use mayasaba_storage::NewCertificationBinding;
+    let storage = project_storage();
+    storage.conn().execute(
+        "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_1','prj_reliability','task_1','{}','{}','PASS','1')", []
+    ).expect("validation");
+    storage.insert_certification_binding(&NewCertificationBinding {
+        certification_binding_id:"cert_1".into(), project_id:"prj_reliability".into(), task_id:Some("task_1".into()),
+        validation_id:"val_1".into(), workspace_revision_id:None, environment_snapshot_id:None,
+        artifact_hashes_json:"[]".into(), validator_version:"v1".into(), test_suite_version:None,
+        status:"ASSERTED".into(), supersedes_binding_id:None, reason:None, created_at:"2".into()
+    }).expect("first certification");
+    storage.insert_certification_binding(&NewCertificationBinding {
+        certification_binding_id:"cert_2".into(), project_id:"prj_reliability".into(), task_id:Some("task_1".into()),
+        validation_id:"val_1".into(), workspace_revision_id:None, environment_snapshot_id:None,
+        artifact_hashes_json:"[]".into(), validator_version:"v2".into(), test_suite_version:None,
+        status:"INVALIDATED".into(), supersedes_binding_id:Some("cert_1".into()), reason:Some("workspace changed".into()), created_at:"3".into()
+    }).expect("invalidation");
+    let latest = storage.get_latest_certification_binding("prj_reliability", Some("task_1")).expect("latest").expect("binding");
+    assert_eq!(latest.certification_binding_id, "cert_2");
+    assert_eq!(latest.status, "INVALIDATED");
+    let old_status:String = storage.conn().query_row("SELECT status FROM certification_bindings WHERE certification_binding_id='cert_1'",[],|r|r.get(0)).expect("old");
+    assert_eq!(old_status,"ASSERTED","historical certification must not be rewritten");
+}
