@@ -3944,18 +3944,45 @@ impl Storage {
 
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        let validation: Option<(String, Option<String>, String)> = self.conn.query_row(
+            "SELECT project_id, task_id, verdict FROM validation_runs WHERE validation_id = ?1",
+            [new.validation_id.as_str()],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (validation_project, validation_task, validation_verdict) = match validation {
+            Some(v) => v,
+            None => return Err(StorageError::NotFound(format!("validation run {}", new.validation_id))),
+        };
+        if validation_project != new.project_id {
+            return Err(StorageError::Malformed {
+                column: "certification_bindings.project_id".to_string(),
+                detail: format!("validation {} belongs to project {validation_project}, not {}", new.validation_id, new.project_id),
+            });
+        }
+        if new.task_id != validation_task {
+            return Err(StorageError::Malformed {
+                column: "certification_bindings.task_id".to_string(),
+                detail: format!("certification task scope does not match validation {} task scope", new.validation_id),
+            });
+        }
+        if new.status == "ASSERTED" && validation_verdict != "PASS" {
+            return Err(StorageError::Malformed {
+                column: "validation_runs.verdict".to_string(),
+                detail: format!("validation {} has verdict {validation_verdict}; ASSERTED certification requires PASS", new.validation_id),
+            });
+        }
         if let Some(parent_id) = new.supersedes_binding_id.as_deref() {
-            let parent_project: Option<String> = self.conn.query_row(
-                "SELECT project_id FROM certification_bindings WHERE certification_binding_id = ?1",
+            let parent: Option<(String, Option<String>)> = self.conn.query_row(
+                "SELECT project_id, task_id FROM certification_bindings WHERE certification_binding_id = ?1",
                 [parent_id],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             ).optional().map_err(StorageError::Db)?;
-            match parent_project {
+            match parent {
                 None => return Err(StorageError::NotFound(format!("certification binding {parent_id}"))),
-                Some(project) if project != new.project_id => {
+                Some((project, task)) if project != new.project_id || task != new.task_id => {
                     return Err(StorageError::Malformed {
                         column: "certification_bindings.supersedes_binding_id".to_string(),
-                        detail: format!("binding {parent_id} belongs to project {project}, not {}", new.project_id),
+                        detail: format!("binding {parent_id} does not match the new certification project/task scope"),
                     })
                 }
                 Some(_) => {}
