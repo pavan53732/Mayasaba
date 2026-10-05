@@ -4943,8 +4943,10 @@ impl Storage {
         let mut stmt = self.conn.prepare(
             "SELECT t.task_id, t.project_id, t.workspace_id, t.priority, t.risk, t.created_at, t.updated_at
              FROM tasks t
+             JOIN projects p ON p.project_id = t.project_id
              WHERE t.project_id = ?1
                AND t.status = 'READY'
+               AND t.current_epoch = p.current_epoch
                AND t.workspace_id IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM task_dependencies d
