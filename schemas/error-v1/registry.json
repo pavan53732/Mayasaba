@@ -289,6 +289,15 @@
       "tauri_code": "MAYASABA_TRANSPORT_FAILURE",
       "meaning": "A Tauri invocation did not complete, or Rust rejected it with something that is not a registered error payload. It is raised on the frontend side of the boundary, which is why it has no MCF counterpart.",
       "remediation": "Retry the operation. If it persists, check that the command is registered in generate_handler![...] and that the shell is running; a rejection that is not a registered error payload is a contract violation and should be reported as one."
+    },
+    "CAPACITY_EXCEEDED": {
+      "category": "INTERNAL",
+      "retryability": "BACKOFF",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_CAPACITY_EXCEEDED",
+      "meaning": "The work was refused because a bounded local queue is already at its configured capacity. It is transient and expected: nothing is wrong with the request, and the same request is expected to succeed once the queue drains.",
+      "remediation": "Wait for outstanding work to be dispatched or expired, then retry. This is not a denial - a denial means the request may never be made, and this means it may not be made yet. Do not treat it as a permanent failure or surface it to the user as one."
     }
   }
 }

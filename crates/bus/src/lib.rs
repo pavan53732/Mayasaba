@@ -297,6 +297,27 @@ impl Bus {
             project_epoch: envelope.project_epoch(),
         };
 
+        // Refused before the write when the queue is already at its bound. A message whose id already exists
+        // is never refused for capacity: it adds no work, because the enqueue below absorbs it as a retry. See
+        // DEC-068 for the wart this leaves - a message that is new by id but duplicates a live
+        // (project_id, operation_id) is refused rather than deduplicated when the queue is full.
+        let known = self
+            .storage
+            .message_exists(&new.message_id)
+            .map_err(error::classify)?;
+        if !known {
+            let pending = self
+                .storage
+                .pending_outbound_count()
+                .map_err(error::classify)?;
+            if pending >= self.dispatch_policy.max_pending {
+                return Err(BusError::CapacityExceeded {
+                    pending,
+                    limit: self.dispatch_policy.max_pending,
+                });
+            }
+        }
+
         let enqueued = self
             .storage
             .enqueue_message(&new)

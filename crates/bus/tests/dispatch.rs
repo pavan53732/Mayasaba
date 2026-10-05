@@ -83,6 +83,7 @@ fn the_decision_is_taken_from_the_recorded_attempt_count_and_nothing_else() {
     let policy = DispatchPolicy {
         max_attempts: 3,
         batch_size: 10,
+        ..DispatchPolicy::default()
     };
     // Below the budget: send, numbered from one.
     assert_eq!(
@@ -317,6 +318,7 @@ fn exhausting_the_budget_expires_the_message_through_the_declared_edge() {
     let policy = DispatchPolicy {
         max_attempts: 2,
         batch_size: 10,
+        ..DispatchPolicy::default()
     };
     let backoff = BackoffPolicy {
         base_seconds: 1,
@@ -404,6 +406,7 @@ fn one_pass_claims_no_more_than_its_batch_size() {
     let policy = DispatchPolicy {
         max_attempts: 5,
         batch_size: 2,
+        ..DispatchPolicy::default()
     };
     let mut bus = Bus::with_policy(storage, policy, BackoffPolicy::default());
     for n in 1..=4 {
@@ -579,6 +582,7 @@ fn a_pass_serves_the_control_lane_before_the_bulk_lane() {
     let policy = DispatchPolicy {
         max_attempts: 3,
         batch_size: 3,
+        ..DispatchPolicy::default()
     };
     let mut bus = Bus::with_policy(storage, policy, BackoffPolicy::default());
     let lanes = [

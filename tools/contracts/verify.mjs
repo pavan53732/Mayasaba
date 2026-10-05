@@ -1585,6 +1585,7 @@ const busDefaults=[
   ["BASE_SECONDS",busBase,"backoff.base_seconds"],
   ["MULTIPLIER",busMultiplier,"backoff.multiplier"],
   ["CAP_SECONDS",busCap,"backoff.cap_seconds"],
+  ["MAX_PENDING",busPolicies.dispatch?.max_pending,"dispatch.max_pending"],
 ];
 for(const [constant,expected,where] of busDefaults){
   const got=rustConst(constant);

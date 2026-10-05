@@ -13,6 +13,8 @@
 pub const MAX_ATTEMPTS: i64 = 5;
 /// The shipped `bus-policies.json:dispatch.batch_size`.
 pub const BATCH_SIZE: i64 = 32;
+/// The shipped `bus-policies.json:dispatch.max_pending`.
+pub const MAX_PENDING: i64 = 1024;
 /// The shipped `bus-policies.json:backoff.base_seconds`.
 pub const BASE_SECONDS: i64 = 2;
 /// The shipped `bus-policies.json:backoff.multiplier`.
@@ -27,6 +29,8 @@ pub struct DispatchPolicy {
     pub max_attempts: i64,
     /// The most queue entries one dispatch pass claims.
     pub batch_size: i64,
+    /// The most queue entries that may be waiting for dispatch at once.
+    pub max_pending: i64,
 }
 
 impl Default for DispatchPolicy {
@@ -34,6 +38,7 @@ impl Default for DispatchPolicy {
         DispatchPolicy {
             max_attempts: MAX_ATTEMPTS,
             batch_size: BATCH_SIZE,
+            max_pending: MAX_PENDING,
         }
     }
 }

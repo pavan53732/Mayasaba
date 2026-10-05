@@ -438,6 +438,19 @@ const MUTATIONS = [
     ],
     expect: [],
   },
+  {
+    id: "dec068-a",
+    what: "the shipped MAX_PENDING disagrees with bus-policies.json",
+    check: GATE,
+    edits: [
+      {
+        file: "crates/bus/src/policy.rs",
+        find: "pub const MAX_PENDING: i64 = 1024;",
+        replace: "pub const MAX_PENDING: i64 = 64;",
+      },
+    ],
+    expect: ["MAX_PENDING is 64 but bus-policies.json dispatch.max_pending is 1024"],
+  },
 ];
 
 // -----------------------------------------------------------------------------------------------------------

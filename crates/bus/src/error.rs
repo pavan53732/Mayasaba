@@ -56,6 +56,18 @@ pub enum BusError {
         /// The registry code of the last failure, which is what the dead letter records.
         last_error: &'static str,
     },
+    /// The queue is at its configured bound, so the work was not accepted.
+    ///
+    /// Reported rather than swallowed, and distinct from a policy refusal: `POLICY_DENIED` means the request may
+    /// never be made, and this means it may not be made yet. The two are different answers and a caller acts
+    /// differently on each, so collapsing them into one code would cost the caller the ability to tell them
+    /// apart (AGENTS.md section 19).
+    CapacityExceeded {
+        /// How many entries were already waiting for dispatch.
+        pending: i64,
+        /// The configured bound they had reached.
+        limit: i64,
+    },
 }
 
 /// Turn a storage refusal into the bus's own report of it.
@@ -134,6 +146,8 @@ impl BusError {
             // registry's own meaning for this code is exactly that: the message exhausted its retry budget and
             // is retained for inspection.
             BusError::Expired { .. } => "DEAD_LETTERED",
+            // Transient and expected, which is why it is not POLICY_DENIED: see the variant.
+            BusError::CapacityExceeded { .. } => "CAPACITY_EXCEEDED",
         }
     }
 }
@@ -186,6 +200,11 @@ impl std::fmt::Display for BusError {
                 f,
                 "message `{message_id}` exhausted its delivery budget after {attempts} attempt(s); the last \
                  failure was {last_error} and a dead letter records it"
+            ),
+            BusError::CapacityExceeded { pending, limit } => write!(
+                f,
+                "{pending} queue entries are already waiting for dispatch, which is the configured bound of \
+                 {limit}; the work was not accepted and may be retried once the queue drains"
             ),
         }
     }
