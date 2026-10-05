@@ -61,7 +61,12 @@ pub fn expire_leases(storage: &mut Storage, now: &str) -> Result<u64> {
     storage.expire_due_leases(now)
 }
 
-/// Return a lease-expired Task to READY only after durable attempt/process reconciliation is clear.
+/// Move a lease-expired Task into recovery before physical reconciliation.
+pub fn queue_expired_task_for_recovery(storage: &mut Storage, task_id: &str, now: &str) -> Result<()> {
+    storage.queue_expired_task_for_recovery(task_id, now)
+}
+
+/// Return a recovery-pending Task to READY only after durable attempt/process reconciliation is clear.
 pub fn recover_expired_task(storage: &mut Storage, task_id: &str, now: &str) -> Result<()> {
     storage.recover_expired_task(task_id, now)
 }
