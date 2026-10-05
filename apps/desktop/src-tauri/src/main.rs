@@ -13,6 +13,8 @@
 //! `#[tauri::command(rename_all = "snake_case")]` on every command, because Tauri's default for command
 //! arguments is camelCase and an implicit default is how the two sides drifted apart in the first place.
 
+mod bus_shell;
+
 use std::sync::Mutex;
 
 use mayasaba_core::project_service::{
@@ -251,9 +253,20 @@ fn main() {
         Err(error) => eprintln!("mayasaba: startup recovery could not run: {error}"),
     }
 
+    // Its own connection, opened eagerly so a failure to reach the durable store surfaces at startup rather
+    // than on the first command, exactly as the project service does above.
+    let bus_state: bus_shell::SharedBus = std::sync::Arc::new(Mutex::new(
+        bus_shell::BusShell::open(&database_path())
+            .expect("Mayasaba could not open its durable bus store; see AGENTS.md section 20"),
+    ));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
+        // The bus holds its own connection to the same store, never ProjectService's (DEC-072). It is managed
+        // as an Arc<Mutex<..>> because a Tauri State borrow is not 'static and cannot move into the
+        // spawn_blocking task a handler will use.
+        .manage(bus_state)
         .invoke_handler(tauri::generate_handler![
             create_project,
             list_projects,

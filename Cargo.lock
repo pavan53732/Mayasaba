@@ -1843,6 +1843,7 @@ dependencies = [
 name = "mayasaba-desktop"
 version = "0.1.0"
 dependencies = [
+ "mayasaba-bus",
  "mayasaba-core",
  "mayasaba-protocol",
  "mayasaba-storage",

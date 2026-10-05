@@ -200,7 +200,7 @@ impl ProjectService {
 /// `RandomState` is seeded by the operating system, so this yields cross-process uniqueness without adding
 /// a uuid dependency. The counter guarantees distinctness within the process even if two creations land in
 /// the same clock tick.
-fn next_nonce() -> String {
+pub(crate) fn next_nonce() -> String {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
     use std::sync::atomic::{AtomicU64, Ordering};

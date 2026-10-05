@@ -4,6 +4,7 @@
 //! persistence to the owning storage crate. It never becomes a second authority for a concept another
 //! service owns (AGENTS.md section 6).
 
+pub mod bus_runtime;
 pub mod project_service;
 
 pub use mayasaba_storage::{RecoveryIssue, RecoveryReport};
