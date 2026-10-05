@@ -932,6 +932,33 @@ for(const m of sqlText.matchAll(/REFERENCES\s+(\w+)\s*\(/g)){
 }
 if(danglingFk.length) fail(`schema.sql declares foreign keys to non-existent table(s): ${[...new Set(danglingFk)].join(", ")}`);
 
+// SQLite validates the referenced table name, but a malformed CREATE TABLE can still carry a FOREIGN KEY
+// whose local column was never declared. Require every FOREIGN KEY(local...) item to name a column in the
+// same CREATE TABLE block. This is structural validation of the canonical SQL, not a second schema authority.
+const sqliteFkLocalProblems=[];
+for(const tableMatch of sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\\s+(\\w+)\\s*\\(([\\s\\S]*?)\\n\\);/g)){
+  const [,tableName,body]=tableMatch;
+  const columns=new Set();
+  for(const line of body.split(/\\r?\\n/)){
+    const trimmed=line.trim();
+    if(!trimmed || /^(?:PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK|CONSTRAINT)\\b/i.test(trimmed)) continue;
+    const column=trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s+/);
+    if(column) columns.add(column[1]);
+  }
+  for(const fk of body.matchAll(/FOREIGN KEY\\s*\\(([^)]+)\\)/gi)){
+    for(const local of fk[1].split(",").map(v=>v.trim()).filter(Boolean)){
+      if(!columns.has(local)){
+        sqliteFkLocalProblems.push(`table ${tableName}: FOREIGN KEY local column "${local}" is not declared in the table`);
+      }
+    }
+  }
+}
+if(sqliteFkLocalProblems.length) fail(
+  "schema.sql declares foreign keys whose local columns do not exist:\\n  - "+
+  sqliteFkLocalProblems.join("\\n  - ")
+);
+console.log(`SQLite schema foreign-key structure: checked ${sqlTablesArr.length} table(s); every local FOREIGN KEY column is declared`);
+
 // SQLITE-DATA-ARCHITECTURE.md groups the tables by concern, and that grouping drifted the moment
 // project_briefs and user_contributions were added: the tables existed in schema.sql and in DATA-MODEL.md
 // while the architecture document still listed neither. Nothing compared the two, so an external audit found
