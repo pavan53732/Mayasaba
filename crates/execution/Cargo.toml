@@ -4,5 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+tokio.workspace = true
 mayasaba-storage = { path = "../storage" }
 mayasaba-policy = { path = "../policy" }
