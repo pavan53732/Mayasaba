@@ -3229,6 +3229,20 @@ const OUTCOME_SOURCE_VOCABULARY: &[&str] =
 ///
 /// The returned reference borrows `allowed`, which is always one of this crate's own `const` tables, so the
 /// caller gets the canonical spelling rather than the string it passed in.
+fn agent_session_event_payload(
+    project_id: &str,
+    session_id: &str,
+    agent_id: &str,
+    state: &str,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("session_id", canonical::JcsValue::Str(session_id)),
+        ("agent_id", canonical::JcsValue::Str(agent_id)),
+        ("state", canonical::JcsValue::Str(state)),
+    ])
+}
+
 fn task_lease_task_event_payload(
     project_id: &str,
     task_id: &str,
@@ -3698,6 +3712,41 @@ pub struct SchedulableTask {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewAgentSession {
+    pub session_id: String,
+    pub project_id: String,
+    pub agent_id: String,
+    pub workspace_id: Option<String>,
+    pub current_epoch: i64,
+    pub started_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSessionRecord {
+    pub session_id: String,
+    pub project_id: String,
+    pub agent_id: String,
+    pub native_session_id: Option<String>,
+    pub state: String,
+    pub health_state: String,
+    pub process_id: Option<i64>,
+    pub workspace_id: Option<String>,
+    pub capability_snapshot_id: Option<String>,
+    pub current_epoch: i64,
+    pub started_at: Option<String>,
+    pub stopped_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewAgentCapabilitySnapshot {
+    pub capability_snapshot_id: String,
+    pub agent_id: String,
+    pub session_id: Option<String>,
+    pub capabilities_json: String,
+    pub detected_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTaskLease {
     pub lease_id: String,
     pub task_id: String,
@@ -3910,6 +3959,8 @@ pub struct NewCertificationBinding {
 const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
 const EXECUTION_CLASSIFICATIONS: &[&str] = &["READ_ONLY","SAFE_WRITE","PROJECT_WRITE","EXECUTE","INSTALL","ADMIN_REQUIRED"];
 const LEASE_STATES: &[&str] = &["REQUESTED","ACTIVE","RENEWING","EXPIRED","RELEASED","REVOKED"];
+const AGENT_SESSION_STATES: &[&str] = &["DISCOVERED","HANDSHAKING","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","READY","ACTIVE","PAUSED","DRAINING","STOPPED","LOST","RECONNECTING","SYNCING","FAILED"];
+const AGENT_HEALTH_STATES: &[&str] = &["HEALTHY","DEGRADED","UNHEALTHY","UNKNOWN"];
 const EXECUTION_STATES: &[&str] = &["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"];
 const PROCESS_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
 const RESOURCE_TYPES: &[&str] = &["CPU","RAM","GPU","DISK","PORT","WORKSPACE","PROCESS_SLOT","AGENT_SLOT","TOOLCHAIN"];
@@ -3925,6 +3976,209 @@ impl Storage {
     /// The request state is recorded before activation inside the same transaction so durable history contains
     /// the canonical REQUESTED -> ACTIVE transition, while no caller can observe an intermediate half-granted
     /// lease after a crash.
+    /// Persist a new agent session at DISCOVERED. The session is the runtime identity anchor for a single process lineage.
+    pub fn create_agent_session(&self, new: &NewAgentSession) -> Result<AgentSessionRecord> {
+        if new.current_epoch < 0 || new.started_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions".to_string(),
+                detail: "current_epoch must be non-negative and started_at must be non-empty".to_string(),
+            });
+        }
+        let agent_project_ok: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
+            [new.agent_id.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if agent_project_ok != 1 {
+            return Err(StorageError::NotFound(format!("enabled agent {}", new.agent_id)));
+        }
+        let project_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM projects WHERE project_id=?1",
+            [new.project_id.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if project_exists != 1 {
+            return Err(StorageError::NotFound(format!("project {}", new.project_id)));
+        }
+        if let Some(workspace_id) = new.workspace_id.as_deref() {
+            let exists: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
+                rusqlite::params![workspace_id,new.project_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if exists != 1 {
+                return Err(StorageError::Malformed {
+                    column: "agent_sessions.workspace_id".to_string(),
+                    detail: "workspace does not belong to project".to_string(),
+                });
+            }
+        }
+
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        tx.execute(
+            "INSERT INTO agent_sessions (session_id,project_id,agent_id,native_session_id,state,health_state,process_id,workspace_id,capability_snapshot_id,current_epoch,started_at,stopped_at)
+             VALUES (?1,?2,?3,NULL,'DISCOVERED','UNKNOWN',NULL,?4,NULL,?5,?6,NULL)",
+            rusqlite::params![new.session_id,new.project_id,new.agent_id,new.workspace_id,new.current_epoch,new.started_at],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,
+            &new.session_id,
+            "AGENT_DISCOVERED",
+            &new.project_id,
+            &new.session_id,
+            &new.session_id,
+            None,
+            agent_session_event_payload(&new.project_id,&new.session_id,&new.agent_id,"DISCOVERED")?,
+            &new.started_at,
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        self.get_agent_session(&new.session_id)?
+            .ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))
+    }
+
+    pub fn get_agent_session(&self, session_id: &str) -> Result<Option<AgentSessionRecord>> {
+        self.conn.query_row(
+            "SELECT session_id,project_id,agent_id,native_session_id,state,health_state,process_id,workspace_id,capability_snapshot_id,current_epoch,started_at,stopped_at
+             FROM agent_sessions WHERE session_id=?1",
+            [session_id],
+            |r| Ok(AgentSessionRecord {
+                session_id:r.get(0)?, project_id:r.get(1)?, agent_id:r.get(2)?,
+                native_session_id:r.get(3)?, state:r.get(4)?, health_state:r.get(5)?,
+                process_id:r.get(6)?, workspace_id:r.get(7)?, capability_snapshot_id:r.get(8)?,
+                current_epoch:r.get(9)?, started_at:r.get(10)?, stopped_at:r.get(11)?
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    /// CAS transition for the agent-session machine. The event is emitted in the same transaction as the state mutation.
+    pub fn transition_agent_session(
+        &mut self,
+        session_id: &str,
+        expected_state: &str,
+        next_state: &str,
+        event_type: &str,
+        now: &str,
+    ) -> Result<()> {
+        require_vocabulary("agent_sessions.expected_state", expected_state, AGENT_SESSION_STATES)?;
+        require_vocabulary("agent_sessions.next_state", next_state, AGENT_SESSION_STATES)?;
+        let legal = matches!(
+            (expected_state,next_state),
+            ("DISCOVERED","HANDSHAKING")
+            | ("HANDSHAKING","CAPABILITY_VALIDATING")
+            | ("CAPABILITY_VALIDATING","WORKSPACE_VALIDATING")
+            | ("WORKSPACE_VALIDATING","READY")
+            | ("READY","ACTIVE")
+            | ("ACTIVE","PAUSED")
+            | ("PAUSED","DRAINING")
+            | ("DRAINING","STOPPED")
+            | ("READY","LOST")
+            | ("ACTIVE","LOST")
+            | ("LOST","RECONNECTING")
+            | ("RECONNECTING","SYNCING")
+            | ("SYNCING","READY")
+            | ("SYNCING","ACTIVE")
+            | ("SYNCING","FAILED")
+        );
+        if !legal {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.state".to_string(),
+                detail: format!("illegal agent-session transition {expected_state} -> {next_state}"),
+            });
+        }
+
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let row: Option<(String,String,String,String)> = tx.query_row(
+            "SELECT project_id,agent_id,state,health_state FROM agent_sessions WHERE session_id=?1",
+            [session_id],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,agent_id,current,_) =
+            row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+        if current != expected_state {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.state".to_string(),
+                detail: format!("compare-and-swap failed: expected {expected_state}, found {current}"),
+            });
+        }
+        let changed = tx.execute(
+            "UPDATE agent_sessions SET state=?1 WHERE session_id=?2 AND state=?3",
+            rusqlite::params![next_state,session_id,expected_state],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.state".to_string(),
+                detail: "agent-session state changed concurrently".to_string(),
+            });
+        }
+        append_event_in(&tx, &transition_event(
+            &tx,
+            session_id,
+            event_type,
+            &project_id,
+            session_id,
+            session_id,
+            None,
+            agent_session_event_payload(&project_id,session_id,&agent_id,next_state)?,
+            now,
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn bind_agent_process(
+        &self,
+        session_id: &str,
+        process_id: i64,
+        native_session_id: Option<&str>,
+    ) -> Result<()> {
+        if process_id <= 0 {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.process_id".to_string(),
+                detail: "process_id must be positive".to_string(),
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE agent_sessions SET process_id=?1,native_session_id=COALESCE(?2,native_session_id) WHERE session_id=?3",
+            rusqlite::params![process_id,native_session_id,session_id],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!("agent session {session_id}")));
+        }
+        Ok(())
+    }
+
+    pub fn insert_agent_capability_snapshot(&self, new: &NewAgentCapabilitySnapshot) -> Result<()> {
+        let caps: serde_json::Value = serde_json::from_str(&new.capabilities_json).map_err(|e| StorageError::Malformed {
+            column:"agent_capabilities.capabilities_json".to_string(),
+            detail:format!("must be valid JSON object: {e}"),
+        })?;
+        if !caps.is_object() {
+            return Err(StorageError::Malformed {
+                column:"agent_capabilities.capabilities_json".to_string(),
+                detail:"capabilities_json must be a JSON object".to_string(),
+            });
+        }
+        if let Some(session_id)=new.session_id.as_deref() {
+            let matches:i64=self.conn.query_row(
+                "SELECT COUNT(*) FROM agent_sessions WHERE session_id=?1 AND agent_id=?2",
+                rusqlite::params![session_id,new.agent_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if matches!=1 {
+                return Err(StorageError::Malformed {
+                    column:"agent_capabilities.session_id".to_string(),
+                    detail:"capability session does not belong to agent".to_string(),
+                });
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO agent_capabilities (capability_snapshot_id,agent_id,session_id,capabilities_json,detected_at)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![new.capability_snapshot_id,new.agent_id,new.session_id,new.capabilities_json,new.detected_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     pub fn lease_task(&mut self, new: &NewTaskLease) -> Result<TaskLeaseRecord> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let task: Option<(String,Option<String>,i64,String)> = tx.query_row(
