@@ -3229,6 +3229,22 @@ const OUTCOME_SOURCE_VOCABULARY: &[&str] =
 ///
 /// The returned reference borrows `allowed`, which is always one of this crate's own `const` tables, so the
 /// caller gets the canonical spelling rather than the string it passed in.
+fn lease_event_payload(
+    project_id: &str,
+    task_id: &str,
+    lease_id: &str,
+    lease_version: i64,
+    state: &str,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("task_id", canonical::JcsValue::Str(task_id)),
+        ("lease_id", canonical::JcsValue::Str(lease_id)),
+        ("lease_version", canonical::JcsValue::Int(lease_version)),
+        ("state", canonical::JcsValue::Str(state)),
+    ])
+}
+
 fn require_vocabulary<'a>(column: &str, value: &str, allowed: &'a [&'a str]) -> Result<&'a str> {
     match allowed.iter().find(|candidate| **candidate == value) {
         Some(matched) => Ok(matched),
@@ -3658,6 +3674,46 @@ mod tests {
 /// Durable retry/recovery identity for a Task. The active lease version is copied as the fencing value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTaskLease {
+    pub lease_id: String,
+    pub task_id: String,
+    pub project_id: String,
+    pub agent_id: String,
+    pub session_id: String,
+    pub workspace_id: String,
+    pub project_epoch: i64,
+    pub context_snapshot_id: String,
+    pub state_digest: String,
+    pub allowed_paths_json: String,
+    pub required_capabilities_json: String,
+    pub policy_scope: String,
+    pub issued_at: String,
+    pub heartbeat_at: String,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskLeaseRecord {
+    pub lease_id: String,
+    pub task_id: String,
+    pub project_id: String,
+    pub agent_id: String,
+    pub session_id: String,
+    pub workspace_id: String,
+    pub lease_version: i64,
+    pub project_epoch: i64,
+    pub context_snapshot_id: String,
+    pub state_digest: String,
+    pub allowed_paths_json: String,
+    pub required_capabilities_json: String,
+    pub policy_scope: String,
+    pub issued_at: String,
+    pub heartbeat_at: String,
+    pub expires_at: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewCommandExecution {
     pub execution_id: String,
     pub project_id: String,
@@ -3829,6 +3885,7 @@ pub struct NewCertificationBinding {
 
 const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
 const EXECUTION_CLASSIFICATIONS: &[&str] = &["READ_ONLY","SAFE_WRITE","PROJECT_WRITE","EXECUTE","INSTALL","ADMIN_REQUIRED"];
+const LEASE_STATES: &[&str] = &["REQUESTED","ACTIVE","RENEWING","EXPIRED","RELEASED","REVOKED"];
 const EXECUTION_STATES: &[&str] = &["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"];
 const PROCESS_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
 const RESOURCE_TYPES: &[&str] = &["CPU","RAM","GPU","DISK","PORT","WORKSPACE","PROCESS_SLOT","AGENT_SLOT","TOOLCHAIN"];
@@ -3839,6 +3896,274 @@ const REVISION_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
 const CERTIFICATION_STATES: &[&str] = &["ASSERTED","INVALIDATED","EXPIRED"];
 
 impl Storage {
+    /// Admit and activate one task lease in a single transaction.
+    ///
+    /// The request state is recorded before activation inside the same transaction so durable history contains
+    /// the canonical REQUESTED -> ACTIVE transition, while no caller can observe an intermediate half-granted
+    /// lease after a crash.
+    pub fn lease_task(&mut self, new: &NewTaskLease) -> Result<TaskLeaseRecord> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        require_vocabulary("task_leases.status", "REQUESTED", LEASE_STATES)?;
+
+        let task: Option<(String,Option<String>,i64,String)> = tx.query_row(
+            "SELECT project_id, workspace_id, current_epoch, status FROM tasks WHERE task_id=?1",
+            [new.task_id.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (task_project, task_workspace, task_epoch, task_status) =
+            task.ok_or_else(|| StorageError::NotFound(format!("task {}", new.task_id)))?;
+        if task_project != new.project_id || task_workspace.as_deref() != Some(new.workspace_id.as_str()) || task_epoch != new.project_epoch {
+            return Err(StorageError::Malformed {
+                column: "task_leases".to_string(),
+                detail: "lease does not match task project/workspace/epoch".to_string(),
+            });
+        }
+        if !matches!(task_status.as_str(), "READY" | "LEASE_REQUESTED") {
+            return Err(StorageError::Malformed {
+                column: "tasks.status".to_string(),
+                detail: format!("task {} is not leaseable from {}", new.task_id, task_status),
+            });
+        }
+
+        let agent_matches: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
+            [new.agent_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        let session: Option<(String,String,String,String, i64)> = tx.query_row(
+            "SELECT project_id, agent_id, state, health_state, current_epoch FROM agent_sessions WHERE session_id=?1",
+            [new.session_id.as_str()],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+        ).optional().map_err(StorageError::Db)?;
+        if agent_matches != 1 {
+            return Err(StorageError::NotFound(format!("enabled agent {}", new.agent_id)));
+        }
+        let (session_project, session_agent, session_state, health, session_epoch) =
+            session.ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))?;
+        if session_project != new.project_id || session_agent != new.agent_id || !matches!(session_state.as_str(), "READY" | "ACTIVE")
+            || health != "HEALTHY" || session_epoch != new.project_epoch
+        {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions".to_string(),
+                detail: format!("agent session {} is not eligible for lease admission", new.session_id),
+            });
+        }
+
+        let context_project: Option<String> = tx.query_row(
+            "SELECT project_id FROM context_snapshots WHERE context_snapshot_id=?1",
+            [new.context_snapshot_id.as_str()],
+            |row| row.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        if context_project.as_deref() != Some(new.project_id.as_str()) {
+            return Err(StorageError::Malformed {
+                column: "task_leases.context_snapshot_id".to_string(),
+                detail: "context snapshot does not belong to the lease project".to_string(),
+            });
+        }
+
+        let existing: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM task_leases WHERE task_id=?1 AND status IN ('ACTIVE','RENEWING')",
+            [new.task_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if existing != 0 {
+            return Err(StorageError::Malformed {
+                column: "task_leases.task_id".to_string(),
+                detail: format!("task {} already has a live lease", new.task_id),
+            });
+        }
+
+        for json_field in [&new.allowed_paths_json, &new.required_capabilities_json] {
+            let value: serde_json::Value = serde_json::from_str(json_field).map_err(|e| StorageError::Malformed {
+                column: "task_leases".to_string(),
+                detail: format!("lease JSON must be valid: {e}"),
+            })?;
+            if !value.is_array() {
+                return Err(StorageError::Malformed {
+                    column: "task_leases".to_string(),
+                    detail: "allowed_paths_json and required_capabilities_json must be JSON arrays".to_string(),
+                });
+            }
+        }
+        if new.issued_at.trim().is_empty() || new.heartbeat_at.trim().is_empty() || new.expires_at.trim().is_empty()
+            || new.state_digest.trim().is_empty() || new.policy_scope.trim().is_empty()
+        {
+            return Err(StorageError::Malformed {
+                column: "task_leases".to_string(),
+                detail: "lease timestamps, state_digest and policy_scope are required".to_string(),
+            });
+        }
+
+        tx.execute(
+            "INSERT INTO task_leases (lease_id,task_id,project_id,agent_id,session_id,workspace_id,lease_version,project_epoch,context_snapshot_id,state_digest,allowed_paths_json,required_capabilities_json,policy_scope,issued_at,heartbeat_at,expires_at,status)
+             VALUES (?1,?2,?3,?4,?5,?6,1,?7,?8,?9,?10,?11,?12,?13,?14,?15,'REQUESTED')",
+            rusqlite::params![
+                new.lease_id,new.task_id,new.project_id,new.agent_id,new.session_id,new.workspace_id,new.project_epoch,
+                new.context_snapshot_id,new.state_digest,new.allowed_paths_json,new.required_capabilities_json,new.policy_scope,
+                new.issued_at,new.heartbeat_at,new.expires_at
+            ],
+        ).map_err(StorageError::Db)?;
+
+        append_event_in(&tx, &transition_event(
+            &tx,&new.lease_id,"LEASE_REQUESTED",&new.project_id,&new.session_id,&new.lease_id,None,
+            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"REQUESTED")?,&new.issued_at
+        )?)?;
+
+        tx.execute(
+            "UPDATE task_leases SET status='ACTIVE' WHERE lease_id=?1 AND status='REQUESTED'",
+            [new.lease_id.as_str()],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,&new.lease_id,"LEASE_ACTIVE",&new.project_id,&new.session_id,&new.lease_id,None,
+            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"ACTIVE")?,&new.issued_at
+        )?)?;
+
+        tx.commit().map_err(StorageError::Db)?;
+        self.get_task_lease(&new.lease_id)?.ok_or_else(|| StorageError::NotFound(format!("task lease {}", new.lease_id)))
+    }
+
+    pub fn get_task_lease(&self, lease_id: &str) -> Result<Option<TaskLeaseRecord>> {
+        self.conn.query_row(
+            "SELECT lease_id,task_id,project_id,agent_id,session_id,workspace_id,lease_version,project_epoch,context_snapshot_id,state_digest,allowed_paths_json,required_capabilities_json,policy_scope,issued_at,heartbeat_at,expires_at,status FROM task_leases WHERE lease_id=?1",
+            [lease_id],
+            |row| Ok(TaskLeaseRecord {
+                lease_id: row.get(0)?, task_id: row.get(1)?, project_id: row.get(2)?,
+                agent_id: row.get(3)?, session_id: row.get(4)?, workspace_id: row.get(5)?,
+                lease_version: row.get(6)?, project_epoch: row.get(7)?, context_snapshot_id: row.get(8)?,
+                state_digest: row.get(9)?, allowed_paths_json: row.get(10)?, required_capabilities_json: row.get(11)?,
+                policy_scope: row.get(12)?, issued_at: row.get(13)?, heartbeat_at: row.get(14)?,
+                expires_at: row.get(15)?, status: row.get(16)?,
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    /// Renew a live lease with an optimistic version check. The update is persisted as RENEWING -> ACTIVE in one
+    /// transaction, so a crash cannot leave a half-incremented fencing value.
+    pub fn renew_lease(
+        &mut self,
+        lease_id: &str,
+        expected_version: i64,
+        heartbeat_at: &str,
+        expires_at: &str,
+    ) -> Result<TaskLeaseRecord> {
+        if expected_version < 1 {
+            return Err(StorageError::Malformed {
+                column: "task_leases.lease_version".to_string(),
+                detail: "expected lease version must be positive".to_string(),
+            });
+        }
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let lease: Option<(String,String,String,String,String,String,i64,i64)> = tx.query_row(
+            "SELECT task_id,project_id,agent_id,session_id,workspace_id,status,lease_version,project_epoch FROM task_leases WHERE lease_id=?1",
+            [lease_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?,row.get(7)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (task_id,project_id,agent_id,session_id,workspace_id,status,current_version,project_epoch) =
+            lease.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))?;
+        if status != "ACTIVE" {
+            return Err(StorageError::Malformed {
+                column: "task_leases.status".to_string(),
+                detail: format!("lease {lease_id} cannot renew from {status}"),
+            });
+        }
+        if current_version != expected_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: lease_id.to_owned(),
+                attempt_fence: current_version,
+                current_lease_version: current_version,
+                presented: expected_version,
+            });
+        }
+        tx.execute(
+            "UPDATE task_leases SET status='RENEWING', lease_version=lease_version+1, heartbeat_at=?1, expires_at=?2 WHERE lease_id=?3 AND status='ACTIVE' AND lease_version=?4",
+            rusqlite::params![heartbeat_at,expires_at,lease_id,expected_version],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,lease_id,"LEASE_RENEWED",&project_id,&session_id,lease_id,None,
+            lease_event_payload(&project_id,&task_id,lease_id,expected_version+1,"RENEWING")?,heartbeat_at
+        )?)?;
+        tx.execute(
+            "UPDATE task_leases SET status='ACTIVE' WHERE lease_id=?1 AND status='RENEWING' AND lease_version=?2",
+            rusqlite::params![lease_id,expected_version+1],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,lease_id,"LEASE_ACTIVE",&project_id,&session_id,lease_id,None,
+            lease_event_payload(&project_id,&task_id,lease_id,expected_version+1,"ACTIVE")?,heartbeat_at
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        self.get_task_lease(lease_id)?.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))
+    }
+
+    pub fn release_lease(&mut self, lease_id: &str, expected_version: i64, now: &str) -> Result<()> {
+        self.finish_lease(lease_id, expected_version, "RELEASED", "LEASE_RELEASED", now)
+    }
+
+    pub fn revoke_lease(&mut self, lease_id: &str, expected_version: i64, now: &str) -> Result<()> {
+        self.finish_lease(lease_id, expected_version, "REVOKED", "LEASE_REVOKED", now)
+    }
+
+    pub fn expire_due_leases(&mut self, now: &str) -> Result<u64> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let mut stmt = tx.prepare(
+            "SELECT lease_id,task_id,project_id,session_id,lease_version,status FROM task_leases
+             WHERE status IN ('ACTIVE','RENEWING') AND expires_at <= ?1"
+        ).map_err(StorageError::Db)?;
+        let leases: Vec<(String,String,String,String,i64,String)> = stmt.query_map([now], |row|
+            Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?))
+        ).map_err(StorageError::Db)?.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)?;
+        drop(stmt);
+        for (lease_id,task_id,project_id,session_id,version,status) in leases {
+            let event_type = if status == "RENEWING" { "LEASE_EXPIRED" } else { "LEASE_EXPIRED" };
+            tx.execute(
+                "UPDATE task_leases SET status='EXPIRED' WHERE lease_id=?1 AND status=?2 AND lease_version=?3",
+                rusqlite::params![lease_id,status,version],
+            ).map_err(StorageError::Db)?;
+            append_event_in(&tx, &transition_event(
+                &tx,&lease_id,event_type,&project_id,&session_id,&lease_id,None,
+                lease_event_payload(&project_id,&task_id,&lease_id,version,"EXPIRED")?,now
+            )?)?;
+        }
+        let count = leases.len() as u64;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(count)
+    }
+
+    fn finish_lease(&mut self, lease_id: &str, expected_version: i64, terminal: &str, event_type: &str, now: &str) -> Result<()> {
+        require_vocabulary("task_leases.status", terminal, LEASE_STATES)?;
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let lease: Option<(String,String,String,String,String,String,i64)> = tx.query_row(
+            "SELECT task_id,project_id,agent_id,session_id,workspace_id,status,lease_version FROM task_leases WHERE lease_id=?1",
+            [lease_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (task_id,project_id,_agent_id,session_id,_workspace,status,current_version) =
+            lease.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))?;
+        if !matches!(status.as_str(), "ACTIVE" | "RENEWING") {
+            return Err(StorageError::Malformed {
+                column: "task_leases.status".to_string(),
+                detail: format!("lease {lease_id} cannot finish from {status}"),
+            });
+        }
+        if current_version != expected_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: lease_id.to_owned(),
+                attempt_fence: current_version,
+                current_lease_version: current_version,
+                presented: expected_version,
+            });
+        }
+        tx.execute(
+            "UPDATE task_leases SET status=?1 WHERE lease_id=?2 AND status=?3 AND lease_version=?4",
+            rusqlite::params![terminal,lease_id,status,expected_version],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,lease_id,event_type,&project_id,&session_id,lease_id,None,
+            lease_event_payload(&project_id,&task_id,lease_id,current_version,terminal)?,now
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     /// Persist a command execution after admission. Material attempts are re-fenced against the current lease.
     pub fn insert_command_execution(&self, new: &NewCommandExecution) -> Result<()> {
         require_vocabulary("command_executions.classification", &new.classification, EXECUTION_CLASSIFICATIONS)?;
