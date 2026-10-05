@@ -3905,6 +3905,20 @@ impl Storage {
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+
+/// Durable recovery candidate for a non-terminal task attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverableAttempt {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub attempt_no: i64,
+    pub state: String,
+    pub lease_id: String,
+    pub fence_token: i64,
+    pub current_lease_version: Option<i64>,
+    pub lease_status: Option<String>,
+}
+
 pub struct NewTraceLink {
     pub trace_link_id: String,
     pub project_id: String,
@@ -3939,6 +3953,77 @@ const TRACE_LINK_TYPES: &[&str] = &[
 
 
 impl Storage {
+
+    /// Transition a held resource reservation to RELEASED using the current lease fence.
+    pub fn release_resource_reservation(
+        &self,
+        reservation_id: &str,
+        lease_version: i64,
+        released_at: &str,
+    ) -> Result<()> {
+        let row: Option<(String, String, i64)> = self.conn.query_row(
+            "SELECT rr.resource_type, rr.resource_key, rr.lease_version
+             FROM resource_reservations rr
+             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD'",
+            [reservation_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (resource_type, resource_key, stored_version) = match row {
+            Some(v) => v,
+            None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
+        };
+        if stored_version != lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: format!("reservation:{reservation_id}"),
+                attempt_fence: stored_version,
+                current_lease_version: lease_version,
+                presented: lease_version,
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'RELEASED', released_at = ?1
+             WHERE reservation_id = ?2 AND state = 'HELD' AND lease_version = ?3",
+            rusqlite::params![released_at, reservation_id, lease_version],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::Malformed {
+                column: "resource_reservations.state".to_string(),
+                detail: format!("reservation {reservation_id} changed while being released ({resource_type}:{resource_key})"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Expire reservations whose durable deadline has passed. This is a recovery operation, not a lease-authorized mutation.
+    pub fn expire_due_resource_reservations(&self, now: &str) -> Result<u64> {
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'EXPIRED'
+             WHERE state = 'HELD' AND expires_at <= ?1",
+            [now],
+        ).map_err(StorageError::Db)?;
+        Ok(changed as u64)
+    }
+
+    /// List attempts whose physical execution may still need reconciliation after a restart.
+    pub fn list_recoverable_attempts(&self, project_id: &str) -> Result<Vec<RecoverableAttempt>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ta.attempt_id, ta.task_id, ta.attempt_no, ta.state, ta.lease_id, ta.fence_token,
+                    tl.lease_version, tl.status
+             FROM task_attempts ta
+             LEFT JOIN task_leases tl ON tl.lease_id = ta.lease_id
+             WHERE ta.project_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')
+             ORDER BY ta.attempt_no ASC, ta.attempt_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(RecoverableAttempt {
+            attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
+            state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
+            current_lease_version:r.get(6)?, lease_status:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
     pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
         require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
         if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
