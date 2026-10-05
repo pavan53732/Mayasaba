@@ -281,6 +281,22 @@ pub struct NewOutboundMessage {
     pub project_epoch: i64,
 }
 
+/// The facts a replay decision needs, read without writing anything.
+///
+/// `Bus::replay` rewrites the envelope as it copies it, so a caller that has to decide *whether* to replay
+/// cannot decide by calling it - by the time it had an answer the replay would have happened. These three facts
+/// are read in one query for that reason, and `message_type` is read from its own column rather than parsed out
+/// of the envelope, because the column is the stored projection the insert already made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplayFacts {
+    /// The envelope's `message_type`, as stored.
+    pub message_type: String,
+    /// The context the message was decided in, absent when it is not a material action.
+    pub context_snapshot_id: Option<String>,
+    /// The state digest the message was decided against, absent when it is not a material action.
+    pub state_digest: Option<String>,
+}
+
 /// A terminal message rewritten as a new one, ready to be enqueued.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplaySource {
@@ -2174,6 +2190,31 @@ impl Storage {
             sequence,
             terminal_event_id,
         })
+    }
+
+    /// The facts a replay decision needs, for one message.
+    ///
+    /// Read-only, and deliberately separate from `replay_source`, which rewrites the envelope: a caller that
+    /// must judge before replaying has to be able to look without producing a replay.
+    pub fn replay_facts(&self, message_id: &str) -> Result<ReplayFacts> {
+        self.conn
+            .query_row(
+                "SELECT message_type,
+                        json_extract(envelope_json, '$.context_snapshot_id'),
+                        json_extract(envelope_json, '$.state_digest')
+                   FROM messages WHERE message_id = ?1",
+                [message_id],
+                |row| {
+                    Ok(ReplayFacts {
+                        message_type: row.get(0)?,
+                        context_snapshot_id: row.get(1)?,
+                        state_digest: row.get(2)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("messages.message_id = {message_id}")))
     }
 
     /// A message's delivery state, which decides whether an arrival is a redelivery or a duplicate.

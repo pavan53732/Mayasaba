@@ -108,9 +108,11 @@
       "owner": "RecoveryService",
       "request": "replay_dead_letterRequest",
       "response": "replay_dead_letterResponse",
-      "cancellable": true
-    },
-    "abandon_project": {
+      "cancellable": true,
+      "request_fields": [
+        {"name":"message_id","type":"string","required":true,"description":"The terminal message to replay. The bus owns the precondition that it is replayable, which is EXPIRED or DEAD_LETTER."}
+      ]
+    },    "abandon_project": {
       "owner": "LifecycleService",
       "request": "abandon_projectRequest",
       "response": "abandon_projectResponse",

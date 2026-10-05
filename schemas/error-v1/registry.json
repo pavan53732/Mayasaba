@@ -263,6 +263,15 @@
       "meaning": "The intake judgement that a brief states real project intent has not been implemented. The structural rule passed; no semantic judgement was made, and this code reports the absence of that judgement rather than a rejection of the brief.",
       "remediation": "No retry succeeds until the intake judgement exists. This is a named gap, not a user error, and it must not be surfaced as a refusal of the user's brief."
     },
+    "AUTHORIZATION_NOT_IMPLEMENTED": {
+      "category": "CAPABILITY",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_AUTHORIZATION_NOT_IMPLEMENTED",
+      "meaning": "Authorization could not be evaluated because PolicyService is not implemented. No rule ran and no judgement was made; this code reports the absence of that judgement, not a rejection of the action.",
+      "remediation": "No retry succeeds until PolicyService exists. This is a named gap and a deliberate fail-closed refusal, not a user error, and it must not be surfaced to the user as a refusal of their action."
+    },
     "STORAGE_FAILURE": {
       "category": "INTERNAL",
       "retryability": "BACKOFF",

@@ -309,8 +309,8 @@ rather than the four state vocabularies.
 
 ## Shell integration tests (M2.5, DEC-069 to DEC-074)
 
-The test surfaces this milestone adds. **The Tranche 1 and 2 rows exist and pass** (`cd27580` and the T2
-commit); the Tranche 3 and 4 rows do not exist yet. They are kept here so the plan and the tests can be compared
+The test surfaces this milestone adds. **The Tranche 1 to 3 rows exist and pass** (`cd27580`, the T2
+commit, and the T3 commit); the Tranche 4 rows do not exist yet. They are kept here so the plan and the tests can be compared
 rather than assumed to match, and so a row that quietly never lands is visible as a gap rather than an omission.
 
 Two rows were strengthened rather than merely satisfied. "Identity uniqueness" also covers 8 threads and two

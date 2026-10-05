@@ -160,6 +160,31 @@
         "transport_status":{"type":"string","enum":["not_connected"]}
       }
     },
+    "replay_dead_letterRequest":{
+      "title":"Replay a dead-lettered message as a new message",
+      "description":"Identifies the terminal message to re-enqueue. The bus owns the precondition that the message is replayable - EXPIRED or DEAD_LETTER - so it is not restated here, and it is deliberately not narrowed to the literal DEAD_LETTER state: the dead-letter store holds EXPIRED messages, because that is the state an exhausted retry budget produces (DEC-061), so requiring DEAD_LETTER would refuse the store's own contents. A material-action message is refused rather than replayed, because replay is the one path that would reach a material action without the authorization every other material mutation passes.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["message_id"],
+      "properties":{
+        "message_id":{"type":"string","minLength":1}
+      }
+    },
+    "replay_dead_letterResponse":{
+      "title":"A completed dead-letter replay",
+      "description":"The new message the bus produced, or the one an earlier identical replay already produced when deduplicated is true; the envelope keeps the original operation_id, so a second replay of one operation is absorbed rather than delivered twice. context_snapshot_id and state_digest are the original's, carried forward unchanged, and context_refreshed is always false: a replay re-enqueues the original envelope, so reporting a refresh would claim one that did not happen, and a caller that trusted it would act on a stale context believing it current. Both context fields are absent when the original did not carry them, which is the non-material case this operation replays.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["replayed_message_id","source_message_id","context_refreshed","deduplicated"],
+      "properties":{
+        "replayed_message_id":{"type":"string","minLength":1},
+        "source_message_id":{"type":"string","minLength":1},
+        "context_snapshot_id":{"type":["string","null"]},
+        "state_digest":{"type":["string","null"]},
+        "context_refreshed":{"type":"boolean"},
+        "deduplicated":{"type":"boolean"}
+      }
+    },
     "get_event_cursorRequest":{
       "title":"Read a consumer's durable position in one project's event stream",
       "description":"Read-only. Identifies one consumer of one project.",

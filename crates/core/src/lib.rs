@@ -7,6 +7,7 @@
 pub mod bus_runtime;
 pub mod diagnostics;
 pub mod project_service;
+pub mod recovery_service;
 
 pub use mayasaba_storage::{RecoveryIssue, RecoveryReport};
 pub use mayasaba_workspace::{WorkspaceRejection, WorkspaceValidation};

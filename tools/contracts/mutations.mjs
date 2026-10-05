@@ -399,6 +399,45 @@ const MUTATIONS = [
     expect: ["defines #[tauri::command] fn get_event_cursor but never registers it"],
   },
   {
+    id: "dec075-c",
+    what: "recovery_service.rs: the material-action refusal is removed, so replay becomes a route around authorization",
+    check: RUST,
+    edits: [
+      {
+        file: "crates/core/src/recovery_service.rs",
+        find: "MATERIAL_ACTION_MESSAGE_TYPES.contains(&facts.message_type.as_str())",
+        replace: "false",
+      },
+    ],
+    expect: ["expected an authorization refusal"],
+  },
+  {
+    id: "dec075-d",
+    what: "recovery_service.rs: the response claims a context refresh that did not happen",
+    check: RUST,
+    edits: [
+      {
+        file: "crates/core/src/recovery_service.rs",
+        find: "context_refreshed: false,",
+        replace: "context_refreshed: true,",
+      },
+    ],
+    expect: ["context_refreshed"],
+  },
+  {
+    id: "dec075-e",
+    what: "main.rs: the authorization refusal emits a code the registry does not declare",
+    check: GATE,
+    edits: [
+      {
+        file: MAIN,
+        find: 'code: "AUTHORIZATION_NOT_IMPLEMENTED",',
+        replace: 'code: "AUTHORIZATION_MISSING",',
+      },
+    ],
+    expect: ["AUTHORIZATION_MISSING"],
+  },
+  {
     id: "dec056-f",
     what: "main.rs: a command stops declaring rename_all, so Tauri's camelCase default decides the wire names",
     check: GATE,

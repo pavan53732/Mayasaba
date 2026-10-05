@@ -17,10 +17,12 @@ mod bus_shell;
 
 use std::sync::Mutex;
 
+use mayasaba_core::bus_runtime::{CoreClock, CoreIdSource};
 use mayasaba_core::diagnostics::DiagnosticsService;
 use mayasaba_core::project_service::{
     CreateProjectRequest, ProjectService, ProjectValidationError,
 };
+use mayasaba_core::recovery_service::{RecoveryService, ReplayRefusal};
 use serde::Serialize;
 use tauri::State;
 
@@ -297,6 +299,49 @@ struct EventCursorView {
     resync_from: Option<i64>,
 }
 
+/// What a completed dead-letter replay produced.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ReplayDeadLetterView {
+    replayed_message_id: String,
+    source_message_id: String,
+    context_snapshot_id: Option<String>,
+    state_digest: Option<String>,
+    context_refreshed: bool,
+    deduplicated: bool,
+}
+
+/// Turn a replay refusal into the wire error the registry declares for it.
+///
+/// The code is chosen here rather than in `crates/core` so the registry stays the one place a code's meaning is
+/// decided, and so every emission site stays visible to the gate that checks each emitted code is registered.
+fn replay_refused(error: ReplayRefusal) -> CommandError {
+    match error {
+        // The bus chose the code for its own refusals, so it is asked rather than re-listed. A second list
+        // would be a second source of truth for one fact (AGENTS.md section 6).
+        ReplayRefusal::Bus(bus_error) => bus_error.into(),
+        // Not UNAUTHORIZED and not POLICY_DENIED: no rule ran and nothing established that the actor is not
+        // allowed, so either would report a judgement that was never made. This reports the absence instead.
+        ReplayRefusal::AuthorizationNotImplemented {
+            message_id,
+            message_type,
+        } => CommandError {
+            code: "AUTHORIZATION_NOT_IMPLEMENTED",
+            message: format!(
+                "{message_id} is a {message_type}, which is a material action, and replaying a material action \
+                 requires an authorization judgement that PolicyService does not make yet"
+            ),
+        },
+        // The code the bus's own classifier gives a named row that does not exist, applied rather than
+        // re-decided: a missing message is that condition reached from the other side, and it is not a storage
+        // failure, because nothing went wrong with the database.
+        ReplayRefusal::Unreadable { message_id, detail } => CommandError {
+            code: "SCHEMA_INVALID",
+            message: format!("{message_id} could not be read as a replayable message: {detail}"),
+        },
+    }
+}
+
 /// A poisoned lock and a panicked blocking task are both "this service is unusable", which is the one code the
 /// registry has for that condition.
 fn service_unusable(detail: String) -> CommandError {
@@ -384,6 +429,38 @@ async fn get_event_cursor(
     })
     .await
 }
+
+/// Re-enqueue a dead-lettered message as a new one, refusing the types whose replay needs an authorizer.
+///
+/// The refusal is the operation's substance. Replay is the one path that would reach a material action without
+/// passing the authorization every other material mutation passes, so it stays closed until `PolicyService`
+/// exists (DEC-071). This does not honour `cancellable`, which the contract declares on this command and defines
+/// nowhere; nothing here implies it does.
+#[tauri::command(rename_all = "snake_case")]
+async fn replay_dead_letter(
+    bus: State<'_, bus_shell::SharedBus>,
+    message_id: String,
+) -> Result<ReplayDeadLetterView, CommandError> {
+    let bus = bus.inner().clone();
+    on_bus(bus, move |shell| {
+        let outcome = RecoveryService::replay_dead_letter(
+            shell.bus_mut(),
+            &CoreIdSource,
+            &CoreClock,
+            &message_id,
+        )
+        .map_err(replay_refused)?;
+        Ok(ReplayDeadLetterView {
+            replayed_message_id: outcome.replayed_message_id,
+            source_message_id: outcome.source_message_id,
+            context_snapshot_id: outcome.context_snapshot_id,
+            state_digest: outcome.state_digest,
+            context_refreshed: outcome.context_refreshed,
+            deduplicated: outcome.deduplicated,
+        })
+    })
+    .await
+}
 fn main() {
     // The service owns its store and is registered as managed state. It is created eagerly so a failure to
     // open the durable store surfaces at startup rather than on the first command.
@@ -420,6 +497,7 @@ fn main() {
             list_projects,
             get_recovery_status,
             validate_workspace,
+            replay_dead_letter,
             get_communication_health,
             get_event_cursor
         ])
@@ -457,6 +535,7 @@ mod wire_shape_tests {
         "list_projects",
         "get_recovery_status",
         "validate_workspace",
+        "replay_dead_letter",
         "get_communication_health",
         "get_event_cursor",
     ];
@@ -820,6 +899,38 @@ mod wire_shape_tests {
             },
         );
     }
+    #[test]
+    fn replay_dead_letter_response_conforms() {
+        conforms(
+            "replay_dead_letterResponse",
+            &ReplayDeadLetterView {
+                replayed_message_id: "msg_replayed".to_string(),
+                source_message_id: "msg_dead".to_string(),
+                context_snapshot_id: None,
+                state_digest: None,
+                context_refreshed: false,
+                deduplicated: false,
+            },
+        );
+    }
+
+    #[test]
+    fn replay_dead_letter_response_with_context_conforms() {
+        conforms(
+            "replay_dead_letterResponse",
+            &ReplayDeadLetterView {
+                replayed_message_id: "msg_replayed".to_string(),
+                source_message_id: "msg_dead".to_string(),
+                context_snapshot_id: Some("ctx_original".to_string()),
+                state_digest: Some(
+                    "a3f1c8e07b2d4956af13c8e07b2d4956af13c8e07b2d4956af13c8e07b2d4956".to_string(),
+                ),
+                context_refreshed: false,
+                deduplicated: true,
+            },
+        );
+    }
+
     /// A handler registered in `generate_handler![...]` with no shape test is a wire surface nothing checks.
     #[test]
     fn every_registered_handler_is_covered() {
