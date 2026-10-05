@@ -187,3 +187,17 @@ No live AI CLI is required for this proof. The slice passes only when the questi
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.
+
+
+## Cross-cutting reliability gate
+
+The following reliability capabilities are acceptance requirements across M3-M10; they are not a replacement milestone and do not alter the locked agent set (DEC-029):
+- durable TaskAttempt identity across retry/reassignment;
+- lease-version fencing on every material write derived from a lease;
+- scheduler resource admission for ports/process slots and other scarce local resources;
+- WorkspaceRevision and EnvironmentSnapshot provenance;
+- persisted safe points and recovery reconciliation;
+- plan/context invalidation on material epoch changes;
+- certification binding to exact artifact/workspace/environment/validator inputs;
+- explicit UNKNOWN state and desired-vs-observed reconciliation;
+- deterministic liveness/convergence, fairness and bounded repair/swarm budgets.
