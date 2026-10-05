@@ -30,8 +30,9 @@ pub fn advance_attempt(
     attempt_id: &str,
     expected_state: &str,
     next_state: &str,
+    ended_at: Option<&str>,
 ) -> Result<()> {
-    storage.transition_task_attempt(attempt_id, expected_state, next_state)
+    storage.transition_task_attempt(attempt_id, expected_state, next_state, ended_at)
 }
 
 /// Validate the lease fence immediately before a material side effect.
@@ -72,4 +73,15 @@ pub fn recoverable_attempts(
     project_id: &str,
 ) -> Result<Vec<mayasaba_storage::RecoverableAttempt>> {
     storage.list_recoverable_attempts(project_id)
+}
+
+
+/// Refresh the durable heartbeat under the current lease fence.
+pub fn heartbeat_attempt(
+    storage: &Storage,
+    attempt_id: &str,
+    lease_version: i64,
+    heartbeat_at: &str,
+) -> Result<()> {
+    storage.heartbeat_task_attempt(attempt_id, lease_version, heartbeat_at)
 }
