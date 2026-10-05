@@ -3229,6 +3229,20 @@ const OUTCOME_SOURCE_VOCABULARY: &[&str] =
 ///
 /// The returned reference borrows `allowed`, which is always one of this crate's own `const` tables, so the
 /// caller gets the canonical spelling rather than the string it passed in.
+fn context_event_payload(
+    context_snapshot_id: &str,
+    project_id: &str,
+    epoch: i64,
+    state_digest: &str,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("context_snapshot_id", canonical::JcsValue::Str(context_snapshot_id)),
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("epoch", canonical::JcsValue::Int(epoch)),
+        ("state_digest", canonical::JcsValue::Str(state_digest)),
+    ])
+}
+
 fn agent_session_event_payload(
     project_id: &str,
     session_id: &str,
@@ -4055,7 +4069,7 @@ impl Storage {
 
     /// Persist an immutable ContextPack snapshot. The digest is deterministic over project, epoch, scope and
     /// the exact canonical ContextPack serialization stored in pack_json.
-    pub fn create_context_snapshot(&self, new: &NewContextSnapshot) -> Result<ContextSnapshotRecord> {
+    pub fn create_context_snapshot(&mut self, new: &NewContextSnapshot) -> Result<ContextSnapshotRecord> {
         if new.epoch < 0 || new.scope.trim().is_empty() || new.created_at.trim().is_empty() {
             return Err(StorageError::Malformed {
                 column: "context_snapshots".to_string(),
@@ -4084,7 +4098,6 @@ impl Storage {
                 detail: format!("snapshot epoch {} does not match project epoch {}", new.epoch, current_epoch),
             });
         }
-
         let canonical = canonical::jcs_object(&[
             ("project_id", canonical::JcsValue::Str(&new.project_id)),
             ("epoch", canonical::JcsValue::Int(new.epoch)),
@@ -4095,12 +4108,24 @@ impl Storage {
             detail: format!("cannot canonicalize snapshot digest input: {e}"),
         })?;
         let state_digest = canonical::sha256_hex(&canonical);
-
-        self.conn.execute(
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        tx.execute(
             "INSERT INTO context_snapshots (context_snapshot_id,project_id,epoch,scope,state_digest,pack_json,created_at,superseded_at,invalidated_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,NULL)",
             rusqlite::params![new.context_snapshot_id,new.project_id,new.epoch,new.scope,state_digest,new.pack_json,new.created_at],
         ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &NewEvent {
+            event_id: format!("evt_ctx_{}_CONTEXT_CREATED", new.context_snapshot_id),
+            project_id: Some(new.project_id.clone()),
+            session_id: None,
+            event_type: "CONTEXT_CREATED".to_owned(),
+            correlation_id: Some(new.context_snapshot_id.clone()),
+            causation_id: None,
+            epoch: Some(new.epoch),
+            payload_json: context_event_payload(&new.context_snapshot_id,&new.project_id,new.epoch,&state_digest)?,
+            created_at: new.created_at.clone(),
+        })?;
+        tx.commit().map_err(StorageError::Db)?;
         self.get_context_snapshot(&new.context_snapshot_id)?.ok_or_else(|| {
             StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
         })
@@ -4144,11 +4169,20 @@ impl Storage {
     }
 
     pub fn supersede_context_snapshot(
-        &self,
+        &mut self,
         context_snapshot_id: &str,
         superseded_at: &str,
     ) -> Result<()> {
-        let changed = self.conn.execute(
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let row: Option<(String,i64,String)> = tx.query_row(
+            "SELECT project_id,epoch,state_digest FROM context_snapshots
+             WHERE context_snapshot_id=?1 AND invalidated_at IS NULL",
+            [context_snapshot_id],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,epoch,state_digest) =
+            row.ok_or_else(|| StorageError::NotFound(format!("active context snapshot {context_snapshot_id}")))?;
+        let changed = tx.execute(
             "UPDATE context_snapshots SET superseded_at=COALESCE(superseded_at,?1)
              WHERE context_snapshot_id=?2 AND invalidated_at IS NULL",
             rusqlite::params![superseded_at,context_snapshot_id],
@@ -4156,15 +4190,35 @@ impl Storage {
         if changed != 1 {
             return Err(StorageError::NotFound(format!("active context snapshot {context_snapshot_id}")));
         }
+        append_event_in(&tx, &NewEvent {
+            event_id: format!("evt_ctx_{}_CONTEXT_SUPERSEDED", context_snapshot_id),
+            project_id: Some(project_id.clone()),
+            session_id: None,
+            event_type: "CONTEXT_SUPERSEDED".to_owned(),
+            correlation_id: Some(context_snapshot_id.to_owned()),
+            causation_id: None,
+            epoch: Some(epoch),
+            payload_json: context_event_payload(context_snapshot_id,&project_id,epoch,&state_digest)?,
+            created_at: superseded_at.to_owned(),
+        })?;
+        tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
 
     pub fn invalidate_context_snapshot(
-        &self,
+        &mut self,
         context_snapshot_id: &str,
         invalidated_at: &str,
     ) -> Result<()> {
-        let changed = self.conn.execute(
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let row: Option<(String,i64,String)> = tx.query_row(
+            "SELECT project_id,epoch,state_digest FROM context_snapshots WHERE context_snapshot_id=?1",
+            [context_snapshot_id],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,epoch,state_digest) =
+            row.ok_or_else(|| StorageError::NotFound(format!("context snapshot {context_snapshot_id}")))?;
+        let changed = tx.execute(
             "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
              WHERE context_snapshot_id=?2",
             rusqlite::params![invalidated_at,context_snapshot_id],
@@ -4172,6 +4226,18 @@ impl Storage {
         if changed != 1 {
             return Err(StorageError::NotFound(format!("context snapshot {context_snapshot_id}")));
         }
+        append_event_in(&tx, &NewEvent {
+            event_id: format!("evt_ctx_{}_CONTEXT_INVALIDATED", context_snapshot_id),
+            project_id: Some(project_id.clone()),
+            session_id: None,
+            event_type: "CONTEXT_INVALIDATED".to_owned(),
+            correlation_id: Some(context_snapshot_id.to_owned()),
+            causation_id: None,
+            epoch: Some(epoch),
+            payload_json: context_event_payload(context_snapshot_id,&project_id,epoch,&state_digest)?,
+            created_at: invalidated_at.to_owned(),
+        })?;
+        tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
 
