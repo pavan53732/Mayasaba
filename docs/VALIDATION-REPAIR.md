@@ -123,3 +123,7 @@ Evidence is not ordered by one universal truth ladder. Admissibility is claim-sp
 
 ### Repair convergence
 Repair consumes a bounded budget. Repeated identical fingerprints, repeated no-op repairs or repeated regressions cause escalation/blocking instead of another unconstrained agent loop.
+
+
+### CertificationBinding state semantics
+`ASSERTED` is an immutable certification claim. `INVALIDATED` and `EXPIRED` are append-only supersession records that carry `supersedes_binding_id`; the previous row is never updated. The effective certification is the terminal row of the supersession chain, resolved by the validation/storage owner.
