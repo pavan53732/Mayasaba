@@ -1111,3 +1111,32 @@ Changing a HARD_LOCK requires:
 5. new version/supersession record
 6. migration/reconciliation plan
 7. updated tests/evidence
+
+## DEC-076 to DEC-084 — Long-running orchestration reliability
+
+### DEC-076 — TaskAttempt is the retry/recovery identity
+Classification: ADDITIVE. A Task remains the stable acceptance-bearing unit. Every retry, reassignment or recovery attempt receives a distinct durable TaskAttempt identity and attempt number; the Task itself is never cloned or rewritten to represent a retry.
+
+### DEC-077 — Lease version is the fencing token
+Classification: REFINEMENT. The active TaskLease `lease_version` is the sole fencing token for material actions derived from that lease. No second fencing-token authority is introduced. Any stale lease version is rejected before material side effects.
+
+### DEC-078 — Integration is a persisted protocol, not one ACID transaction
+Classification: HARDENING. Controller admission/state/event writes are transactional in SQLite, while Git/filesystem mutation, build and test are external effects. Integration therefore uses checkpoint + apply + observe + validate + promote/rollback semantics with reconciliation; history is never rolled back.
+
+### DEC-079 — Resource admission is durable and local
+Classification: ADDITIVE. Scarce local resources—including ports and process slots—are represented by durable ResourceReservation records bound to task leases. Resource reservation never overrides policy, workspace or capability gates.
+
+### DEC-080 — Workspace and environment provenance are first-class
+Classification: ADDITIVE. WorkspaceRevision records observed repository/filesystem identity and drift. EnvironmentSnapshot records the observed OS/toolchain/runtime facts and environment-policy hash used by execution or validation. They are evidence provenance, not alternate configuration authorities.
+
+### DEC-081 — Safe points are checkpoints with explicit runtime meaning
+Classification: ADDITIVE. A safe point is an existing WorkspaceCheckpoint with kind `SAFE_POINT`, created before pause, risky mutation, migration or worker drain. Safe-point state permits recovery; it does not imply task completion.
+
+### DEC-082 — Certification binds the exact validated inputs
+Classification: HARDENING. CertificationBinding binds validation, artifact hashes, workspace revision, environment snapshot and validator/test-suite versions. A change to any load-bearing binding supersedes the certification; historical certification remains immutable.
+
+### DEC-083 — Liveness is explicit; UNKNOWN is not success
+Classification: HARDENING. Reconciliation must distinguish desired, reported and observed state. When physical outcome cannot yet be established, execution/attempt state may be `UNKNOWN`; it cannot satisfy a positive gate or silently consume a retry. Stable, resource-available executions must not remain silently running forever.
+
+### DEC-084 — No duplicate mission/journal/cell/supervisor authorities
+Classification: HARDENING. Project remains the durable lifecycle root; events remain the journal; AgentSession/process records represent runtime identity; existing task/lease/workspace/context/execution records compose execution cells. Mission, Worker, ExecutionCell, SwarmCell and Supervisor may be used as controller views/groupings but do not become competing sources of truth without a separately justified future requirement.
