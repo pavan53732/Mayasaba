@@ -10,7 +10,7 @@ use mayasaba_storage::{
 use std::{
     collections::BTreeMap,
     fmt,
-    process::{Stdio, ChildStdout, ChildStderr},
+    process::Stdio,
     time::Duration,
 };
 
@@ -71,8 +71,8 @@ impl ProcessSpec {
 #[derive(Debug)]
 pub struct SpawnedProcess {
     child: Child,
-    stdout: Option<tokio::io::BufReader<ChildStdout>>,
-    stderr: Option<tokio::io::BufReader<ChildStderr>>,
+    stdout: Option<tokio::io::BufReader<tokio::process::ChildStdout>>,
+    stderr: Option<tokio::io::BufReader<tokio::process::ChildStderr>>,
     pub execution_id: String,
     pub pid: u32,
     pub output_limit_bytes: usize,
