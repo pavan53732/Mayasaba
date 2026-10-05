@@ -343,6 +343,7 @@ CREATE TABLE IF NOT EXISTS admissions (
   refusal_reasons_json TEXT,
   supersedes_admission_id TEXT,
   created_at TEXT NOT NULL,
+  UNIQUE(supersedes_binding_id),
   FOREIGN KEY(project_id) REFERENCES projects(project_id),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
   FOREIGN KEY(task_id) REFERENCES tasks(task_id)
