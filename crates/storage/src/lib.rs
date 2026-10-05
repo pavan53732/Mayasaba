@@ -3934,6 +3934,688 @@ impl Storage {
 
     pub fn insert_environment_snapshot(&self, new: &NewEnvironmentSnapshot) -> Result<()> {
         require_vocabulary("environment_snapshots.source", &new.source, &["PREFLIGHT", "EXECUTION", "VALIDATION"])?;
+        let json_ok: i64 = self.conn.query_row(
+            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '
+            "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
+        require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        if let Some(parent_id) = new.supersedes_binding_id.as_deref() {
+            let parent_project: Option<String> = self.conn.query_row(
+                "SELECT project_id FROM certification_bindings WHERE certification_binding_id = ?1",
+                [parent_id],
+                |r| r.get(0),
+            ).optional().map_err(StorageError::Db)?;
+            match parent_project {
+                None => return Err(StorageError::NotFound(format!("certification binding {parent_id}"))),
+                Some(project) if project != new.project_id => {
+                    return Err(StorageError::Malformed {
+                        column: "certification_bindings.supersedes_binding_id".to_string(),
+                        detail: format!("binding {parent_id} belongs to project {project}, not {}", new.project_id),
+                    })
+                }
+                Some(_) => {}
+            }
+        }
+        let valid: i64 = self.conn.query_row(
+            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '
+        self.conn.execute(
+            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+
+/// Durable recovery candidate for a non-terminal task attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverableAttempt {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub attempt_no: i64,
+    pub state: String,
+    pub lease_id: String,
+    pub fence_token: i64,
+    pub current_lease_version: Option<i64>,
+    pub lease_status: Option<String>,
+}
+
+pub struct NewTraceLink {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+pub struct TraceLinkRecord {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+const TRACE_LINK_TYPES: &[&str] = &[
+    "INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION",
+    "DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK",
+    "TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION",
+    "LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT",
+    "EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION",
+    "VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION",
+];
+
+
+
+impl Storage {
+
+    /// Transition a held resource reservation to RELEASED using the current lease fence.
+    pub fn release_resource_reservation(
+        &self,
+        reservation_id: &str,
+        lease_version: i64,
+        released_at: &str,
+    ) -> Result<()> {
+        let row: Option<(String, String, i64, i64)> = self.conn.query_row(
+            "SELECT rr.resource_type, rr.resource_key, rr.lease_version, tl.lease_version
+             FROM resource_reservations rr
+             JOIN task_leases tl ON tl.lease_id = rr.lease_id
+             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD' AND tl.status IN ('ACTIVE','RENEWING')",
+            [reservation_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (resource_type, resource_key, stored_version, current_version) = match row {
+            Some(v) => v,
+            None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
+        };
+        if stored_version != current_version || current_version != lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: format!("reservation:{reservation_id}"),
+                attempt_fence: stored_version,
+                current_lease_version: lease_version,
+                presented: lease_version,
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'RELEASED', released_at = ?1
+             WHERE reservation_id = ?2 AND state = 'HELD' AND lease_version = ?3",
+            rusqlite::params![released_at, reservation_id, lease_version],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::Malformed {
+                column: "resource_reservations.state".to_string(),
+                detail: format!("reservation {reservation_id} changed while being released ({resource_type}:{resource_key})"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Expire reservations whose durable deadline has passed. This is a recovery operation, not a lease-authorized mutation.
+    pub fn expire_due_resource_reservations(&self, now: &str) -> Result<u64> {
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'EXPIRED'
+             WHERE state = 'HELD' AND expires_at <= ?1",
+            [now],
+        ).map_err(StorageError::Db)?;
+        Ok(changed as u64)
+    }
+
+    /// List attempts whose physical execution may still need reconciliation after a restart.
+    pub fn list_recoverable_attempts(&self, project_id: &str) -> Result<Vec<RecoverableAttempt>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ta.attempt_id, ta.task_id, ta.attempt_no, ta.state, ta.lease_id, ta.fence_token,
+                    tl.lease_version, tl.status
+             FROM task_attempts ta
+             LEFT JOIN task_leases tl ON tl.lease_id = ta.lease_id
+             WHERE ta.project_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')
+             ORDER BY ta.attempt_no ASC, ta.attempt_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(RecoverableAttempt {
+            attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
+            state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
+            current_lease_version:r.get(6)?, lease_status:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// Resolve the effective latest certification claim without mutating historical rows.
+    pub fn get_latest_certification_binding(
+        &self,
+        project_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<Option<CertificationBindingRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
+                    b.workspace_revision_id, b.environment_snapshot_id, b.artifact_hashes_json,
+                    b.validator_version, b.test_suite_version, b.status, b.supersedes_binding_id,
+                    b.reason, b.created_at
+             FROM certification_bindings b
+             WHERE b.project_id = ?1
+               AND (?2 IS NULL AND b.task_id IS NULL OR ?2 IS NOT NULL AND b.task_id = ?2)
+               AND NOT EXISTS (
+                   SELECT 1 FROM certification_bindings newer
+                   WHERE newer.supersedes_binding_id = b.certification_binding_id
+               )
+             ORDER BY b.created_at DESC, b.certification_binding_id DESC
+             LIMIT 1",
+        ).map_err(StorageError::Db)?;
+        stmt.query_row(
+            rusqlite::params![project_id, task_id],
+            |r| Ok(CertificationBindingRecord {
+                certification_binding_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
+                validation_id:r.get(3)?, workspace_revision_id:r.get(4)?,
+                environment_snapshot_id:r.get(5)?, artifact_hashes_json:r.get(6)?,
+                validator_version:r.get(7)?, test_suite_version:r.get(8)?,
+                status:r.get(9)?, supersedes_binding_id:r.get(10)?,
+                reason:r.get(11)?, created_at:r.get(12)?
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
+        require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
+        if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
+            || new.target_type.trim().is_empty() || new.target_id.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "trace_links".to_string(),
+                detail: "source/target type and id must be non-empty".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO trace_links (trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                new.trace_link_id,new.project_id,new.link_type,new.source_type,
+                new.source_id,new.target_type,new.target_id,new.created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn list_trace_links(&self, project_id: &str) -> Result<Vec<TraceLinkRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at
+             FROM trace_links WHERE project_id = ?1
+             ORDER BY created_at ASC, trace_link_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(TraceLinkRecord {
+            trace_link_id:r.get(0)?, project_id:r.get(1)?, link_type:r.get(2)?,
+            source_type:r.get(3)?, source_id:r.get(4)?, target_type:r.get(5)?,
+            target_id:r.get(6)?, created_at:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+}
+) = 'object' THEN 1 ELSE 0 END",
+            [new.runtime_versions_json.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if json_ok != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "environment_snapshots.runtime_versions_json".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
+        require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        if let Some(parent_id) = new.supersedes_binding_id.as_deref() {
+            let parent_project: Option<String> = self.conn.query_row(
+                "SELECT project_id FROM certification_bindings WHERE certification_binding_id = ?1",
+                [parent_id],
+                |r| r.get(0),
+            ).optional().map_err(StorageError::Db)?;
+            match parent_project {
+                None => return Err(StorageError::NotFound(format!("certification binding {parent_id}"))),
+                Some(project) if project != new.project_id => {
+                    return Err(StorageError::Malformed {
+                        column: "certification_bindings.supersedes_binding_id".to_string(),
+                        detail: format!("binding {parent_id} belongs to project {project}, not {}", new.project_id),
+                    })
+                }
+                Some(_) => {}
+            }
+        }
+        if let Some(value) = Some(new.artifact_hashes_json.as_str()) {
+            let valid: i64 = self.conn.query_row("SELECT json_valid(?1)", [value], |r| r.get(0)).map_err(StorageError::Db)?;
+            if valid != 1 {
+                return Err(StorageError::MalformedJson { column: "certification_bindings.artifact_hashes_json".to_string() });
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+
+/// Durable recovery candidate for a non-terminal task attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverableAttempt {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub attempt_no: i64,
+    pub state: String,
+    pub lease_id: String,
+    pub fence_token: i64,
+    pub current_lease_version: Option<i64>,
+    pub lease_status: Option<String>,
+}
+
+pub struct NewTraceLink {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+pub struct TraceLinkRecord {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+const TRACE_LINK_TYPES: &[&str] = &[
+    "INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION",
+    "DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK",
+    "TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION",
+    "LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT",
+    "EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION",
+    "VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION",
+];
+
+
+
+impl Storage {
+
+    /// Transition a held resource reservation to RELEASED using the current lease fence.
+    pub fn release_resource_reservation(
+        &self,
+        reservation_id: &str,
+        lease_version: i64,
+        released_at: &str,
+    ) -> Result<()> {
+        let row: Option<(String, String, i64, i64)> = self.conn.query_row(
+            "SELECT rr.resource_type, rr.resource_key, rr.lease_version, tl.lease_version
+             FROM resource_reservations rr
+             JOIN task_leases tl ON tl.lease_id = rr.lease_id
+             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD' AND tl.status IN ('ACTIVE','RENEWING')",
+            [reservation_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (resource_type, resource_key, stored_version, current_version) = match row {
+            Some(v) => v,
+            None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
+        };
+        if stored_version != current_version || current_version != lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: format!("reservation:{reservation_id}"),
+                attempt_fence: stored_version,
+                current_lease_version: lease_version,
+                presented: lease_version,
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'RELEASED', released_at = ?1
+             WHERE reservation_id = ?2 AND state = 'HELD' AND lease_version = ?3",
+            rusqlite::params![released_at, reservation_id, lease_version],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::Malformed {
+                column: "resource_reservations.state".to_string(),
+                detail: format!("reservation {reservation_id} changed while being released ({resource_type}:{resource_key})"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Expire reservations whose durable deadline has passed. This is a recovery operation, not a lease-authorized mutation.
+    pub fn expire_due_resource_reservations(&self, now: &str) -> Result<u64> {
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'EXPIRED'
+             WHERE state = 'HELD' AND expires_at <= ?1",
+            [now],
+        ).map_err(StorageError::Db)?;
+        Ok(changed as u64)
+    }
+
+    /// List attempts whose physical execution may still need reconciliation after a restart.
+    pub fn list_recoverable_attempts(&self, project_id: &str) -> Result<Vec<RecoverableAttempt>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ta.attempt_id, ta.task_id, ta.attempt_no, ta.state, ta.lease_id, ta.fence_token,
+                    tl.lease_version, tl.status
+             FROM task_attempts ta
+             LEFT JOIN task_leases tl ON tl.lease_id = ta.lease_id
+             WHERE ta.project_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')
+             ORDER BY ta.attempt_no ASC, ta.attempt_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(RecoverableAttempt {
+            attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
+            state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
+            current_lease_version:r.get(6)?, lease_status:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// Resolve the effective latest certification claim without mutating historical rows.
+    pub fn get_latest_certification_binding(
+        &self,
+        project_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<Option<CertificationBindingRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
+                    b.workspace_revision_id, b.environment_snapshot_id, b.artifact_hashes_json,
+                    b.validator_version, b.test_suite_version, b.status, b.supersedes_binding_id,
+                    b.reason, b.created_at
+             FROM certification_bindings b
+             WHERE b.project_id = ?1
+               AND (?2 IS NULL AND b.task_id IS NULL OR ?2 IS NOT NULL AND b.task_id = ?2)
+               AND NOT EXISTS (
+                   SELECT 1 FROM certification_bindings newer
+                   WHERE newer.supersedes_binding_id = b.certification_binding_id
+               )
+             ORDER BY b.created_at DESC, b.certification_binding_id DESC
+             LIMIT 1",
+        ).map_err(StorageError::Db)?;
+        stmt.query_row(
+            rusqlite::params![project_id, task_id],
+            |r| Ok(CertificationBindingRecord {
+                certification_binding_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
+                validation_id:r.get(3)?, workspace_revision_id:r.get(4)?,
+                environment_snapshot_id:r.get(5)?, artifact_hashes_json:r.get(6)?,
+                validator_version:r.get(7)?, test_suite_version:r.get(8)?,
+                status:r.get(9)?, supersedes_binding_id:r.get(10)?,
+                reason:r.get(11)?, created_at:r.get(12)?
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
+        require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
+        if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
+            || new.target_type.trim().is_empty() || new.target_id.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "trace_links".to_string(),
+                detail: "source/target type and id must be non-empty".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO trace_links (trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                new.trace_link_id,new.project_id,new.link_type,new.source_type,
+                new.source_id,new.target_type,new.target_id,new.created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn list_trace_links(&self, project_id: &str) -> Result<Vec<TraceLinkRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at
+             FROM trace_links WHERE project_id = ?1
+             ORDER BY created_at ASC, trace_link_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(TraceLinkRecord {
+            trace_link_id:r.get(0)?, project_id:r.get(1)?, link_type:r.get(2)?,
+            source_type:r.get(3)?, source_id:r.get(4)?, target_type:r.get(5)?,
+            target_id:r.get(6)?, created_at:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+}
+) = 'array' THEN 1 ELSE 0 END",
+            [new.artifact_hashes_json.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if valid != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "certification_bindings.artifact_hashes_json".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+
+/// Durable recovery candidate for a non-terminal task attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverableAttempt {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub attempt_no: i64,
+    pub state: String,
+    pub lease_id: String,
+    pub fence_token: i64,
+    pub current_lease_version: Option<i64>,
+    pub lease_status: Option<String>,
+}
+
+pub struct NewTraceLink {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+pub struct TraceLinkRecord {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+const TRACE_LINK_TYPES: &[&str] = &[
+    "INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION",
+    "DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK",
+    "TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION",
+    "LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT",
+    "EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION",
+    "VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION",
+];
+
+
+
+impl Storage {
+
+    /// Transition a held resource reservation to RELEASED using the current lease fence.
+    pub fn release_resource_reservation(
+        &self,
+        reservation_id: &str,
+        lease_version: i64,
+        released_at: &str,
+    ) -> Result<()> {
+        let row: Option<(String, String, i64, i64)> = self.conn.query_row(
+            "SELECT rr.resource_type, rr.resource_key, rr.lease_version, tl.lease_version
+             FROM resource_reservations rr
+             JOIN task_leases tl ON tl.lease_id = rr.lease_id
+             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD' AND tl.status IN ('ACTIVE','RENEWING')",
+            [reservation_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (resource_type, resource_key, stored_version, current_version) = match row {
+            Some(v) => v,
+            None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
+        };
+        if stored_version != current_version || current_version != lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: format!("reservation:{reservation_id}"),
+                attempt_fence: stored_version,
+                current_lease_version: lease_version,
+                presented: lease_version,
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'RELEASED', released_at = ?1
+             WHERE reservation_id = ?2 AND state = 'HELD' AND lease_version = ?3",
+            rusqlite::params![released_at, reservation_id, lease_version],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::Malformed {
+                column: "resource_reservations.state".to_string(),
+                detail: format!("reservation {reservation_id} changed while being released ({resource_type}:{resource_key})"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Expire reservations whose durable deadline has passed. This is a recovery operation, not a lease-authorized mutation.
+    pub fn expire_due_resource_reservations(&self, now: &str) -> Result<u64> {
+        let changed = self.conn.execute(
+            "UPDATE resource_reservations
+             SET state = 'EXPIRED'
+             WHERE state = 'HELD' AND expires_at <= ?1",
+            [now],
+        ).map_err(StorageError::Db)?;
+        Ok(changed as u64)
+    }
+
+    /// List attempts whose physical execution may still need reconciliation after a restart.
+    pub fn list_recoverable_attempts(&self, project_id: &str) -> Result<Vec<RecoverableAttempt>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ta.attempt_id, ta.task_id, ta.attempt_no, ta.state, ta.lease_id, ta.fence_token,
+                    tl.lease_version, tl.status
+             FROM task_attempts ta
+             LEFT JOIN task_leases tl ON tl.lease_id = ta.lease_id
+             WHERE ta.project_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')
+             ORDER BY ta.attempt_no ASC, ta.attempt_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(RecoverableAttempt {
+            attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
+            state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
+            current_lease_version:r.get(6)?, lease_status:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// Resolve the effective latest certification claim without mutating historical rows.
+    pub fn get_latest_certification_binding(
+        &self,
+        project_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<Option<CertificationBindingRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
+                    b.workspace_revision_id, b.environment_snapshot_id, b.artifact_hashes_json,
+                    b.validator_version, b.test_suite_version, b.status, b.supersedes_binding_id,
+                    b.reason, b.created_at
+             FROM certification_bindings b
+             WHERE b.project_id = ?1
+               AND (?2 IS NULL AND b.task_id IS NULL OR ?2 IS NOT NULL AND b.task_id = ?2)
+               AND NOT EXISTS (
+                   SELECT 1 FROM certification_bindings newer
+                   WHERE newer.supersedes_binding_id = b.certification_binding_id
+               )
+             ORDER BY b.created_at DESC, b.certification_binding_id DESC
+             LIMIT 1",
+        ).map_err(StorageError::Db)?;
+        stmt.query_row(
+            rusqlite::params![project_id, task_id],
+            |r| Ok(CertificationBindingRecord {
+                certification_binding_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
+                validation_id:r.get(3)?, workspace_revision_id:r.get(4)?,
+                environment_snapshot_id:r.get(5)?, artifact_hashes_json:r.get(6)?,
+                validator_version:r.get(7)?, test_suite_version:r.get(8)?,
+                status:r.get(9)?, supersedes_binding_id:r.get(10)?,
+                reason:r.get(11)?, created_at:r.get(12)?
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
+        require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
+        if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
+            || new.target_type.trim().is_empty() || new.target_id.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "trace_links".to_string(),
+                detail: "source/target type and id must be non-empty".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO trace_links (trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                new.trace_link_id,new.project_id,new.link_type,new.source_type,
+                new.source_id,new.target_type,new.target_id,new.created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn list_trace_links(&self, project_id: &str) -> Result<Vec<TraceLinkRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at
+             FROM trace_links WHERE project_id = ?1
+             ORDER BY created_at ASC, trace_link_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(TraceLinkRecord {
+            trace_link_id:r.get(0)?, project_id:r.get(1)?, link_type:r.get(2)?,
+            source_type:r.get(3)?, source_id:r.get(4)?, target_type:r.get(5)?,
+            target_id:r.get(6)?, created_at:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+}
+) = 'object' THEN 1 ELSE 0 END",
+            [new.runtime_versions_json.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if json_ok != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "environment_snapshots.runtime_versions_json".to_string(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
