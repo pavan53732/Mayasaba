@@ -813,6 +813,27 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
         let result = self.process.wait(storage, observed_at).await;
         if result.is_ok() {
+            storage.transition_agent_session(
+                &self.session_id,
+                "ACTIVE",
+                "PAUSED",
+                "AGENT_PAUSED",
+                observed_at,
+            )?;
+            storage.transition_agent_session(
+                &self.session_id,
+                "PAUSED",
+                "DRAINING",
+                "AGENT_DRAINING",
+                observed_at,
+            )?;
+            storage.transition_agent_session(
+                &self.session_id,
+                "DRAINING",
+                "STOPPED",
+                "AGENT_STOPPED",
+                observed_at,
+            )?;
             storage.set_agent_health(&self.session_id, "DEGRADED")?;
         }
         result.map_err(Into::into)
@@ -825,8 +846,30 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
         timeout: Duration,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
         let result = self.process.wait_timeout(storage, observed_at, timeout).await;
-        if result.is_ok() {
-            storage.set_agent_health(&self.session_id, "DEGRADED")?;
+        if let Ok(completed) = &result {
+            let health = if completed.timed_out { "UNHEALTHY" } else { "DEGRADED" };
+            storage.transition_agent_session(
+                &self.session_id,
+                "ACTIVE",
+                "PAUSED",
+                "AGENT_PAUSED",
+                observed_at,
+            )?;
+            storage.transition_agent_session(
+                &self.session_id,
+                "PAUSED",
+                "DRAINING",
+                "AGENT_DRAINING",
+                observed_at,
+            )?;
+            storage.transition_agent_session(
+                &self.session_id,
+                "DRAINING",
+                "STOPPED",
+                "AGENT_STOPPED",
+                observed_at,
+            )?;
+            storage.set_agent_health(&self.session_id, health)?;
         }
         result.map_err(Into::into)
     }
