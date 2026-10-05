@@ -3229,6 +3229,22 @@ const OUTCOME_SOURCE_VOCABULARY: &[&str] =
 ///
 /// The returned reference borrows `allowed`, which is always one of this crate's own `const` tables, so the
 /// caller gets the canonical spelling rather than the string it passed in.
+fn epoch_event_payload(
+    project_id: &str,
+    previous_epoch: i64,
+    new_epoch: i64,
+    reason: &str,
+    invalidated_contexts: u64,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("previous_epoch", canonical::JcsValue::Int(previous_epoch)),
+        ("new_epoch", canonical::JcsValue::Int(new_epoch)),
+        ("reason", canonical::JcsValue::Str(reason)),
+        ("invalidated_contexts", canonical::JcsValue::Int(invalidated_contexts as i64)),
+    ])
+}
+
 fn context_event_payload(
     context_snapshot_id: &str,
     project_id: &str,
@@ -3763,6 +3779,15 @@ pub struct NewContextSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectEpochAdvance {
+    pub project_id: String,
+    pub previous_epoch: i64,
+    pub new_epoch: i64,
+    pub reason: String,
+    pub invalidated_contexts: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContextSnapshotRecord {
     pub context_snapshot_id: String,
     pub project_id: String,
@@ -4083,6 +4108,72 @@ impl Storage {
 
     /// Persist an immutable ContextPack snapshot. The digest is deterministic over project, epoch, scope and
     /// the exact canonical ContextPack serialization stored in pack_json.
+    /// Advance the authoritative project epoch and conservatively invalidate every older context snapshot.
+    ///
+    /// The whole operation is one transaction: a material-truth change cannot commit without its epoch and
+    /// context invalidation history. The dependency map can narrow this later without changing the current
+    /// fail-safe rule that no stale snapshot remains admissible after a material truth change.
+    pub fn advance_project_epoch(
+        &mut self,
+        project_id: &str,
+        reason: &str,
+        now: &str,
+    ) -> Result<ProjectEpochAdvance> {
+        if reason.trim().is_empty() || now.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "project_epochs".to_string(),
+                detail: "reason and created_at must be non-empty".to_string(),
+            });
+        }
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let previous_epoch: i64 = tx.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [project_id],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?
+        .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
+        let new_epoch = previous_epoch.checked_add(1).ok_or_else(|| StorageError::Malformed {
+            column: "projects.current_epoch".to_string(),
+            detail: "epoch overflow".to_string(),
+        })?;
+
+        tx.execute(
+            "UPDATE projects SET current_epoch=?1, updated_at=?2 WHERE project_id=?3 AND current_epoch=?4",
+            rusqlite::params![new_epoch,now,project_id,previous_epoch],
+        ).map_err(StorageError::Db)?;
+        tx.execute(
+            "INSERT INTO project_epochs (project_id,epoch,reason,created_at) VALUES (?1,?2,?3,?4)",
+            rusqlite::params![project_id,new_epoch,reason,now],
+        ).map_err(StorageError::Db)?;
+
+        let invalidated = tx.execute(
+            "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
+             WHERE project_id=?2 AND epoch < ?3 AND invalidated_at IS NULL AND superseded_at IS NULL",
+            rusqlite::params![now,project_id,new_epoch],
+        ).map_err(StorageError::Db)? as u64;
+
+        append_event_in(&tx, &NewEvent {
+            event_id: format!("evt_epoch_{}_{}", project_id,new_epoch),
+            project_id: Some(project_id.to_owned()),
+            session_id: None,
+            event_type: "EPOCH_CHANGED".to_owned(),
+            correlation_id: Some(project_id.to_owned()),
+            causation_id: None,
+            epoch: Some(new_epoch),
+            payload_json: epoch_event_payload(project_id,previous_epoch,new_epoch,reason,invalidated)?,
+            created_at: now.to_owned(),
+        })?;
+        tx.commit().map_err(StorageError::Db)?;
+
+        Ok(ProjectEpochAdvance {
+            project_id: project_id.to_owned(),
+            previous_epoch,
+            new_epoch,
+            reason: reason.to_owned(),
+            invalidated_contexts: invalidated,
+        })
+    }
+
     pub fn create_context_snapshot(&mut self, new: &NewContextSnapshot) -> Result<ContextSnapshotRecord> {
         if new.epoch < 0 || new.scope.trim().is_empty() || new.created_at.trim().is_empty() {
             return Err(StorageError::Malformed {
