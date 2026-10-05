@@ -55,7 +55,7 @@ A task may leave a recovery state only when its guard conditions are satisfied.
 
 Owner: TaskService.
 
-REQUESTED → ACTIVE → RENEWING → EXPIRED / RELEASED / REVOKED.
+REQUESTED → ACTIVE ⇄ RENEWING → EXPIRED / RELEASED / REVOKED.
 
 Expiry is authoritative from persisted timestamps and heartbeat policy. Expired/revoked leases cannot authorize writes.
 
