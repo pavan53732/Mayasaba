@@ -298,9 +298,11 @@ What is implemented:
   append-only decision-outcome records. There is **no council runtime** — nothing here spawns an agent, and no
   round is orchestrated end to end.
 
-Crate sizes at this commit, which is the honest read on what is real: `council` ~6,800 lines, `storage` ~2,100,
-`protocol` ~1,500 (about 330 of it generated), `core` ~460, `workspace` ~290. Seven crates are still two-line
-stubs: `agents`, `bus`, `evidence`, `execution`, `policy`, `tasks` and `validation`.
+Crate sizes are not used as a maturity metric. The current runtime baseline includes durable storage,
+task/lease orchestration, recovery planning, workspace admission/checkpoints, the contract-driven agent gateway,
+local process supervision and deterministic council decision-quality logic. The remaining milestones are tracked by
+behavioral gates in `docs/ROADMAP.md`, not by line count; policy, live transport dispatch, Git worktree/integration,
+evidence/validation completion, Control Room, build/test/E2E and MSI packaging remain staged.
 
 Per `docs/ROADMAP.md` the milestones are ordered M0 → M0.5 → M1 → M2 → M2.5 → M3 → M4 → M4.5 → M5 → M6 → M7 → M8 → M9 → M10 → M11. M0, M0.5, M1 and M2 are complete; **M2.5 shell integration is in progress** and does not yet dispatch to live adapters. Council decision-quality logic has landed ahead of the live adapter/runtime milestones because it is deterministic logic with no live-CLI dependency.
 
