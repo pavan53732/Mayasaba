@@ -3724,6 +3724,29 @@ pub struct AgentInstallationRecord {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewContextSnapshot {
+    pub context_snapshot_id: String,
+    pub project_id: String,
+    pub epoch: i64,
+    pub scope: String,
+    pub pack_json: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextSnapshotRecord {
+    pub context_snapshot_id: String,
+    pub project_id: String,
+    pub epoch: i64,
+    pub scope: String,
+    pub state_digest: String,
+    pub pack_json: String,
+    pub created_at: String,
+    pub superseded_at: Option<String>,
+    pub invalidated_at: Option<String>,
+}
+
 pub struct NewAgentSession {
     pub session_id: String,
     pub project_id: String,
@@ -4028,6 +4051,128 @@ impl Storage {
                 version:r.get(4)?,enabled:r.get::<_,i64>(5)? != 0,created_at:r.get(6)?,updated_at:r.get(7)?
             }),
         ).map_err(StorageError::Db)
+    }
+
+    /// Persist an immutable ContextPack snapshot. The digest is deterministic over project, epoch, scope and
+    /// the exact canonical ContextPack serialization stored in pack_json.
+    pub fn create_context_snapshot(&self, new: &NewContextSnapshot) -> Result<ContextSnapshotRecord> {
+        if new.epoch < 0 || new.scope.trim().is_empty() || new.created_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "context_snapshots".to_string(),
+                detail: "epoch, scope and created_at must be valid".to_string(),
+            });
+        }
+        let pack: serde_json::Value = serde_json::from_str(&new.pack_json).map_err(|e| StorageError::Malformed {
+            column: "context_snapshots.pack_json".to_string(),
+            detail: format!("pack_json must be valid JSON: {e}"),
+        })?;
+        if !pack.is_object() {
+            return Err(StorageError::Malformed {
+                column: "context_snapshots.pack_json".to_string(),
+                detail: "pack_json must be a JSON object".to_string(),
+            });
+        }
+        let current_epoch: i64 = self.conn.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [new.project_id.as_str()],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?
+        .ok_or_else(|| StorageError::NotFound(format!("project {}", new.project_id)))?;
+        if current_epoch != new.epoch {
+            return Err(StorageError::Malformed {
+                column: "context_snapshots.epoch".to_string(),
+                detail: format!("snapshot epoch {} does not match project epoch {}", new.epoch, current_epoch),
+            });
+        }
+
+        let canonical = canonical::jcs_object(&[
+            ("project_id", canonical::JcsValue::Str(&new.project_id)),
+            ("epoch", canonical::JcsValue::Int(new.epoch)),
+            ("scope", canonical::JcsValue::Str(&new.scope)),
+            ("pack_json", canonical::JcsValue::Str(&new.pack_json)),
+        ]).map_err(|e| StorageError::Malformed {
+            column: "context_snapshots.state_digest".to_string(),
+            detail: format!("cannot canonicalize snapshot digest input: {e}"),
+        })?;
+        let state_digest = canonical::sha256_hex(&canonical);
+
+        self.conn.execute(
+            "INSERT INTO context_snapshots (context_snapshot_id,project_id,epoch,scope,state_digest,pack_json,created_at,superseded_at,invalidated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,NULL)",
+            rusqlite::params![new.context_snapshot_id,new.project_id,new.epoch,new.scope,state_digest,new.pack_json,new.created_at],
+        ).map_err(StorageError::Db)?;
+        self.get_context_snapshot(&new.context_snapshot_id)?.ok_or_else(|| {
+            StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
+        })
+    }
+
+    pub fn get_context_snapshot(&self, context_snapshot_id: &str) -> Result<Option<ContextSnapshotRecord>> {
+        self.conn.query_row(
+            "SELECT context_snapshot_id,project_id,epoch,scope,state_digest,pack_json,created_at,superseded_at,invalidated_at
+             FROM context_snapshots WHERE context_snapshot_id=?1",
+            [context_snapshot_id],
+            |r| Ok(ContextSnapshotRecord {
+                context_snapshot_id:r.get(0)?, project_id:r.get(1)?, epoch:r.get(2)?, scope:r.get(3)?,
+                state_digest:r.get(4)?, pack_json:r.get(5)?, created_at:r.get(6)?,
+                superseded_at:r.get(7)?, invalidated_at:r.get(8)?,
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    pub fn validate_context_fresh(
+        &self,
+        context_snapshot_id: &str,
+        project_id: &str,
+        expected_epoch: i64,
+        expected_digest: &str,
+    ) -> Result<bool> {
+        let Some(snapshot) = self.get_context_snapshot(context_snapshot_id)? else {
+            return Ok(false);
+        };
+        let current_epoch: i64 = self.conn.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [project_id],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?
+        .unwrap_or(-1);
+        Ok(snapshot.project_id == project_id
+            && snapshot.epoch == expected_epoch
+            && current_epoch == expected_epoch
+            && snapshot.state_digest == expected_digest
+            && snapshot.superseded_at.is_none()
+            && snapshot.invalidated_at.is_none())
+    }
+
+    pub fn supersede_context_snapshot(
+        &self,
+        context_snapshot_id: &str,
+        superseded_at: &str,
+    ) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE context_snapshots SET superseded_at=COALESCE(superseded_at,?1)
+             WHERE context_snapshot_id=?2 AND invalidated_at IS NULL",
+            rusqlite::params![superseded_at,context_snapshot_id],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!("active context snapshot {context_snapshot_id}")));
+        }
+        Ok(())
+    }
+
+    pub fn invalidate_context_snapshot(
+        &self,
+        context_snapshot_id: &str,
+        invalidated_at: &str,
+    ) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
+             WHERE context_snapshot_id=?2",
+            rusqlite::params![invalidated_at,context_snapshot_id],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!("context snapshot {context_snapshot_id}")));
+        }
+        Ok(())
     }
 
     pub fn create_agent_session(&mut self, new: &NewAgentSession) -> Result<AgentSessionRecord> {
