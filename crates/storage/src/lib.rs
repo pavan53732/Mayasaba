@@ -4660,18 +4660,22 @@ impl Storage {
             });
         }
 
-        let context: Option<(String,i64,Option<String>)> = tx.query_row(
-            "SELECT project_id, epoch, invalidated_at FROM context_snapshots WHERE context_snapshot_id=?1",
+        let context: Option<(String,i64,String,Option<String>)> = tx.query_row(
+            "SELECT project_id, epoch, state_digest, invalidated_at FROM context_snapshots WHERE context_snapshot_id=?1",
             [new.context_snapshot_id.as_str()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (context_project, context_epoch, invalidated_at) = context.ok_or_else(|| {
+        let (context_project, context_epoch, context_digest, invalidated_at) = context.ok_or_else(|| {
             StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
         })?;
-        if context_project != new.project_id || context_epoch != new.project_epoch || invalidated_at.is_some() {
+        if context_project != new.project_id
+            || context_epoch != new.project_epoch
+            || invalidated_at.is_some()
+            || context_digest != new.state_digest
+        {
             return Err(StorageError::Malformed {
                 column: "task_leases.context_snapshot_id".to_string(),
-                detail: "context snapshot is missing, stale for the task epoch, or invalidated".to_string(),
+                detail: "context snapshot is missing, stale for the task epoch, invalidated, or its digest does not match the lease".to_string(),
             });
         }
 
@@ -4844,21 +4848,51 @@ impl Storage {
                 presented: expected_version,
             });
         }
+
+        let session_ok: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM agent_sessions
+             WHERE session_id=?1 AND project_id=?2 AND agent_id=?3
+               AND current_epoch=?4 AND state IN ('READY','ACTIVE') AND health_state='HEALTHY'",
+            rusqlite::params![session_id,project_id,agent_id,project_epoch],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if session_ok != 1 {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions".to_string(),
+                detail: format!("agent session {session_id} is no longer healthy for lease renewal"),
+            });
+        }
+
+        let current_epoch: i64 = tx.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [project_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if current_epoch != project_epoch {
+            return Err(StorageError::Malformed {
+                column: "task_leases.project_epoch".to_string(),
+                detail: format!("lease epoch {project_epoch} is stale against project epoch {current_epoch}"),
+            });
+        }
+
+        // The fencing token identifies the lease ownership epoch, not each heartbeat. A renewal extends the
+        // same owner lease; a different owner receives a different lease_id and starts a new fencing lifetime.
         tx.execute(
-            "UPDATE task_leases SET status='RENEWING', lease_version=lease_version+1, heartbeat_at=?1, expires_at=?2 WHERE lease_id=?3 AND status='ACTIVE' AND lease_version=?4",
+            "UPDATE task_leases SET status='RENEWING', heartbeat_at=?1, expires_at=?2
+             WHERE lease_id=?3 AND status='ACTIVE' AND lease_version=?4",
             rusqlite::params![heartbeat_at,expires_at,lease_id,expected_version],
         ).map_err(StorageError::Db)?;
         append_event_in(&tx, &transition_event(
             &tx,lease_id,"LEASE_RENEWED",&project_id,&session_id,lease_id,None,
-            lease_event_payload(&project_id,&task_id,lease_id,expected_version+1,"RENEWING")?,heartbeat_at
+            lease_event_payload(&project_id,&task_id,lease_id,expected_version,"RENEWING")?,heartbeat_at
         )?)?;
         tx.execute(
             "UPDATE task_leases SET status='ACTIVE' WHERE lease_id=?1 AND status='RENEWING' AND lease_version=?2",
-            rusqlite::params![lease_id,expected_version+1],
+            rusqlite::params![lease_id,expected_version],
         ).map_err(StorageError::Db)?;
         append_event_in(&tx, &transition_event(
             &tx,lease_id,"LEASE_ACTIVE",&project_id,&session_id,lease_id,None,
-            lease_event_payload(&project_id,&task_id,lease_id,expected_version+1,"ACTIVE")?,heartbeat_at
+            lease_event_payload(&project_id,&task_id,lease_id,expected_version,"ACTIVE")?,heartbeat_at
         )?)?;
         tx.commit().map_err(StorageError::Db)?;
         self.get_task_lease(lease_id)?.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))
@@ -5327,10 +5361,10 @@ impl Storage {
         attempt_id: &str,
         presented_lease_version: i64,
     ) -> Result<()> {
-        let row: Option<(String,String,String,String,String,i64,i64,String,String,Option<String>,Option<String>)> =
+        let row: Option<(String,String,String,String,String,i64,i64,i64,String,String,Option<String>,Option<String>)> =
             self.conn.query_row(
                 "SELECT ta.project_id, ta.task_id, ta.workspace_id, ta.lease_id, ta.context_snapshot_id,
-                        ta.fence_token, ta.project_epoch, tl.status, tl.state_digest,
+                        ta.fence_token, tl.lease_version, ta.project_epoch, tl.status, tl.state_digest,
                         cs.superseded_at, cs.invalidated_at
                  FROM task_attempts ta
                  JOIN task_leases tl ON tl.lease_id = ta.lease_id
@@ -5352,6 +5386,7 @@ impl Storage {
             _lease_id,
             context_snapshot_id,
             fence_token,
+            current_lease_version,
             attempt_epoch,
             lease_status,
             lease_digest,
@@ -5359,12 +5394,7 @@ impl Storage {
             invalidated_at,
         ) = row.ok_or_else(|| StorageError::NotFound(format!("active task attempt {attempt_id}")))?;
 
-        if fence_token != presented_lease_version {
-            let current_lease_version: i64 = self.conn.query_row(
-                "SELECT lease_version FROM task_leases WHERE lease_id=(SELECT lease_id FROM task_attempts WHERE attempt_id=?1)",
-                [attempt_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+        if fence_token != current_lease_version || presented_lease_version != current_lease_version {
             return Err(StorageError::StaleFence {
                 attempt_id: attempt_id.to_owned(),
                 attempt_fence: fence_token,
