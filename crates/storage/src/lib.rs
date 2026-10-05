@@ -3830,7 +3830,7 @@ impl Storage {
     }
 
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
-    pub fn transition_task_attempt(&self, attempt_id: &str, expected_state: &str, next_state: &str) -> Result<()> {
+    pub fn transition_task_attempt(&self, attempt_id: &str, expected_state: &str, next_state: &str, ended_at: Option<&str>) -> Result<()> {
         require_vocabulary("task_attempts.next_state", next_state, TASK_ATTEMPT_STATES)?;
         let allowed = match (expected_state, next_state) {
             ("CREATED","STARTED")
@@ -3861,8 +3861,8 @@ impl Storage {
             });
         }
         let changed = self.conn.execute(
-            "UPDATE task_attempts SET state = ?1, ended_at = CASE WHEN ?1 IN ('COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN') THEN COALESCE(ended_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE ended_at END WHERE attempt_id = ?2 AND state = ?3",
-            rusqlite::params![next_state, attempt_id, expected_state],
+            "UPDATE task_attempts SET state = ?1, ended_at = CASE WHEN ?1 IN ('COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN') THEN COALESCE(ended_at, ?4) ELSE ended_at END WHERE attempt_id = ?2 AND state = ?3",
+            rusqlite::params![next_state, attempt_id, expected_state, ended_at],
         ).map_err(StorageError::Db)?;
         if changed != 1 {
             return Err(StorageError::InvalidAttemptTransition {
