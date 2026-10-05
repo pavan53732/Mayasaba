@@ -77,7 +77,9 @@ dispatch loop, `request_event_resync`, `PolicyService`, `ContextService`, an enq
 and any schema or table change.
 ## M3 — Agent gateway
 
-M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.
+**Status: in progress.** The contract-driven adapter kernel, closed three-agent identity set, launch-proof boundary,
+native-event normalization and process-spec bridge are implemented. Live executable discovery/probing, session
+handshake, capability negotiation, health checks and native transport dispatch remain the next M3 integration tranche.
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
 - OpenCode CLI adapter
@@ -110,6 +112,11 @@ Before broad task execution or full Control Room implementation, prove Mayasaba'
 No live AI CLI is required for this proof. The slice passes only when the question/answer is durable, targeted agents receive the new context, stale context cannot authorize work, duplicate delivery is safe, and non-participation is explicit. M6 completes the production Council Engine after this behavior is demonstrated.
 
 ## M5 — Task/workspace execution for code and local artifacts
+
+**Status: reliability/runtime foundation implemented; full milestone remains open.** Durable task leases, fencing,
+attempt identity, deterministic ready-task selection, command execution records, process observations, bounded local
+process supervision and restart reconciliation are implemented. Git worktrees, full workspace mutation policy,
+real artifact/evidence capture and end-to-end project execution remain open.
 - request/acceptance-criteria-to-task DAG
 - task leases
 - lease renewal/expiry
