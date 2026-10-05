@@ -258,6 +258,11 @@ CREATE TABLE IF NOT EXISTS task_leases (
   FOREIGN KEY(task_id) REFERENCES tasks(task_id)
 );
 
+-- At most one live lease may own a task. Historical expired/released/revoked leases remain for audit/replay.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_leases_one_live_per_task
+  ON task_leases(task_id)
+  WHERE status IN ('ACTIVE','RENEWING');
+
 -- Reliability persistence (orchestration refinement).
 -- TaskAttempt is distinct from Task: retries/recovery create a new attempt identity while the task remains stable.
 -- The active TaskLease's lease_version is the fencing token; no second fencing authority is introduced.
