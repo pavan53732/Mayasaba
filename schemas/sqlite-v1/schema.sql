@@ -766,6 +766,11 @@ CREATE INDEX IF NOT EXISTS idx_leases_expiry ON task_leases(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_task_attempts_task ON task_attempts(project_id, task_id, attempt_no);
 CREATE INDEX IF NOT EXISTS idx_task_attempts_active ON task_attempts(project_id, state, heartbeat_at);
 CREATE INDEX IF NOT EXISTS idx_resource_reservations_live ON resource_reservations(project_id, resource_type, resource_key, state, expires_at);
+-- Exclusive local resources are globally unique while held; project identity is intentionally absent because a port,
+-- process slot or other machine-local resource cannot be held by two projects at once.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_reservations_exclusive
+  ON resource_reservations(resource_type, resource_key)
+  WHERE mode = 'EXCLUSIVE' AND state = 'HELD';
 CREATE INDEX IF NOT EXISTS idx_workspace_revisions_workspace ON workspace_revisions(project_id, workspace_id, revision_no);
 CREATE INDEX IF NOT EXISTS idx_environment_snapshots_project ON environment_snapshots(project_id, captured_at);
 CREATE INDEX IF NOT EXISTS idx_certification_bindings_validation ON certification_bindings(project_id, validation_id, status);
