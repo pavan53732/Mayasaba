@@ -125,3 +125,33 @@ Completion claims must map to observable artifacts and task-appropriate checks: 
 ## Acceptance principle
 
 A requirement is not “implemented” because source text exists. It is implemented only when the required behavior is validated with appropriate evidence.
+
+
+## Reliability requirements
+
+### FR-022 Durable task attempts
+The system shall preserve Task identity across retries/reassignment and create a distinct durable TaskAttempt for each concrete attempt. Attempt number is unique per task.
+
+### FR-023 Lease fencing
+Every material task-side effect derived from a lease shall validate the current TaskLease.lease_version. A stale attempt may observe but cannot mutate authoritative state or the leased workspace.
+
+### FR-024 Resource admission
+The scheduler shall durably reserve scarce local resources such as ports and process slots before execution. Exclusive resources shall not have two simultaneously held reservations.
+
+### FR-025 Workspace/environment provenance
+Execution and validation shall record the observed WorkspaceRevision and EnvironmentSnapshot used by the operation. External workspace drift shall block affected integration.
+
+### FR-026 Certification binding
+Certification shall bind the exact validation run, applicable artifact hashes, workspace revision, environment snapshot and validator/test-suite versions. A load-bearing change supersedes the certification.
+
+### FR-027 Liveness and reconciliation
+The controller shall reconcile desired and observed state and shall not interpret unknown physical state as success. Stable admitted work shall not remain silently running forever; bounded recovery, blocking or escalation is required.
+
+### FR-028 Plan invalidation
+Material requirement, decision, contract or architecture changes shall invalidate affected plans/context and prevent stale material admissions until recomputation.
+
+### NFR-010 Liveness
+For stable requirements and sufficient resources, every admitted execution eventually reaches a terminal result, explicit recovery/UNKNOWN state, human blocker or capacity blocker; silent infinite execution is non-conforming.
+
+### NFR-011 Provenance
+Certification and validation evidence shall identify the exact artifacts, workspace revision, environment and validator/test-suite inputs that produced the verdict.
