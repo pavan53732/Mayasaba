@@ -40,6 +40,21 @@ fn seed_task_lease_workspace(storage: &Storage) {
         [],
     ).expect("context");
     storage.conn().execute(
+        "INSERT INTO task_scopes (task_id,allowed_paths_json,required_capabilities_json,validation_requirements_json,policy_scope,max_attempts,max_parallel_children,created_at,updated_at)
+         VALUES ('task_1','[]','[]','[]','PROJECT_WRITE',3,2,'1','1')",
+        [],
+    ).expect("task scope");
+    let admission = mayasaba_storage::NewAdmission {
+        admission_id:"admit_1".into(), project_id:"prj_reliability".into(), task_id:"task_1".into(),
+        workspace_id:"ws_1".into(), lease_id:None, agent_id:None, session_id:None,
+        kind:"WORKSPACE_ADMISSION".into(), epoch:0,
+        context_digest:Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+        base_checkpoint_ref:None, changed_paths_json:"[]".into(),
+        checks_json:r#"[{"check_id":"REPOSITORY_IDENTITY","status":"PASS"},{"check_id":"BASELINE_CLEAN","status":"PASS"},{"check_id":"WORKTREE_ASSIGNED","status":"PASS"},{"check_id":"PROTECTED_PATHS_DETERMINED","status":"PASS"},{"check_id":"CONTEXT_FRESH","status":"PASS"},{"check_id":"WORKSPACE_OWNERSHIP","status":"PASS"}]"#.into(),
+        verdict:"ADMITTED".into(), refusal_reasons_json:None, supersedes_admission_id:None, created_at:"1".into()
+    };
+    storage.insert_admission(&admission).expect("workspace admission");
+    storage.conn().execute(
         "INSERT INTO task_leases (lease_id, task_id, project_id, agent_id, session_id, workspace_id, lease_version, project_epoch, context_snapshot_id, state_digest, allowed_paths_json, required_capabilities_json, policy_scope, issued_at, heartbeat_at, expires_at, status) VALUES ('lease_1','task_1','prj_reliability','agent_1','sess_1','ws_1',7,0,'ctx_1','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','[]','[]','PROJECT_WRITE','1','1','9999','ACTIVE')",
         [],
     ).expect("lease");
