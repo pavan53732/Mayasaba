@@ -49,6 +49,12 @@ PLANNED → READY → LEASE_REQUESTED → LEASED → ACCEPTED → IN_PROGRESS �
 Recovery:
 BLOCKED, FAILED, RETRY_PENDING, REPAIR_PENDING, LEASE_EXPIRED, RECOVERY_PENDING, REASSIGNED, INVALIDATED.
 
+Lease-expiry recovery path:
+LEASED / ACCEPTED / IN_PROGRESS / REPAIR_PENDING → LEASE_EXPIRED → RECOVERY_PENDING → READY.
+The final RECOVERY_PENDING → READY transition is allowed only when TaskService verifies there is no live lease, no
+unresolved TaskAttempt and no live/cleanup/unknown CommandExecution physical state. Reassignment remains a separate
+governed recovery path when a different agent/session/workspace must be selected.
+
 A task may leave a recovery state only when its guard conditions are satisfied.
 
 ## 4. Lease
@@ -57,7 +63,9 @@ Owner: TaskService.
 
 REQUESTED → ACTIVE ⇄ RENEWING → EXPIRED / RELEASED / REVOKED.
 
-Expiry is authoritative from persisted timestamps and heartbeat policy. Expired/revoked leases cannot authorize writes.
+Expiry is authoritative from persisted timestamps and heartbeat policy. lease_version is a stable fencing token for one
+lease ownership lifetime: renewal extends heartbeat/expiry without rotating the token; a new lease_id represents a new
+ownership lifetime. Expired/revoked leases cannot authorize writes.
 
 ## 5. Council round
 
