@@ -6132,6 +6132,18 @@ impl Storage {
         require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
         require_vocabulary("resource_reservations.state", &new.state, RESOURCE_STATES)?;
+        if new.state != "HELD" {
+            return Err(StorageError::Malformed {
+                column:"resource_reservations.state".to_string(),
+                detail:"new reservations must enter through HELD; RELEASED/EXPIRED/LOST are observations or terminal outcomes".to_string(),
+            });
+        }
+        if new.quantity <= 0 || new.issued_at.trim().is_empty() || new.expires_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column:"resource_reservations".to_string(),
+                detail:"quantity must be positive and issued_at/expires_at are required".to_string(),
+            });
+        }
         let lease: Option<(String,String,String,String,String,i64)> = self.conn.query_row(
             "SELECT task_id, project_id, agent_id, session_id, workspace_id, lease_version
              FROM task_leases
