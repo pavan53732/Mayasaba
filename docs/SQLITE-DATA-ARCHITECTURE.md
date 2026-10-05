@@ -201,3 +201,8 @@ Retry/recovery identity is persisted separately from task identity in `task_atte
 `certification_bindings` pins certification to validation, artifact hashes, workspace revision, environment snapshot and validator/test-suite versions. A later load-bearing mutation creates a superseding/invalidation record rather than rewriting historical certification.
 
 Safe points do not require another table: `workspace_checkpoints.kind = SAFE_POINT` is the canonical representation.
+
+
+Safe points do not require another table: `workspace_checkpoints.kind = SAFE_POINT` is the canonical representation.
+
+Reliability additions avoid `ALTER TABLE` requirements for pre-existing tables. Task-attempt-to-existing-record relationships are represented through the existing `trace_links`/`trace_link_versions` model until a versioned migration runner exists.
