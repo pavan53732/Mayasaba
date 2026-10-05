@@ -22,7 +22,7 @@ version = "0.1.0"
 license = "MIT"
 
 [workspace.dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "io-util"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # SQLite driver for crates/storage. `bundled` compiles SQLite from the vendored amalgamation so the MSI
