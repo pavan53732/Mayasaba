@@ -593,7 +593,7 @@ One control was run alongside them: the unmutated tree passes both the test suit
 
 ## Long-running orchestration reliability tests
 
-These tests extend the existing protocol/recovery suites without creating a second state model.
+These tests extend the existing protocol/recovery suites without creating a second state model. They are committed as executable Rust tests; this environment could not run `cargo test` because outbound GitHub/DNS access is unavailable, so execution is not represented as a passing validation claim.
 
 ### Task attempt and fencing
 - two attempts of one task have distinct identities and immutable attempt numbers;
