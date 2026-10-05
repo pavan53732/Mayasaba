@@ -871,7 +871,7 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
                 "AGENT_STOPPED",
                 observed_at,
             )?;
-            storage.set_agent_health(&self.session_id, "DEGRADED")?;
+            storage.set_agent_health(&self.session_id, "DEGRADED", observed_at)?;
         }
         result.map_err(Into::into)
     }
@@ -906,7 +906,7 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
                 "AGENT_STOPPED",
                 observed_at,
             )?;
-            storage.set_agent_health(&self.session_id, health)?;
+            storage.set_agent_health(&self.session_id, health, observed_at)?;
         }
         result.map_err(Into::into)
     }
@@ -949,6 +949,7 @@ pub async fn launch_live_session(
         return Err(AgentRuntimeError::Storage(error));
     }
 
+    storage.set_agent_health(&request.session_id, "HEALTHY", started_at)?;
     let transition_result = storage.transition_agent_session(
         &request.session_id,
         "READY",
