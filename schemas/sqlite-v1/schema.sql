@@ -489,6 +489,25 @@ CREATE TABLE IF NOT EXISTS trace_coverage (
   PRIMARY KEY(project_id, requirement_id)
 );
 
+CREATE TABLE IF NOT EXISTS resource_reservations (
+  reservation_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  lease_id TEXT NOT NULL,
+  lease_version INTEGER NOT NULL,
+  resource_type TEXT NOT NULL CHECK(resource_type IN ('CPU','RAM','GPU','DISK','PORT','WORKSPACE','PROCESS_SLOT','AGENT_SLOT','TOOLCHAIN')),
+  resource_key TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK(mode IN ('EXCLUSIVE','SHARED')),
+  quantity INTEGER NOT NULL CHECK(quantity > 0),
+  state TEXT NOT NULL CHECK(state IN ('HELD','RELEASED','EXPIRED','LOST')),
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  released_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(lease_id) REFERENCES task_leases(lease_id)
+);
 CREATE TABLE IF NOT EXISTS command_executions (
   execution_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -536,6 +555,44 @@ CREATE TABLE IF NOT EXISTS test_runs (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workspace_revisions (
+  revision_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  task_id TEXT,
+  session_id TEXT,
+  revision_no INTEGER NOT NULL,
+  parent_revision_id TEXT,
+  repository_head TEXT,
+  manifest_hash TEXT,
+  tree_hash TEXT,
+  source TEXT NOT NULL CHECK(source IN ('CONTROLLER','AGENT','USER','EXTERNAL','GIT')),
+  status TEXT NOT NULL CHECK(status IN ('EXPECTED','VERIFIED','DRIFTED','UNKNOWN')),
+  observed_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(workspace_id, revision_no),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(parent_revision_id) REFERENCES workspace_revisions(revision_id)
+);
+
+CREATE TABLE IF NOT EXISTS environment_snapshots (
+  environment_snapshot_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  workspace_id TEXT,
+  task_id TEXT,
+  execution_id TEXT,
+  os_identity TEXT NOT NULL,
+  runtime_versions_json TEXT NOT NULL,
+  environment_policy_hash TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('PREFLIGHT','EXECUTION','VALIDATION')),
+  captured_at TEXT NOT NULL,
+  UNIQUE(project_id, execution_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+);
 CREATE TABLE IF NOT EXISTS failures (
   failure_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -605,6 +662,25 @@ CREATE TABLE IF NOT EXISTS evidence (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS certification_bindings (
+  certification_binding_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  task_id TEXT,
+  validation_id TEXT NOT NULL,
+  workspace_revision_id TEXT,
+  environment_snapshot_id TEXT,
+  artifact_hashes_json TEXT NOT NULL,
+  validator_version TEXT NOT NULL,
+  test_suite_version TEXT,
+  status TEXT NOT NULL CHECK(status IN ('ACTIVE','SUPERSEDED','INVALIDATED','EXPIRED')),
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(validation_id) REFERENCES validation_runs(validation_id),
+  FOREIGN KEY(workspace_revision_id) REFERENCES workspace_revisions(revision_id),
+  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id)
+);
 CREATE TABLE IF NOT EXISTS evidence_links (
   evidence_id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
