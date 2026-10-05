@@ -302,10 +302,7 @@ Crate sizes at this commit, which is the honest read on what is real: `council` 
 `protocol` ~1,500 (about 330 of it generated), `core` ~460, `workspace` ~290. Seven crates are still two-line
 stubs: `agents`, `bus`, `evidence`, `execution`, `policy`, `tasks` and `validation`.
 
-Per `docs/ROADMAP.md` the milestones are ordered M0 → M0.5 → M1 → M2 → M3 → M4 → M4.5 → M5 → M6 → M7 → M8 →
-M9. M0, M0.5 and M1 are complete; **M2, the durable local communication bus, is the next unstarted
-milestone**, and `crates/bus` is still a stub. The council logic is M4.5/M6 work that has landed ahead of M2
-because it is pure logic with no runtime dependency on the bus.
+Per `docs/ROADMAP.md` the milestones are ordered M0 → M0.5 → M1 → M2 → M2.5 → M3 → M4 → M4.5 → M5 → M6 → M7 → M8 → M9 → M10 → M11. M0, M0.5, M1 and M2 are complete; **M2.5 shell integration is in progress** and does not yet dispatch to live adapters. Council decision-quality logic has landed ahead of the live adapter/runtime milestones because it is deterministic logic with no live-CLI dependency.
 
 
 ### Long-running orchestration reliability
