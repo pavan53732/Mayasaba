@@ -163,7 +163,10 @@
         "ACTIVE->EXPIRED",
         "ACTIVE->RELEASED",
         "ACTIVE->REVOKED",
-        "RENEWING->EXPIRED"
+        "RENEWING->EXPIRED",
+        "RENEWING->ACTIVE",
+        "RENEWING->RELEASED",
+        "RENEWING->REVOKED"
       ],
       "unreviewed_branches": []
     },
@@ -2797,7 +2800,124 @@
         "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
         "failure_transition": null
       }
-    ],
+    ],,
+      {
+        "transition_id": "lease.RENEWING->ACTIVE",
+        "owner": "crates/tasks",
+        "source_state": "RENEWING",
+        "event_type": "LEASE_ACTIVE",
+        "command": "RENEW_LEASE",
+        "guards": [
+          {
+            "project": "current phase == RENEWING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task ownership and dependency predicates satisfy transition",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "lease.state = ACTIVE",
+        "emitted_events": [
+          "LEASE_ACTIVE"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
+      },
+      {
+        "transition_id": "lease.RENEWING->RELEASED",
+        "owner": "crates/tasks",
+        "source_state": "RENEWING",
+        "event_type": "LEASE_RELEASED",
+        "command": "RELEASE_LEASE",
+        "guards": [
+          {
+            "project": "current phase == RENEWING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task ownership and dependency predicates satisfy transition",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "lease.state = RELEASED",
+        "emitted_events": [
+          "LEASE_RELEASED"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
+      },
+      {
+        "transition_id": "lease.RENEWING->REVOKED",
+        "owner": "crates/tasks",
+        "source_state": "RENEWING",
+        "event_type": "LEASE_REVOKED",
+        "command": "REVOKE_LEASE",
+        "guards": [
+          {
+            "project": "current phase == RENEWING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task ownership and dependency predicates satisfy transition",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "lease.state = REVOKED",
+        "emitted_events": [
+          "LEASE_REVOKED"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
+      }
     "council_round": [
       {
         "transition_id": "council_round.OPEN->RESPONSES_COLLECTING",
