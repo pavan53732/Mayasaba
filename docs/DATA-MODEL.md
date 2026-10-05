@@ -34,11 +34,16 @@ Decision
 ArchitectureArtifact
 Contract
 Task
+TaskAttempt
 TaskDependency
 TaskLease
 Handoff
 Workspace
 WorkspaceCheckpoint
+WorkspaceRevision
+ResourceReservation
+EnvironmentSnapshot
+CertificationBinding
 Admission
 CommandExecution
 Build
