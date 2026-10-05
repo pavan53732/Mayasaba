@@ -167,6 +167,13 @@ pub async fn spawn_process(
             "process spec does not match persisted execution executable/cwd".to_string(),
         ));
     }
+    let persisted_args: Vec<String> = serde_json::from_str(&execution.arguments_json)
+        .map_err(|e| ExecutionError::InvalidSpec(format!("persisted arguments are invalid JSON: {e}")))?;
+    if persisted_args != spec.argv {
+        return Err(ExecutionError::InvalidSpec(
+            "process spec argv does not match the durably approved execution arguments".to_string(),
+        ));
+    }
     if spec.executable.trim().is_empty() || spec.cwd.trim().is_empty() {
         return Err(ExecutionError::InvalidSpec(
             "executable and cwd must be non-empty".to_string(),
