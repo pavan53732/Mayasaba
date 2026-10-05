@@ -102,3 +102,91 @@ fn safe_provenance_records_accept_only_declared_vocabularies() {
         [],
     ).is_err(), "an undeclared revision source must fail closed");
 }
+
+#[test]
+fn an_old_attempt_fence_is_rejected_after_lease_rollover() {
+    use mayasaba_storage::NewTaskAttempt;
+    let storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.insert_task_attempt(&NewTaskAttempt {
+        attempt_id: "att_fence".to_string(),
+        task_id: "task_1".to_string(),
+        project_id: "prj_reliability".to_string(),
+        attempt_no: 1,
+        lease_id: "lease_1".to_string(),
+        agent_id: "agent_1".to_string(),
+        session_id: "sess_1".to_string(),
+        workspace_id: "ws_1".to_string(),
+        fence_token: 7,
+        project_epoch: 0,
+        context_snapshot_id: "ctx_1".to_string(),
+        state: "RUNNING".to_string(),
+        checkpoint_id: None,
+        failure_id: None,
+        started_at: Some("1".to_string()),
+        heartbeat_at: Some("1".to_string()),
+        ended_at: None,
+        created_at: "1".to_string(),
+    }).expect("attempt");
+    storage.conn().execute("UPDATE task_leases SET lease_version = 8, status = 'ACTIVE' WHERE lease_id = 'lease_1'", []).expect("roll lease");
+    assert!(storage.verify_attempt_fence("att_fence", 7).is_err(), "the old fence must not authorize a write");
+    assert!(storage.verify_attempt_fence("att_fence", 8).is_err(), "the attempt snapshot is fenced to version 7 and must be recovered/recreated rather than silently upgraded");
+}
+
+#[test]
+fn active_fence_is_accepted_while_lease_version_matches() {
+    use mayasaba_storage::NewTaskAttempt;
+    let storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.insert_task_attempt(&NewTaskAttempt {
+        attempt_id: "att_live".to_string(),
+        task_id: "task_1".to_string(),
+        project_id: "prj_reliability".to_string(),
+        attempt_no: 1,
+        lease_id: "lease_1".to_string(),
+        agent_id: "agent_1".to_string(),
+        session_id: "sess_1".to_string(),
+        workspace_id: "ws_1".to_string(),
+        fence_token: 7,
+        project_epoch: 0,
+        context_snapshot_id: "ctx_1".to_string(),
+        state: "RUNNING".to_string(),
+        checkpoint_id: None,
+        failure_id: None,
+        started_at: Some("1".to_string()),
+        heartbeat_at: Some("1".to_string()),
+        ended_at: None,
+        created_at: "1".to_string(),
+    }).expect("attempt");
+    storage.verify_attempt_fence("att_live", 7).expect("current fence");
+}
+
+#[test]
+fn certification_and_environment_records_reject_invalid_vocabularies() {
+    use mayasaba_storage::{NewEnvironmentSnapshot, NewCertificationBinding};
+    let storage = project_storage();
+    storage.insert_environment_snapshot(&NewEnvironmentSnapshot {
+        environment_snapshot_id: "env_1".to_string(),
+        project_id: "prj_reliability".to_string(),
+        workspace_id: None, task_id: None, execution_id: None,
+        os_identity: "Windows".to_string(), runtime_versions_json: "{}".to_string(),
+        environment_policy_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        source: "EXECUTION".to_string(), captured_at: "1".to_string()
+    }).expect("environment");
+    assert!(storage.insert_environment_snapshot(&NewEnvironmentSnapshot {
+        environment_snapshot_id: "env_bad".to_string(), project_id: "prj_reliability".to_string(),
+        workspace_id: None, task_id: None, execution_id: None, os_identity: "Windows".to_string(),
+        runtime_versions_json: "{}".to_string(),
+        environment_policy_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        source: "NETWORK".to_string(), captured_at: "2".to_string()
+    }).is_err());
+    // The certification binding deliberately requires a real validation row; without one the foreign key
+    // blocks storage rather than permitting an ungrounded certification.
+    assert!(storage.insert_certification_binding(&NewCertificationBinding {
+        certification_binding_id: "cert_1".to_string(), project_id: "prj_reliability".to_string(),
+        task_id: None, validation_id: "missing_validation".to_string(), workspace_revision_id: None,
+        environment_snapshot_id: Some("env_1".to_string()),
+        artifact_hashes_json: "[]".to_string(), validator_version: "validator-1".to_string(),
+        test_suite_version: None, status: "ACTIVE".to_string(), reason: None, created_at: "1".to_string()
+    }).is_err(), "certification without a validation run must fail closed");
+}
