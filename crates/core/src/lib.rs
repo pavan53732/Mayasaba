@@ -1,3 +1,4 @@
+pub mod context_service;
 //! Mayasaba core/controller: cross-subsystem application services.
 //!
 //! A service owns the meaning of a concept, validates the request against the contract, and delegates
@@ -17,3 +18,4 @@ pub use project_service::{
 };
 
 pub use recovery_service::{build_runtime_recovery_plan, RuntimeRecoveryAction, RuntimeRecoveryCandidate, RuntimeRecoveryExecutionCandidate, RuntimeRecoveryPlan};
+pub use context_service::ContextService;
