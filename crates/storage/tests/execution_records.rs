@@ -163,3 +163,42 @@ fn schedulable_selector_is_dependency_safe_and_deterministic() {
     let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector with live lease");
     assert!(!rows.iter().any(|r| r.task_id == "task_low"));
 }
+
+
+#[test]
+fn agent_session_lifecycle_is_cas_and_capability_snapshot_is_bound() {
+    use mayasaba_storage::{NewAgentCapabilitySnapshot, NewAgentSession};
+    let mut storage = project_storage();
+
+    let session = storage.create_agent_session(&NewAgentSession {
+        session_id:"sess_discovery".into(),
+        project_id:"prj_exec".into(),
+        agent_id:"agent_exec".into(),
+        workspace_id:Some("ws_exec".into()),
+        current_epoch:0,
+        started_at:"10".into(),
+    }).expect("session");
+    assert_eq!(session.state, "DISCOVERED");
+    assert_eq!(session.health_state, "UNKNOWN");
+
+    storage.transition_agent_session(
+        "sess_discovery","DISCOVERED","HANDSHAKING","AGENT_HANDSHAKING","11"
+    ).expect("handshake");
+    assert!(storage.transition_agent_session(
+        "sess_discovery","DISCOVERED","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING","12"
+    ).is_err(), "stale expected state must not overwrite session");
+
+    storage.transition_agent_session(
+        "sess_discovery","HANDSHAKING","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING","12"
+    ).expect("capability gate");
+    storage.insert_agent_capability_snapshot(&NewAgentCapabilitySnapshot {
+        capability_snapshot_id:"cap_1".into(),
+        agent_id:"agent_exec".into(),
+        session_id:Some("sess_discovery".into()),
+        capabilities_json:r#"{"version_probe":true,"structured_transport":true}"#.into(),
+        detected_at:"12".into(),
+    }).expect("capabilities");
+    storage.transition_agent_session(
+        "sess_discovery","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","AGENT_WORKSPACE_VALIDATING","13"
+    ).expect("workspace gate");
+}
