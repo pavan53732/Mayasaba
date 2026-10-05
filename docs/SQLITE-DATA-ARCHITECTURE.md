@@ -188,3 +188,16 @@ The database must support deterministic scans for:
 
 ## Migration
 A migration changes schema version atomically, preserves durable history and records migration identity. Destructive schema changes require explicit compatibility/migration design.
+
+
+## Reliability persistence model
+
+Retry/recovery identity is persisted separately from task identity in `task_attempts`. The attempt's `fence_token` is copied from the authoritative `task_leases.lease_version` at admission; it is an auditable snapshot of the lease version, not an independent authority.
+
+`resource_reservations` persists scarce local-resource admission. A partial unique index prevents two simultaneously held `EXCLUSIVE` reservations for the same machine-local `(resource_type, resource_key)`, intentionally without project scoping for resources such as ports and process slots.
+
+`workspace_revisions` and `environment_snapshots` capture observed physical state and runtime/toolchain provenance. They are append-oriented records used to prove what was actually inspected or executed.
+
+`certification_bindings` pins certification to validation, artifact hashes, workspace revision, environment snapshot and validator/test-suite versions. A later load-bearing mutation creates a superseding/invalidation record rather than rewriting historical certification.
+
+Safe points do not require another table: `workspace_checkpoints.kind = SAFE_POINT` is the canonical representation.
