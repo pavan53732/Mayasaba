@@ -187,7 +187,7 @@ fn certification_and_environment_records_reject_invalid_vocabularies() {
         task_id: None, validation_id: "missing_validation".to_string(), workspace_revision_id: None,
         environment_snapshot_id: Some("env_1".to_string()),
         artifact_hashes_json: "[]".to_string(), validator_version: "validator-1".to_string(),
-        test_suite_version: None, status: "ACTIVE".to_string(), reason: None, created_at: "1".to_string()
+        test_suite_version: None, status: "ASSERTED".to_string(), supersedes_binding_id: None, reason: None, created_at: "1".to_string()
     }).is_err(), "certification without a validation run must fail closed");
 }
 
