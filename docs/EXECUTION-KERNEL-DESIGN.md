@@ -58,6 +58,29 @@ Execution evidence contains command metadata, result, exit status, timestamps, o
 ## Recovery
 After controller restart, running executions are reconciled against actual OS process state before they can be resumed, canceled or marked failed.
 
+### Implemented durable ordering
+
+The current runtime enforces this sequence for a material command:
+
+1. Persist execution as APPROVED.
+2. Persist APPROVED → STARTING.
+3. Re-check the TaskAttempt fence immediately before spawn when the execution is attempt-bound.
+4. Apply inherited-environment scrub keys, then explicit adapter-provided environment.
+5. Spawn the local process and persist its PID as an EXPECTED process observation.
+6. Persist STARTING → RUNNING.
+7. Drain stdout/stderr concurrently into bounded buffers; truncation is explicit.
+8. On exit or timeout, persist a physical process observation and transition to EXITED or TIMEOUT.
+
+A failure to persist after the OS side effect triggers an owned-tree termination attempt rather than silently continuing.
+A launch failure before a process exists leaves STARTING for recovery; it is not mislabeled as CRASHED.
+
+### Current Windows termination boundary
+
+Windows cancellation currently uses the fully-qualified SystemRoot\\System32\\taskkill.exe with /PID /T /F. This is a
+recovery-oriented process-tree termination path, not a kernel-level Job Object ownership guarantee. The remaining
+hardening requirement is atomic process-tree ownership so descendants cannot escape between spawn and supervision.
+Until that exists, unreconciled survivors remain a blocker and may produce UNKNOWN recovery state.
+
 
 ## Reliability refinements
 
