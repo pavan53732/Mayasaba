@@ -334,6 +334,7 @@ CREATE TABLE IF NOT EXISTS admissions (
   task_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   lease_id TEXT,
+  attempt_id TEXT,
   agent_id TEXT,
   session_id TEXT,
   kind TEXT NOT NULL,
