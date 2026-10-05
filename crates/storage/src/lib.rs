@@ -3899,7 +3899,7 @@ impl Storage {
             [new.lease_id.as_str()],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (lease_task,lease_project,_lease_agent,_lease_session,lease_workspace,lease_version) =
+        let (lease_task,lease_project,_lease_agent,_lease_session,_lease_workspace,lease_version) =
             match lease { Some(v) => v, None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))) };
         if lease_version != new.lease_version {
             return Err(StorageError::StaleFence {
@@ -3909,7 +3909,7 @@ impl Storage {
                 presented: new.lease_version,
             });
         }
-        if lease_task != new.task_id || lease_project != new.project_id || lease_workspace != new.resource_key && new.resource_type == "WORKSPACE" {
+        if lease_task != new.task_id || lease_project != new.project_id {
             return Err(StorageError::Malformed {
                 column: "resource_reservations".to_string(),
                 detail: format!("reservation {} does not match the authoritative task/project/lease binding", new.reservation_id),
