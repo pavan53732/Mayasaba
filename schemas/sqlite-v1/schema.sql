@@ -686,7 +686,8 @@ CREATE TABLE IF NOT EXISTS certification_bindings (
   FOREIGN KEY(task_id) REFERENCES tasks(task_id),
   FOREIGN KEY(validation_id) REFERENCES validation_runs(validation_id),
   FOREIGN KEY(workspace_revision_id) REFERENCES workspace_revisions(revision_id),
-  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id)
+  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id),
+  FOREIGN KEY(supersedes_binding_id) REFERENCES certification_bindings(certification_binding_id)
 );
 CREATE TABLE IF NOT EXISTS evidence_links (
   evidence_id TEXT NOT NULL,
