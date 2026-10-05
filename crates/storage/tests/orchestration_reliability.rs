@@ -553,3 +553,70 @@ fn lease_cannot_bypass_workspace_admission_or_task_scope() {
     let widened = NewTaskLease { allowed_paths_json:r#"[".."]"#.into(), ..base };
     assert!(storage.lease_task(&widened).is_err(), "caller cannot widen durable task scope");
 }
+
+
+#[test]
+fn attempt_creation_enforces_contiguous_max_attempts() {
+    use mayasaba_storage::NewTaskAttempt;
+    let storage = project_storage();
+    let base = NewTaskAttempt {
+        attempt_id:"att_budget_1".into(),
+        task_id:"task_1".into(),
+        project_id:"prj_reliability".into(),
+        attempt_no:1,
+        lease_id:"lease_1".into(),
+        agent_id:"agent_1".into(),
+        session_id:"sess_1".into(),
+        workspace_id:"ws_1".into(),
+        fence_token:7,
+        project_epoch:0,
+        context_snapshot_id:"ctx_1".into(),
+        state:"STARTED".into(),
+        checkpoint_id:None,
+        failure_id:None,
+        started_at:Some("2".into()),
+        heartbeat_at:Some("2".into()),
+        ended_at:None,
+        created_at:"2".into(),
+    };
+    storage.insert_task_attempt(&base).expect("attempt 1");
+
+    let second = NewTaskAttempt { attempt_id:"att_budget_2".into(), attempt_no:2, created_at:"3".into(), ..base.clone() };
+    storage.insert_task_attempt(&second).expect("attempt 2");
+
+    let skipped = NewTaskAttempt { attempt_id:"att_budget_4".into(), attempt_no:4, created_at:"4".into(), ..base.clone() };
+    assert!(storage.insert_task_attempt(&skipped).is_err(), "attempt numbers cannot skip a retry");
+    
+    let third = NewTaskAttempt { attempt_id:"att_budget_3".into(), attempt_no:3, created_at:"5".into(), ..base };
+    storage.insert_task_attempt(&third).expect("attempt 3");
+    
+    let exhausted = NewTaskAttempt {
+        attempt_id:"att_budget_4b".into(),
+        attempt_no:4,
+        created_at:"6".into(),
+        ..second
+    };
+    assert!(storage.insert_task_attempt(&exhausted).is_err(), "max_attempts=3 must refuse attempt 4");
+}
+
+#[test]
+fn new_resource_reservations_cannot_start_terminal() {
+    use mayasaba_storage::NewResourceReservation;
+    let storage = project_storage();
+    assert!(storage.insert_resource_reservation(&NewResourceReservation {
+        reservation_id:"res_terminal".into(),
+        project_id:"prj_reliability".into(),
+        task_id:"task_1".into(),
+        lease_id:"lease_1".into(),
+        lease_version:7,
+        resource_type:"PORT".into(),
+        resource_key:"4000".into(),
+        mode:"EXCLUSIVE".into(),
+        quantity:1,
+        state:"RELEASED".into(),
+        issued_at:"2".into(),
+        expires_at:"9".into(),
+        released_at:Some("3".into()),
+        created_at:"2".into(),
+    }).is_err(), "new resource admission must always enter HELD");
+}
