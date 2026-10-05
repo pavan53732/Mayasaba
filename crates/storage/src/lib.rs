@@ -6015,6 +6015,79 @@ impl Storage {
         Ok(())
     }
 
+    /// Atomically admit one PROCESS_SLOT child under the task's durable max_parallel_children budget.
+    ///
+    /// Child-slot identity is machine-local and lease-bound. The scheduler cannot exceed the task budget even
+    /// when multiple workers race because the count and reservation insert happen in one SQLite transaction.
+    pub fn reserve_child_slot(
+        &mut self,
+        reservation_id: &str,
+        task_id: &str,
+        lease_id: &str,
+        lease_version: i64,
+        issued_at: &str,
+        expires_at: &str,
+    ) -> Result<String> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let scope: Option<(String,i64)> = tx.query_row(
+            "SELECT policy_scope,max_parallel_children FROM task_scopes WHERE task_id=?1",
+            [task_id],
+            |row| Ok((row.get(0)?,row.get(1)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (_policy_scope,max_children) = scope.ok_or_else(|| StorageError::Malformed {
+            column:"task_scopes.max_parallel_children".to_string(),
+            detail:format!("task {task_id} has no durable child budget"),
+        })?;
+
+        let lease: Option<(String,String,i64)> = tx.query_row(
+            "SELECT project_id,agent_id,lease_version
+             FROM task_leases
+             WHERE lease_id=?1 AND task_id=?2 AND status IN ('ACTIVE','RENEWING')",
+            rusqlite::params![lease_id,task_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,_agent_id,current_version) = lease.ok_or_else(|| {
+            StorageError::NotFound(format!("active lease {lease_id} for task {task_id}"))
+        })?;
+        if current_version != lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id:format!("child_slot:{reservation_id}"),
+                attempt_fence:lease_version,
+                current_lease_version:current_version,
+                presented:lease_version,
+            });
+        }
+
+        let held: i64 = tx.query_row(
+            "SELECT COALESCE(SUM(quantity),0)
+             FROM resource_reservations
+             WHERE task_id=?1 AND resource_type='PROCESS_SLOT' AND state='HELD'",
+            [task_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if held >= max_children {
+            return Err(StorageError::Malformed {
+                column:"task_scopes.max_parallel_children".to_string(),
+                detail:format!("task {task_id} child budget exhausted: {held}/{max_children}"),
+            });
+        }
+
+        let slot = held + 1;
+        tx.execute(
+            "INSERT INTO resource_reservations (
+                reservation_id,project_id,task_id,lease_id,lease_version,resource_type,resource_key,mode,
+                quantity,state,issued_at,expires_at,released_at,created_at
+             ) VALUES (?1,?2,?3,?4,?5,'PROCESS_SLOT',?6,'EXCLUSIVE',1,'HELD',?7,?8,NULL,?7)",
+            rusqlite::params![
+                reservation_id,project_id,task_id,lease_id,lease_version,
+                format!("task:{task_id}:child:{slot}"),issued_at,expires_at
+            ],
+        ).map_err(StorageError::Db)?;
+
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(format!("task:{task_id}:child:{slot}"))
+    }
+
     pub fn insert_resource_reservation(&self, new: &NewResourceReservation) -> Result<()> {
         require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
