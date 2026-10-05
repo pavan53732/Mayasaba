@@ -3835,6 +3835,48 @@ pub struct NewAgentCapabilitySnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewAdmission {
+    pub admission_id: String,
+    pub project_id: String,
+    pub task_id: String,
+    pub workspace_id: String,
+    pub lease_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub session_id: Option<String>,
+    pub kind: String,
+    pub epoch: i64,
+    pub context_digest: Option<String>,
+    pub base_checkpoint_ref: Option<String>,
+    pub changed_paths_json: String,
+    pub checks_json: String,
+    pub verdict: String,
+    pub refusal_reasons_json: Option<String>,
+    pub supersedes_admission_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdmissionRecord {
+    pub admission_id: String,
+    pub project_id: String,
+    pub task_id: String,
+    pub workspace_id: String,
+    pub lease_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub session_id: Option<String>,
+    pub kind: String,
+    pub epoch: i64,
+    pub context_digest: Option<String>,
+    pub base_checkpoint_ref: Option<String>,
+    pub changed_paths_json: String,
+    pub checks_json: String,
+    pub verdict: String,
+    pub refusal_reasons_json: Option<String>,
+    pub supersedes_admission_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTaskLease {
     pub lease_id: String,
     pub task_id: String,
@@ -4047,6 +4089,10 @@ pub struct NewCertificationBinding {
 const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
 const EXECUTION_CLASSIFICATIONS: &[&str] = &["READ_ONLY","SAFE_WRITE","PROJECT_WRITE","EXECUTE","INSTALL","ADMIN_REQUIRED"];
 const LEASE_STATES: &[&str] = &["REQUESTED","ACTIVE","RENEWING","EXPIRED","RELEASED","REVOKED"];
+const ADMISSION_KINDS: &[&str] = &["WORKSPACE_ADMISSION","INTEGRATION_ADMISSION"];
+const ADMISSION_CHECK_STATUSES: &[&str] = &["PASS","FAIL","NOT_APPLICABLE"];
+const ADMISSION_VERDICTS: &[&str] = &["ADMITTED","REFUSED","BLOCKED"];
+
 const AGENT_SESSION_STATES: &[&str] = &["DISCOVERED","HANDSHAKING","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","READY","ACTIVE","PAUSED","DRAINING","STOPPED","LOST","RECONNECTING","SYNCING","FAILED"];
 const AGENT_HEALTH_STATES: &[&str] = &["HEALTHY","DEGRADED","UNHEALTHY","UNKNOWN"];
 const EXECUTION_STATES: &[&str] = &["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"];
@@ -4608,6 +4654,292 @@ impl Storage {
         Ok(())
     }
 
+    /// Persist one immutable workspace/integration admission decision.
+    ///
+    /// An admission is a decision record, not a mutable lifecycle. A later evaluation must supersede the prior
+    /// row, so the historical refusal or approval remains auditable.
+    pub fn insert_admission(&self, new: &NewAdmission) -> Result<AdmissionRecord> {
+        require_vocabulary("admissions.kind", &new.kind, ADMISSION_KINDS)?;
+        require_vocabulary("admissions.verdict", &new.verdict, ADMISSION_VERDICTS)?;
+        if new.epoch < 0 || new.created_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "admissions".to_string(),
+                detail: "epoch must be non-negative and created_at must be non-empty".to_string(),
+            });
+        }
+
+        let changed_paths: serde_json::Value =
+            serde_json::from_str(&new.changed_paths_json).map_err(|e| StorageError::Malformed {
+                column: "admissions.changed_paths_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
+        if !changed_paths.is_array() {
+            return Err(StorageError::Malformed {
+                column: "admissions.changed_paths_json".to_string(),
+                detail: "must be a JSON array".to_string(),
+            });
+        }
+
+        let checks: serde_json::Value =
+            serde_json::from_str(&new.checks_json).map_err(|e| StorageError::Malformed {
+                column: "admissions.checks_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
+        let checks_array = checks.as_array().ok_or_else(|| StorageError::Malformed {
+            column: "admissions.checks_json".to_string(),
+            detail: "must be a JSON array".to_string(),
+        })?;
+        if checks_array.is_empty() {
+            return Err(StorageError::Malformed {
+                column: "admissions.checks_json".to_string(),
+                detail: "at least one admission check is required".to_string(),
+            });
+        }
+
+        let allowed_check_ids = [
+            "REPOSITORY_IDENTITY","BASELINE_CLEAN","WORKTREE_ASSIGNED","PROTECTED_PATHS_DETERMINED",
+            "LEASE_BOUND","LEASE_OWNERSHIP","CONTEXT_FRESH","WORKSPACE_OWNERSHIP","BASE_CHECKPOINT_VALID",
+            "TESTS_EVIDENCE_PRESENT","PROTECTED_PATH_CLEAN","DEPENDENCY_CONFLICT_CLEAR",
+        ];
+        for check in checks_array {
+            let object = check.as_object().ok_or_else(|| StorageError::Malformed {
+                column: "admissions.checks_json".to_string(),
+                detail: "each check must be an object".to_string(),
+            })?;
+            let id = object.get("check_id").and_then(serde_json::Value::as_str).ok_or_else(|| {
+                StorageError::Malformed {
+                    column: "admissions.checks_json".to_string(),
+                    detail: "every check requires check_id".to_string(),
+                }
+            })?;
+            if !allowed_check_ids.contains(&id) {
+                return Err(StorageError::Malformed {
+                    column: "admissions.checks_json".to_string(),
+                    detail: format!("unknown check_id {id}"),
+                });
+            }
+            let status = object.get("status").and_then(serde_json::Value::as_str).ok_or_else(|| {
+                StorageError::Malformed {
+                    column: "admissions.checks_json".to_string(),
+                    detail: format!("check {id} requires status"),
+                }
+            })?;
+            if !ADMISSION_CHECK_STATUSES.contains(&status) {
+                return Err(StorageError::Malformed {
+                    column: "admissions.checks_json".to_string(),
+                    detail: format!("unknown check status {status}"),
+                });
+            }
+        }
+
+        let has_fail = checks_array.iter().any(|check|
+            check.get("status").and_then(serde_json::Value::as_str) == Some("FAIL")
+        );
+        if new.verdict == "ADMITTED" && has_fail {
+            return Err(StorageError::Malformed {
+                column: "admissions.verdict".to_string(),
+                detail: "ADMITTED cannot coexist with a FAIL check".to_string(),
+            });
+        }
+
+        if new.verdict == "REFUSED" {
+            let reasons = new.refusal_reasons_json.as_deref().ok_or_else(|| StorageError::Malformed {
+                column: "admissions.refusal_reasons_json".to_string(),
+                detail: "REFUSED admission requires at least one refusal reason".to_string(),
+            })?;
+            let reasons_value: serde_json::Value = serde_json::from_str(reasons).map_err(|e| StorageError::Malformed {
+                column: "admissions.refusal_reasons_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
+            if reasons_value.as_array().is_none_or(Vec::is_empty) {
+                return Err(StorageError::Malformed {
+                    column: "admissions.refusal_reasons_json".to_string(),
+                    detail: "REFUSED admission requires a non-empty JSON array".to_string(),
+                });
+            }
+        }
+
+        let project_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM projects WHERE project_id=?1",
+            [new.project_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if project_exists != 1 {
+            return Err(StorageError::NotFound(format!("project {}", new.project_id)));
+        }
+
+        let task_match: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2 AND workspace_id=?3",
+            rusqlite::params![new.task_id,new.project_id,new.workspace_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if task_match != 1 {
+            return Err(StorageError::Malformed {
+                column: "admissions.task_id".to_string(),
+                detail: "task/project/workspace scope does not match".to_string(),
+            });
+        }
+
+        let workspace_project: Option<String> = self.conn.query_row(
+            "SELECT project_id FROM workspaces WHERE workspace_id=?1",
+            [new.workspace_id.as_str()],
+            |row| row.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        if workspace_project.as_deref() != Some(new.project_id.as_str()) {
+            return Err(StorageError::Malformed {
+                column: "admissions.workspace_id".to_string(),
+                detail: "workspace does not belong to admission project".to_string(),
+            });
+        }
+
+        if let Some(parent_id) = new.supersedes_admission_id.as_deref() {
+            let parent: Option<(String,String,String,String)> = self.conn.query_row(
+                "SELECT project_id,task_id,workspace_id,kind FROM admissions WHERE admission_id=?1",
+                [parent_id],
+                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+            ).optional().map_err(StorageError::Db)?;
+            match parent {
+                None => return Err(StorageError::NotFound(format!("admission {parent_id}"))),
+                Some((project,task,workspace,kind))
+                    if project != new.project_id || task != new.task_id || workspace != new.workspace_id || kind != new.kind =>
+                {
+                    return Err(StorageError::Malformed {
+                        column: "admissions.supersedes_admission_id".to_string(),
+                        detail: "superseded admission does not match project/task/workspace/kind".to_string(),
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+
+        self.conn.execute(
+            "INSERT INTO admissions (
+                admission_id,project_id,task_id,workspace_id,lease_id,agent_id,session_id,kind,epoch,
+                context_digest,base_checkpoint_ref,changed_paths_json,checks_json,verdict,refusal_reasons_json,
+                supersedes_admission_id,created_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+            rusqlite::params![
+                new.admission_id,new.project_id,new.task_id,new.workspace_id,new.lease_id,new.agent_id,new.session_id,
+                new.kind,new.epoch,new.context_digest,new.base_checkpoint_ref,new.changed_paths_json,new.checks_json,
+                new.verdict,new.refusal_reasons_json,new.supersedes_admission_id,new.created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        self.append_event(&NewEvent {
+            event_id: format!("evt_{}_ADMISSION_RECORDED", new.admission_id),
+            project_id: Some(new.project_id.clone()),
+            session_id: new.session_id.clone(),
+            event_type: "ADMISSION_RECORDED".to_string(),
+            correlation_id: Some(new.task_id.clone()),
+            causation_id: new.supersedes_admission_id.clone(),
+            epoch: Some(new.epoch),
+            payload_json: serde_json::json!({
+                "admission_id":new.admission_id,
+                "task_id":new.task_id,
+                "workspace_id":new.workspace_id,
+                "kind":new.kind,
+                "verdict":new.verdict
+            }).to_string(),
+            created_at:new.created_at.clone(),
+        })?;
+        self.get_latest_admission(&new.project_id,&new.task_id,&new.kind)?
+            .ok_or_else(|| StorageError::NotFound(format!("admission {}",new.admission_id)))
+    }
+
+    pub fn get_latest_admission(
+        &self,
+        project_id: &str,
+        task_id: &str,
+        kind: &str,
+    ) -> Result<Option<AdmissionRecord>> {
+        self.conn.query_row(
+            "SELECT admission_id,project_id,task_id,workspace_id,lease_id,agent_id,session_id,kind,epoch,
+                    context_digest,base_checkpoint_ref,changed_paths_json,checks_json,verdict,refusal_reasons_json,
+                    supersedes_admission_id,created_at
+             FROM admissions a
+             WHERE a.project_id=?1 AND a.task_id=?2 AND a.kind=?3
+               AND NOT EXISTS (
+                   SELECT 1 FROM admissions newer WHERE newer.supersedes_admission_id=a.admission_id
+               )
+             ORDER BY a.created_at DESC, a.admission_id DESC LIMIT 1",
+            rusqlite::params![project_id,task_id,kind],
+            |row| Ok(AdmissionRecord {
+                admission_id:row.get(0)?, project_id:row.get(1)?, task_id:row.get(2)?,
+                workspace_id:row.get(3)?, lease_id:row.get(4)?, agent_id:row.get(5)?,
+                session_id:row.get(6)?, kind:row.get(7)?, epoch:row.get(8)?,
+                context_digest:row.get(9)?, base_checkpoint_ref:row.get(10)?,
+                changed_paths_json:row.get(11)?, checks_json:row.get(12)?, verdict:row.get(13)?,
+                refusal_reasons_json:row.get(14)?, supersedes_admission_id:row.get(15)?, created_at:row.get(16)?
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    pub fn checkpoint_workspace(
+        &self,
+        checkpoint_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        task_id: Option<&str>,
+        agent_id: Option<&str>,
+        session_id: Option<&str>,
+        epoch: i64,
+        kind: &str,
+        repository_head: Option<&str>,
+        diff_hash: Option<&str>,
+        created_at: &str,
+    ) -> Result<()> {
+        if epoch < 0 || created_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "workspace_checkpoints".to_string(),
+                detail: "epoch must be non-negative and created_at must be non-empty".to_string(),
+            });
+        }
+        let exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
+            rusqlite::params![workspace_id,project_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if exists != 1 {
+            return Err(StorageError::Malformed {
+                column: "workspace_checkpoints.workspace_id".to_string(),
+                detail: "workspace does not belong to project".to_string(),
+            });
+        }
+        if let Some(task_id) = task_id {
+            let ok: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2 AND workspace_id=?3",
+                rusqlite::params![task_id,project_id,workspace_id],
+                |row| row.get(0),
+            ).map_err(StorageError::Db)?;
+            if ok != 1 {
+                return Err(StorageError::Malformed {
+                    column: "workspace_checkpoints.task_id".to_string(),
+                    detail: "task is not bound to workspace/project".to_string(),
+                });
+            }
+        }
+        const CHECKPOINT_KINDS: &[&str] = &["SAFE_POINT","BASELINE","INTEGRATION","ROLLBACK"];
+        if !CHECKPOINT_KINDS.contains(&kind) {
+            return Err(StorageError::Malformed {
+                column: "workspace_checkpoints.kind".to_string(),
+                detail: format!("unknown checkpoint kind {kind}"),
+            });
+        }
+        if let Some(head) = repository_head {
+            if head.trim().is_empty() { return Err(StorageError::Malformed {
+                column:"workspace_checkpoints.repository_head".to_string(), detail:"head cannot be empty".to_string()
+            });}
+        }
+        self.conn.execute(
+            "INSERT INTO workspace_checkpoints (
+                checkpoint_id,workspace_id,project_id,task_id,agent_id,session_id,epoch,kind,repository_head,diff_hash,created_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            rusqlite::params![
+                checkpoint_id,workspace_id,project_id,task_id,agent_id,session_id,epoch,kind,repository_head,diff_hash,created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     pub fn lease_task(&mut self, new: &NewTaskLease) -> Result<TaskLeaseRecord> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let task: Option<(String,Option<String>,i64,String)> = tx.query_row(
@@ -4676,6 +5008,57 @@ impl Storage {
             return Err(StorageError::Malformed {
                 column: "task_leases.context_snapshot_id".to_string(),
                 detail: "context snapshot is missing, stale for the task epoch, invalidated, or its digest does not match the lease".to_string(),
+            });
+        }
+
+        // A lease is never issued unless the latest workspace admission explicitly admitted this exact task/workspace
+        // at the current epoch/context. This closes the path where a caller could bypass WorkspaceService's gate.
+        let admitted: Option<(String,i64,Option<String>)> = tx.query_row(
+            "SELECT admission_id, epoch, context_digest
+             FROM admissions a
+             WHERE a.project_id=?1 AND a.task_id=?2 AND a.workspace_id=?3
+               AND a.kind='WORKSPACE_ADMISSION' AND a.verdict='ADMITTED'
+               AND NOT EXISTS (
+                   SELECT 1 FROM admissions newer WHERE newer.supersedes_admission_id=a.admission_id
+               )
+             ORDER BY a.created_at DESC, a.admission_id DESC LIMIT 1",
+            rusqlite::params![new.project_id,new.task_id,new.workspace_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (admission_id, admission_epoch, admission_digest) = admitted.ok_or_else(|| {
+            StorageError::Malformed {
+                column: "admissions".to_string(),
+                detail: format!("task {} has no current ADMITTED WORKSPACE_ADMISSION", new.task_id),
+            }
+        })?;
+        if admission_epoch != new.project_epoch || admission_digest.as_deref() != Some(new.state_digest.as_str()) {
+            return Err(StorageError::Malformed {
+                column: "admissions".to_string(),
+                detail: format!("workspace admission {admission_id} is stale for the requested task epoch/context"),
+            });
+        }
+
+        // Task scope is the durable source of allowed paths, capabilities, validation requirements and policy scope.
+        // The lease request must equal that scope exactly; it cannot narrow-or-widen policy by caller choice.
+        let scope: Option<(String,String,String,String)> = tx.query_row(
+            "SELECT allowed_paths_json,required_capabilities_json,validation_requirements_json,policy_scope
+             FROM task_scopes WHERE task_id=?1",
+            [new.task_id.as_str()],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (scope_paths,scope_caps,_scope_validation,scope_policy) = scope.ok_or_else(|| {
+            StorageError::Malformed {
+                column: "task_scopes".to_string(),
+                detail: format!("task {} has no durable task scope", new.task_id),
+            }
+        })?;
+        if scope_paths != new.allowed_paths_json
+            || scope_caps != new.required_capabilities_json
+            || scope_policy != new.policy_scope
+        {
+            return Err(StorageError::Malformed {
+                column: "task_scopes".to_string(),
+                detail: format!("lease scope for task {} differs from authoritative task scope", new.task_id),
             });
         }
 
