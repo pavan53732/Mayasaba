@@ -74,3 +74,33 @@ fn context_lifecycle_is_event_atomic_and_terminal_marks_block_freshness() {
     service.invalidate("ctx_3","5").expect("invalidate");
     assert!(!service.is_fresh("ctx_3","prj_ctx",0,&fresh.state_digest).expect("invalidated is stale"));
 }
+
+#[test]
+fn material_epoch_advance_invalidates_older_contexts_transactionally() {
+    let storage = project();
+    let mut service = ContextService::new(storage);
+    let snapshot = service.create_snapshot(&NewContextSnapshot {
+        context_snapshot_id:"ctx_epoch".into(),
+        project_id:"prj_ctx".into(),
+        epoch:0,
+        scope:"PROJECT".into(),
+        pack_json:r#"{"objective":"before"}"#.into(),
+        created_at:"2".into(),
+    }).expect("snapshot");
+
+    let advanced = service.advance_epoch("prj_ctx","material requirement change","3")
+        .expect("epoch advance");
+    assert_eq!(advanced.previous_epoch,0);
+    assert_eq!(advanced.new_epoch,1);
+    assert_eq!(advanced.invalidated_contexts,1);
+    assert!(!service.is_fresh("ctx_epoch","prj_ctx",0,&snapshot.state_digest).expect("stale"));
+
+    let current: i64 = service.storage().conn().query_row(
+        "SELECT current_epoch FROM projects WHERE project_id='prj_ctx'",[],|r| r.get(0)
+    ).expect("epoch row");
+    assert_eq!(current,1);
+    let recorded: i64 = service.storage().conn().query_row(
+        "SELECT epoch FROM project_epochs WHERE project_id='prj_ctx' AND epoch=1",[],|r| r.get(0)
+    ).expect("epoch history");
+    assert_eq!(recorded,1);
+}
