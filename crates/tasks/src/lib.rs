@@ -4,10 +4,52 @@
 //! resource admission and recovery operations without creating a second authority for project state.
 
 use mayasaba_storage::{
-    NewResourceReservation, NewTaskAttempt, Result, Storage,
+    NewResourceReservation, NewTaskAttempt, NewTaskLease, Result, Storage,
 };
 
 pub const CRATE_NAME: &str = "mayasaba-tasks";
+
+/// Admit one task lease and atomically advance REQUESTED -> ACTIVE.
+pub fn lease_task(storage: &mut Storage, lease: &NewTaskLease) -> Result<mayasaba_storage::TaskLeaseRecord> {
+    storage.lease_task(lease)
+}
+
+/// Renew a lease using the current fence version; storage increments the version atomically.
+pub fn renew_lease(
+    storage: &mut Storage,
+    lease_id: &str,
+    expected_version: i64,
+    heartbeat_at: &str,
+    expires_at: &str,
+) -> Result<mayasaba_storage::TaskLeaseRecord> {
+    storage.renew_lease(lease_id, expected_version, heartbeat_at, expires_at)
+}
+
+/// Release a live lease with an optimistic fencing check.
+pub fn release_lease(
+    storage: &mut Storage,
+    lease_id: &str,
+    expected_version: i64,
+    now: &str,
+) -> Result<()> {
+    storage.release_lease(lease_id, expected_version, now)
+}
+
+/// Revoke a live lease with an optimistic fencing check.
+pub fn revoke_lease(
+    storage: &mut Storage,
+    lease_id: &str,
+    expected_version: i64,
+    now: &str,
+) -> Result<()> {
+    storage.revoke_lease(lease_id, expected_version, now)
+}
+
+/// Expire every live lease whose durable deadline has passed.
+pub fn expire_leases(storage: &mut Storage, now: &str) -> Result<u64> {
+    storage.expire_due_leases(now)
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AttemptAuthorization {
