@@ -489,3 +489,67 @@ fn recovery_ready_transition_is_blocked_by_unresolved_attempt() {
     ).expect("unknown attempt");
     assert!(storage.recover_expired_task("task_1","12").is_err(), "unknown physical outcome blocks readiness");
 }
+
+
+#[test]
+fn admission_is_fail_closed_and_re_evaluation_requires_supersession() {
+    use mayasaba_storage::NewAdmission;
+    let mut storage = project_storage();
+    let bad = NewAdmission {
+        admission_id:"admit_bad".into(), project_id:"prj_reliability".into(), task_id:"task_1".into(),
+        workspace_id:"ws_1".into(), lease_id:None, agent_id:None, session_id:None,
+        kind:"WORKSPACE_ADMISSION".into(), epoch:0,
+        context_digest:Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+        base_checkpoint_ref:None, changed_paths_json:"[]".into(),
+        checks_json:r#"[{"check_id":"BASELINE_CLEAN","status":"FAIL"}]"#.into(),
+        verdict:"ADMITTED".into(), refusal_reasons_json:None, supersedes_admission_id:None, created_at:"2".into()
+    };
+    assert!(storage.insert_admission(&bad).is_err(), "ADMITTED cannot contain FAIL");
+
+    let current = storage.get_latest_admission("prj_reliability","task_1","WORKSPACE_ADMISSION")
+        .expect("read").expect("seed admission");
+    let missing_parent = NewAdmission {
+        admission_id:"admit_parallel".into(), project_id:"prj_reliability".into(), task_id:"task_1".into(),
+        workspace_id:"ws_1".into(), lease_id:None, agent_id:None, session_id:None,
+        kind:"WORKSPACE_ADMISSION".into(), epoch:0,
+        context_digest:Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+        base_checkpoint_ref:None, changed_paths_json:"[]".into(),
+        checks_json:r#"[{"check_id":"BASELINE_CLEAN","status":"PASS"}]"#.into(),
+        verdict:"ADMITTED".into(), refusal_reasons_json:None, supersedes_admission_id:None, created_at:"3".into()
+    };
+    assert!(storage.insert_admission(&missing_parent).is_err(), "second effective admission requires supersession");
+
+    let next = NewAdmission { admission_id:"admit_2".into(), supersedes_admission_id:Some(current.admission_id.clone()), ..missing_parent };
+    storage.insert_admission(&next).expect("superseding admission");
+    assert_eq!(
+        storage.get_latest_admission("prj_reliability","task_1","WORKSPACE_ADMISSION").expect("read").unwrap().admission_id,
+        "admit_2"
+    );
+}
+
+#[test]
+fn lease_cannot_bypass_workspace_admission_or_task_scope() {
+    use mayasaba_storage::NewTaskLease;
+    let mut storage = project_storage();
+    let scope_ok = storage.conn().query_row(
+        "SELECT COUNT(*) FROM task_scopes WHERE task_id='task_1'", [], |r| r.get::<_,i64>(0)
+    ).expect("scope");
+    assert_eq!(scope_ok, 1);
+
+    storage.conn().execute("UPDATE admissions SET verdict='REFUSED', refusal_reasons_json='[\"manual block\"]' WHERE admission_id='admit_1'", [])
+        .expect("refuse admission");
+    let base = NewTaskLease {
+        lease_id:"lease_bypass".into(), task_id:"task_1".into(), project_id:"prj_reliability".into(),
+        agent_id:"agent_1".into(), session_id:"sess_1".into(), workspace_id:"ws_1".into(),
+        project_epoch:0, context_snapshot_id:"ctx_1".into(),
+        state_digest:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        allowed_paths_json:"[]".into(), required_capabilities_json:"[]".into(), policy_scope:"PROJECT_WRITE".into(),
+        issued_at:"10".into(), heartbeat_at:"10".into(), expires_at:"20".into(),
+    };
+    assert!(storage.lease_task(&base).is_err(), "refused workspace admission blocks lease");
+
+    storage.conn().execute("UPDATE admissions SET verdict='ADMITTED', refusal_reasons_json=NULL WHERE admission_id='admit_1'", [])
+        .expect("restore seed");
+    let widened = NewTaskLease { allowed_paths_json:r#"[".."]"#.into(), ..base };
+    assert!(storage.lease_task(&widened).is_err(), "caller cannot widen durable task scope");
+}
