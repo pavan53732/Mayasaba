@@ -59,22 +59,22 @@ the gate, because they are inline SQL where the from-state is implied by a `WHER
 ## Shell integration coverage (M2.5)
 
 Requirements for wiring the bus into the shell, mapped to the decisions that govern them and to the evidence
-that will exist once each tranche lands. **No row in this table is validated yet**: the decisions are recorded
-and the code is not written, so every evidence cell names work still to be done rather than work observed.
+that exists once each tranche lands. **Tranche 1 (`cd27580`) and Tranche 2 are validated**; the Tranche 3 and 4
+rows are still DECIDED, so their evidence cells name work to be done rather than work observed.
 
 | Requirement | Decision | Evidence | State |
 | --- | --- | --- | --- |
-| A reported ordering gap is visible to the operator | DEC-069 | Communication-health response carries `SEQUENCE_GAP` entries derived from `messages` | DECIDED |
-| A gap is not repaired by discarding the arrival | DEC-069 | Health test over a stream with a hole reports the gap and the arrival remains durable | DECIDED |
-| Resynchronisation is not claimed | DEC-069 | `request_event_resync` remains declared with no handler; the gate's implemented count does not include it | DECIDED |
-| Capacity refusal is transient to the caller | DEC-070 | Retry helper returns the last error at its bound; the registry marks the code `BACKOFF` | DECIDED |
+| A reported ordering gap is visible to the operator | DEC-069 | `open_sequence_gaps` derives holes from `messages`; a test asserts `SEQUENCE_GAP` with session, channel, expected and found | VALIDATED (T2) |
+| A gap is not repaired by discarding the arrival | DEC-069 | The derivation only reads `messages`; the same test asserts `total_changes` is unchanged across both diagnostics, so no arrival was removed | VALIDATED (T2) |
+| Resynchronisation is not claimed | DEC-069 | `request_event_resync` remains declared with no handler; the gate reports 6 of 59 implemented and it is not one of them | VALIDATED (T2) |
+| Capacity refusal is transient to the caller | DEC-070 | `retry_on_capacity` stops at its bound and returns the last refusal; a test asserts exactly `max_attempts` calls | VALIDATED (T1) |
 | Capacity is not rendered as failure | DEC-070 | UI renders queued/busy; the code is never mapped to a non-backoff registry code | DECIDED |
 | Replay cannot bypass authorization | DEC-071 | Material-action replay is refused with a registered code; a mutation proves dropping the refusal fails | DECIDED |
 | A replayed message is not presented as context-fresh | DEC-071 | Response carries the original snapshot and digest with `context_refreshed: false` | DECIDED |
-| SQLite work does not block the IPC thread | DEC-072 | New handlers are `async`; the vendored macro source shows a sync command runs inline on the delivery thread | DECIDED |
+| SQLite work does not block the IPC thread | DEC-072 | Both new handlers are `async` and reach the bus only through `on_bus`, which uses `spawn_blocking`; the vendored macro source shows a sync command runs inline on the delivery thread | VALIDATED (T2) |
 | Two connections to one file are safe | DEC-072 | The M2 concurrent-writer test observes two writers landing without loss under the rollback journal and a 5000 ms busy timeout | OBSERVED (M2) |
-| No message is dead-lettered by a dispatcher that cannot deliver | DEC-073 | A test constructs the shell state and asserts nothing is dead-lettered | DECIDED |
-| Clock and identity are real outside the bus | DEC-074 | Format-validity and uniqueness tests; `crates/bus` gains no I/O | DECIDED |
+| No message is dead-lettered by a dispatcher that cannot deliver | DEC-073 | A test constructs the shell state and asserts nothing is dead-lettered, and a structural guard fails if a dispatch call site is added to `bus_shell.rs` or `main.rs` | VALIDATED (T1) |
+| Clock and identity are real outside the bus | DEC-074 | `CoreClock` and `CoreIdSource` in `crates/core`; tests assert the fixed-width UTC shape, the v4 version/variant nibbles, and uniqueness over 20 000 draws and across 8 threads. `crates/bus` gains no I/O | VALIDATED (T1) |
 
 Not addressed by this milestone: a real transport, adapters, `PolicyService`, `ContextService`,
 `request_event_resync`, and an enqueue command. Each is out of scope by decision rather than by omission, and

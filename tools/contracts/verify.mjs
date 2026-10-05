@@ -1239,7 +1239,15 @@ const mappingSites=[
   ["crates/workspace/src/validation.rs",/pub\s+fn\s+code\s*\([^)]*\)\s*->\s*&'static\s+str\s*\{/],
   ["crates/bus/src/error.rs",/pub\s+fn\s+code\s*\(\s*&self\s*\)\s*->\s*&'static\s+str\s*\{/],
   ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<ProjectValidationError>\s+for\s+CommandError\s*\{/],
+  ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<(?:[A-Za-z_][A-Za-z0-9_]*::)*BusError>\s+for\s+CommandError\s*\{/],
 ];
+// A delegating mapping produces the codes of the mapping it delegates to, so its body holds no literals for the
+// scan above to read. That makes the presence check alone weak: replacing the call with a hardcoded string would
+// keep the site locatable while producing a code the gate never read. Each entry here names the call its site
+// must still make, keyed by the site's own regex source so the two cannot drift apart.
+const delegatingSites=new Map([
+  ["impl\\s+From<(?:[A-Za-z_][A-Za-z0-9_]*::)*BusError>\\s+for\\s+CommandError\\s*\\{","code()"],
+]);
 for(const [file,openRe] of mappingSites){
   const src=scannedText.get(file);
   if(src===undefined) fail(`${file} is one of the error-code mappings this check scans, but the file was not read.`);
@@ -1255,7 +1263,14 @@ for(const [file,openRe] of mappingSites){
     else if(src[i]==="}"&&--depth===0){ end=i; break; }
   }
   if(end<0) fail(`${file}: the error-code mapping's braces are unbalanced, so the codes it produces cannot be read.`);
-  for(const m of src.slice(open.index,end).matchAll(/=>\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
+  const body=src.slice(open.index,end);
+  const required=delegatingSites.get(openRe.source);
+  if(required!==undefined&&!body.includes(required)) fail(
+    `${file}: the ${openRe} mapping no longer calls ${required}, so it must be producing codes this check never reads.\n`+
+    `Either delegate to the mapping that owns those codes, or list them as literals so they are scanned. A mapping `+
+    `whose output the gate cannot read is unchecked, which is why this fails rather than warns.`
+  );
+  for(const m of body.matchAll(/=>\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
 }
 for(const [code,file] of emitted) if(!(code in errorCodes)) errorProblems.push(
   `${file} produces the error code "${code}", which schemas/error-v1/registry.json does not register`

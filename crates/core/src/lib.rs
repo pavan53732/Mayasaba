@@ -5,6 +5,7 @@
 //! service owns (AGENTS.md section 6).
 
 pub mod bus_runtime;
+pub mod diagnostics;
 pub mod project_service;
 
 pub use mayasaba_storage::{RecoveryIssue, RecoveryReport};

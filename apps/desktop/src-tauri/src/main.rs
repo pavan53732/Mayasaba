@@ -17,6 +17,7 @@ mod bus_shell;
 
 use std::sync::Mutex;
 
+use mayasaba_core::diagnostics::DiagnosticsService;
 use mayasaba_core::project_service::{
     CreateProjectRequest, ProjectService, ProjectValidationError,
 };
@@ -87,6 +88,21 @@ impl From<ProjectValidationError> for CommandError {
         CommandError {
             code,
             message: e.to_string(),
+        }
+    }
+}
+
+/// The bus's own error codes, reused rather than re-listed.
+///
+/// This delegates to `BusError::code()` instead of matching each variant. A second match here would be a second
+/// source of truth for the same fact, and the two could disagree - which is exactly the divergence DEC-055
+/// exists to prevent. The wire therefore carries the bus's registry key unchanged, and the gate already scans
+/// that mapping in `crates/bus/src/error.rs`.
+impl From<mayasaba_bus::BusError> for CommandError {
+    fn from(error: mayasaba_bus::BusError) -> Self {
+        CommandError {
+            code: error.code(),
+            message: error.to_string(),
         }
     }
 }
@@ -236,6 +252,138 @@ fn create_project(
     Ok(ProjectView::from(project))
 }
 
+/// One derived sequence gap, carrying the registry code in the value.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct OpenGapView {
+    code: String,
+    session_id: String,
+    channel: String,
+    expected: i64,
+    found: i64,
+}
+
+/// How many of a project's messages are unfinished, by state.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct DeliveryCountsView {
+    queued: i64,
+    retrying: i64,
+    expired: i64,
+    dead_lettered: i64,
+}
+
+/// The communication health of one project.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct CommunicationHealthView {
+    project_id: String,
+    backlog: i64,
+    enqueue_limit: i64,
+    counts: DeliveryCountsView,
+    open_gaps: Vec<OpenGapView>,
+    transport_status: String,
+}
+
+/// A consumer's durable position in a project's event stream.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct EventCursorView {
+    project_id: String,
+    consumer_id: String,
+    last_sequence: i64,
+    next_sequence: Option<i64>,
+    gap_detected: bool,
+    resync_from: Option<i64>,
+}
+
+/// A poisoned lock and a panicked blocking task are both "this service is unusable", which is the one code the
+/// registry has for that condition.
+fn service_unusable(detail: String) -> CommandError {
+    CommandError {
+        code: "SERVICE_POISONED",
+        message: detail,
+    }
+}
+
+/// Run bus work off the delivery thread.
+///
+/// A synchronous `#[tauri::command]` runs inline on the IPC delivery thread (DEC-072), and every bus query is
+/// SQLite work, so a handler that ran one inline would block that thread for the duration. The bus is reached
+/// only through this helper so no handler can quietly reintroduce the blocking call.
+async fn on_bus<T, F>(bus: bus_shell::SharedBus, work: F) -> Result<T, CommandError>
+where
+    T: Send + 'static,
+    F: FnOnce(&mut bus_shell::BusShell) -> Result<T, CommandError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = bus.lock().map_err(|_| {
+            service_unusable("the bus lock was poisoned by a prior panic".to_string())
+        })?;
+        work(&mut guard)
+    })
+    .await
+    .map_err(|error| service_unusable(format!("the bus task did not finish: {error}")))?
+}
+
+/// Read-only. Reports the durable communication state of one project and never mutates it.
+#[tauri::command(rename_all = "snake_case")]
+async fn get_communication_health(
+    bus: State<'_, bus_shell::SharedBus>,
+    project_id: String,
+) -> Result<CommunicationHealthView, CommandError> {
+    let bus = bus.inner().clone();
+    on_bus(bus, move |shell| {
+        let health = DiagnosticsService::communication_health(shell.bus(), &project_id)?;
+        Ok(CommunicationHealthView {
+            project_id: health.project_id,
+            backlog: health.backlog,
+            enqueue_limit: health.enqueue_limit,
+            counts: DeliveryCountsView {
+                queued: health.counts.queued,
+                retrying: health.counts.retrying,
+                expired: health.counts.expired,
+                dead_lettered: health.counts.dead_lettered,
+            },
+            open_gaps: health
+                .open_gaps
+                .into_iter()
+                .map(|gap| OpenGapView {
+                    code: gap.code.to_string(),
+                    session_id: gap.session_id,
+                    channel: gap.channel,
+                    expected: gap.expected,
+                    found: gap.found,
+                })
+                .collect(),
+            transport_status: health.transport_status.to_string(),
+        })
+    })
+    .await
+}
+
+/// Read-only. Reports a consumer's durable event position and never advances it.
+#[tauri::command(rename_all = "snake_case")]
+async fn get_event_cursor(
+    bus: State<'_, bus_shell::SharedBus>,
+    project_id: String,
+    consumer_id: String,
+) -> Result<EventCursorView, CommandError> {
+    let bus = bus.inner().clone();
+    on_bus(bus, move |shell| {
+        let cursor =
+            DiagnosticsService::event_cursor(shell.bus().storage(), &project_id, &consumer_id)?;
+        Ok(EventCursorView {
+            project_id: cursor.project_id,
+            consumer_id: cursor.consumer_id,
+            last_sequence: cursor.last_sequence,
+            next_sequence: cursor.next_sequence,
+            gap_detected: cursor.gap_detected,
+            resync_from: cursor.resync_from,
+        })
+    })
+    .await
+}
 fn main() {
     // The service owns its store and is registered as managed state. It is created eagerly so a failure to
     // open the durable store surfaces at startup rather than on the first command.
@@ -271,7 +419,9 @@ fn main() {
             create_project,
             list_projects,
             get_recovery_status,
-            validate_workspace
+            validate_workspace,
+            get_communication_health,
+            get_event_cursor
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
@@ -307,6 +457,8 @@ mod wire_shape_tests {
         "list_projects",
         "get_recovery_status",
         "validate_workspace",
+        "get_communication_health",
+        "get_event_cursor",
     ];
 
     /// The JSON Schema keywords this validator implements. A validated type that uses anything else is a test
@@ -592,6 +744,82 @@ mod wire_shape_tests {
         );
     }
 
+    #[test]
+    fn get_communication_health_response_conforms() {
+        conforms(
+            "get_communication_healthResponse",
+            &CommunicationHealthView {
+                project_id: "prj_a".to_string(),
+                backlog: 0,
+                enqueue_limit: 1024,
+                counts: DeliveryCountsView {
+                    queued: 0,
+                    retrying: 0,
+                    expired: 0,
+                    dead_lettered: 0,
+                },
+                open_gaps: vec![OpenGapView {
+                    code: "SEQUENCE_GAP".to_string(),
+                    session_id: "ses_a".to_string(),
+                    channel: "TASK".to_string(),
+                    expected: 2,
+                    found: 3,
+                }],
+                transport_status: "not_connected".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn get_communication_health_with_no_gaps_conforms() {
+        conforms(
+            "get_communication_healthResponse",
+            &CommunicationHealthView {
+                project_id: "prj_a".to_string(),
+                backlog: 7,
+                enqueue_limit: 1024,
+                counts: DeliveryCountsView {
+                    queued: 7,
+                    retrying: 1,
+                    expired: 2,
+                    dead_lettered: 3,
+                },
+                open_gaps: Vec::new(),
+                transport_status: "not_connected".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn get_event_cursor_response_conforms() {
+        // The absent-optional case, which is what a fresh consumer actually receives.
+        conforms(
+            "get_event_cursorResponse",
+            &EventCursorView {
+                project_id: "prj_a".to_string(),
+                consumer_id: "ui".to_string(),
+                last_sequence: 0,
+                next_sequence: None,
+                gap_detected: false,
+                resync_from: None,
+            },
+        );
+    }
+
+    #[test]
+    fn get_event_cursor_response_with_a_position_conforms() {
+        conforms(
+            "get_event_cursorResponse",
+            &EventCursorView {
+                project_id: "prj_a".to_string(),
+                consumer_id: "ui".to_string(),
+                last_sequence: 42,
+                next_sequence: Some(43),
+                gap_detected: true,
+                resync_from: Some(44),
+            },
+        );
+    }
     /// A handler registered in `generate_handler![...]` with no shape test is a wire surface nothing checks.
     #[test]
     fn every_registered_handler_is_covered() {

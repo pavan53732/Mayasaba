@@ -5,6 +5,33 @@
   "authority":"schemas/tauri-bridge-v1/payload-types.json",
   "rule":"Every type name referenced by payloads.json request_fields must resolve here. Types are declared as operations gain declared request fields, not speculatively: an operation that does not declare request_fields has no payload type yet, and inventing one would be a declaration nothing consumes. A type is also declared for an operation that is implemented end to end, because that is when the shape exists on the wire and can be checked against the declaration instead of asserted (DEC-056).",
   "types":{
+    "DeliveryCounts":{
+      "title":"How many of a project's messages are unfinished, by state",
+      "description":"Terminal and successful states are deliberately absent: this is a health view, and a count of everything would answer a different question. dead_lettered is counted from the dead_letters table, which is the durable dead-letter record.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["queued","retrying","expired","dead_lettered"],
+      "properties":{
+        "queued":{"type":"integer","minimum":0},
+        "retrying":{"type":"integer","minimum":0},
+        "expired":{"type":"integer","minimum":0},
+        "dead_lettered":{"type":"integer","minimum":0}
+      }
+    },
+    "OpenGap":{
+      "title":"A position missing between two observed positions in one message stream",
+      "description":"Derived from messages and never stored, because the positions are already durable there and a second record of the same fact is a second fact that can disagree. expected is the absent position; found is the observed position that revealed it, which is always present because the walk stops at the stream's highest position. code is the registry key SEQUENCE_GAP, carried in the value so the wire needs no second lookup (DEC-055).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["code","session_id","channel","expected","found"],
+      "properties":{
+        "code":{"type":"string","enum":["SEQUENCE_GAP"]},
+        "session_id":{"type":"string","minLength":1},
+        "channel":{"type":"string","minLength":1},
+        "expected":{"type":"integer","minimum":0},
+        "found":{"type":"integer","minimum":0}
+      }
+    },
     "ProjectBriefDraft":{
       "title":"The user's stated project intent, submitted at project creation",
       "type":"object",
@@ -108,6 +135,57 @@
         "issues":{"type":"array","items":{"$ref":"#/$defs/RecoveryIssue"}}
       }
     },
+    "get_communication_healthRequest":{
+      "title":"Read one project's durable communication health",
+      "description":"Read-only. Names the project whose communication state is reported.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1}
+      }
+    },
+    "get_communication_healthResponse":{
+      "title":"One project's durable communication health",
+      "description":"Every value is read or derived from the durable record. backlog and enqueue_limit are global rather than per-project, because the capacity bound the bus enforces is global (DEC-068); counts and open_gaps are scoped to the requested project. open_gaps is derived from messages and never stored, so it cannot disagree with the record it describes. transport_status is not_connected because no agent transport exists until M3, and reporting anything else would imply something was contacted (DEC-073).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","backlog","enqueue_limit","counts","open_gaps","transport_status"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "backlog":{"type":"integer","minimum":0,"description":"Outstanding dispatch work across all projects."},
+        "enqueue_limit":{"type":"integer","minimum":0,"description":"The bound backlog is measured against, read from the bus's own dispatch policy rather than copied."},
+        "counts":{"$ref":"#/$defs/DeliveryCounts"},
+        "open_gaps":{"type":"array","items":{"$ref":"#/$defs/OpenGap"}},
+        "transport_status":{"type":"string","enum":["not_connected"]}
+      }
+    },
+    "get_event_cursorRequest":{
+      "title":"Read a consumer's durable position in one project's event stream",
+      "description":"Read-only. Identifies one consumer of one project.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","consumer_id"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "consumer_id":{"type":"string","minLength":1}
+      }
+    },
+    "get_event_cursorResponse":{
+      "title":"A consumer's durable event position",
+      "description":"The canonical cursor shape (schemas/ui-events-v1/cursor.schema.json) rather than a second definition of it; that schema sets additionalProperties false, so these six fields are the whole wire shape. last_sequence is 0 when no cursor row exists, which is what the absence of a row truthfully implies - the canonical schema has no field in which to distinguish an absent row from a row at zero, and the error registry has no NOT_FOUND code, so that limitation is recorded rather than papered over. next_sequence, gap_detected and resync_from are reported empty because event_cursors stores only last_sequence and no contract defines how they would be derived; inventing a derivation would put a number on the wire that nothing durable supports.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","consumer_id","last_sequence"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "consumer_id":{"type":"string","minLength":1},
+        "last_sequence":{"type":"integer","minimum":0},
+        "next_sequence":{"type":["integer","null"],"minimum":0},
+        "gap_detected":{"type":"boolean"},
+        "resync_from":{"type":["integer","null"],"minimum":0}
+      }
+    },
     "get_council_roundRequest":{
       "title":"Read one council round together with its decision-quality records",
       "description":"The existing query, extended rather than duplicated: DEC-052 requires outcome data to be observable read-only, and a second query would have been a second read surface for one concept. The response carries the controller-computed records (mode selection, round roles, claim grades, budget state) and the append-only outcome records. All of it is informational: no field here may influence routing, thresholds, mode selection or authority.",
@@ -164,6 +242,33 @@
     }
   },
   "$defs":{
+    "DeliveryCounts":{
+      "title":"How many of a project's messages are unfinished, by state",
+      "description":"Terminal and successful states are deliberately absent: this is a health view, and a count of everything would answer a different question. dead_lettered is counted from the dead_letters table, which is the durable dead-letter record.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["queued","retrying","expired","dead_lettered"],
+      "properties":{
+        "queued":{"type":"integer","minimum":0},
+        "retrying":{"type":"integer","minimum":0},
+        "expired":{"type":"integer","minimum":0},
+        "dead_lettered":{"type":"integer","minimum":0}
+      }
+    },
+    "OpenGap":{
+      "title":"A position missing between two observed positions in one message stream",
+      "description":"Derived from messages and never stored, because the positions are already durable there and a second record of the same fact is a second fact that can disagree. expected is the absent position; found is the observed position that revealed it, which is always present because the walk stops at the stream's highest position. code is the registry key SEQUENCE_GAP, carried in the value so the wire needs no second lookup (DEC-055).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["code","session_id","channel","expected","found"],
+      "properties":{
+        "code":{"type":"string","enum":["SEQUENCE_GAP"]},
+        "session_id":{"type":"string","minLength":1},
+        "channel":{"type":"string","minLength":1},
+        "expected":{"type":"integer","minimum":0},
+        "found":{"type":"integer","minimum":0}
+      }
+    },
     "ProjectBriefDraft":{"$ref":"#/types/ProjectBriefDraft"},
     "ProjectPathDraft":{"$ref":"#/types/ProjectPathDraft"},
     "ProjectView":{"$ref":"#/types/ProjectView"},

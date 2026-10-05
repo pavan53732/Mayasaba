@@ -67,8 +67,11 @@ material-action messages until `PolicyService` exists; the Bus holds its own `St
 handlers are `async` with work on `spawn_blocking`; no background dispatch runs; the production `Clock` and
 `IdSource` live outside `crates/bus`.
 
-**Status: decided, not implemented.** The six records above are written and this milestone's code has not been
-built yet. Nothing here may be read as working until the tranches land and each is validated.
+**Status: in progress.** Tranches 0, 1 and 2 have landed and are validated: the decisions are recorded
+(`025183b`), the shell holds a bus with a production clock and identity source and nothing dispatches
+(`cd27580`), and the two read-only diagnostics are wired (`get_communication_health`, `get_event_cursor`). The
+gate reports 6 of 59 declared operations implemented. Tranches 3 and 4 - replay and the frontend bridge - are
+not built, so no part of this milestone may be read as complete.
 
 Deliberately out of scope: agent adapters and any real CLI process (M3), a real transport, a background
 dispatch loop, `request_event_resync`, `PolicyService`, `ContextService`, an enqueue command, council runtime,

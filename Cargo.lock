@@ -1826,6 +1826,7 @@ dependencies = [
  "mayasaba-tasks",
  "mayasaba-validation",
  "mayasaba-workspace",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",

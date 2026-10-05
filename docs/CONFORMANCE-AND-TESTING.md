@@ -309,9 +309,13 @@ rather than the four state vocabularies.
 
 ## Shell integration tests (M2.5, DEC-069 to DEC-074)
 
-The test surfaces this milestone adds. **None of these exist yet**: the decisions are recorded in Tranche 0 and
-the tests land with the code in Tranches 1 to 4. They are listed here so that the plan and the eventual tests
-can be compared rather than assumed to match.
+The test surfaces this milestone adds. **The Tranche 1 and 2 rows exist and pass** (`cd27580` and the T2
+commit); the Tranche 3 and 4 rows do not exist yet. They are kept here so the plan and the tests can be compared
+rather than assumed to match, and so a row that quietly never lands is visible as a gap rather than an omission.
+
+Two rows were strengthened rather than merely satisfied. "Identity uniqueness" also covers 8 threads and two
+sources in one process, because a per-instance counter would pass a single-threaded check. "Health is read-only"
+is measured with SQLite's own `total_changes` rather than asserted, so a query that wrote would fail the test.
 
 | Surface | What it establishes | Tranche |
 | --- | --- | --- |

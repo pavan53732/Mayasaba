@@ -312,7 +312,10 @@
     "get_communication_health": {
       "owner": "DiagnosticsService",
       "request": "get_communication_healthRequest",
-      "response": "get_communication_healthResponse"
+      "response": "get_communication_healthResponse",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project whose durable communication state is reported. Read-only; nothing is mutated."}
+      ]
     },
     "get_validation_status": {
       "owner": "ValidationService",
@@ -342,7 +345,11 @@
     "get_event_cursor": {
       "owner": "DiagnosticsService",
       "request": "get_event_cursorRequest",
-      "response": "get_event_cursorResponse"
+      "response": "get_event_cursorResponse",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project whose event stream the cursor belongs to."},
+        {"name":"consumer_id","type":"string","required":true,"description":"The consumer whose durable position is read. Cursors are per consumer, so one project has as many positions as it has consumers."}
+      ]
     },
     "get_action_admissibility": {
       "owner": "PolicyService",

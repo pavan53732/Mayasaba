@@ -925,6 +925,20 @@ fn find_message_at_position(
 /// Carries the stored envelope rather than a parsed one, because what a transport sends must be what was
 /// stored: a dispatcher that re-serialized the message could send something the durable record does not
 /// describe.
+/// A position missing between two observed positions in one `(session_id, channel)` stream.
+///
+/// Derived from `messages` rather than stored: the positions are already durable there, and a second record of
+/// the same fact is a second fact that can disagree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SequenceGapRow {
+    pub session_id: String,
+    pub channel: String,
+    /// The absent position.
+    pub expected: i64,
+    /// The observed position that revealed it: the next position actually present after the hole.
+    pub found: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DueMessage {
     pub message_id: String,
@@ -1959,6 +1973,105 @@ impl Storage {
             )
             .optional()
             .map(|found| found.flatten())
+            .map_err(StorageError::Db)
+    }
+
+    /// How many of one project's messages sit in a given delivery state.
+    ///
+    /// The state is matched as a literal rather than validated against the machine's declared states: this is a
+    /// count, and an unrecognised state truthfully counts zero instead of failing a read that changed nothing.
+    pub fn message_count_in_state(&self, project_id: &str, delivery_state: &str) -> Result<i64> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE project_id = ?1 AND delivery_state = ?2",
+                rusqlite::params![project_id, delivery_state],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)
+    }
+
+    /// How many dead letters one project has.
+    ///
+    /// Counted from `dead_letters`, which is the durable dead-letter record and the one that carries the final
+    /// error and the attempt count.
+    pub fn dead_letter_count(&self, project_id: &str) -> Result<i64> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM dead_letters WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)
+    }
+
+    /// The positions missing between observed positions in each of a project's `(session_id, channel)` streams.
+    ///
+    /// The walk starts at each stream's **lowest** observed position, matching the bus: a first message has
+    /// nothing to be missing from, so positions below the first arrival are not gaps. `found` is never null,
+    /// because the walk stops at the stream's highest position and that position is present by definition.
+    pub fn open_sequence_gaps(&self, project_id: &str) -> Result<Vec<SequenceGapRow>> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "WITH RECURSIVE
+                   bounds(session_id, channel, lo, hi) AS (
+                     SELECT session_id, channel, MIN(sequence), MAX(sequence)
+                       FROM messages WHERE project_id = ?1
+                      GROUP BY session_id, channel
+                   ),
+                   positions(session_id, channel, n, hi) AS (
+                     SELECT session_id, channel, lo, hi FROM bounds
+                     UNION ALL
+                     SELECT session_id, channel, n + 1, hi FROM positions WHERE n < hi
+                   )
+                 SELECT p.session_id, p.channel, p.n,
+                        (SELECT MIN(ahead.sequence) FROM messages ahead
+                          WHERE ahead.project_id = ?1
+                            AND ahead.session_id = p.session_id
+                            AND ahead.channel = p.channel
+                            AND ahead.sequence > p.n) AS found
+                   FROM positions p
+                   LEFT JOIN messages present
+                     ON present.project_id = ?1
+                    AND present.session_id = p.session_id
+                    AND present.channel = p.channel
+                    AND present.sequence = p.n
+                  WHERE present.message_id IS NULL
+                  ORDER BY p.session_id, p.channel, p.n",
+            )
+            .map_err(StorageError::Db)?;
+
+        let rows = statement
+            .query_map([project_id], |row| {
+                Ok(SequenceGapRow {
+                    session_id: row.get(0)?,
+                    channel: row.get(1)?,
+                    expected: row.get(2)?,
+                    found: row.get(3)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
+    }
+
+    /// A consumer's durable position in a project's event stream, if it has one.
+    ///
+    /// `event_cursors` had no reader before this. Absence is returned as `None` rather than as zero, so the
+    /// caller decides what an absent cursor means instead of receiving a number that looks durable.
+    pub fn event_cursor_sequence(
+        &self,
+        project_id: &str,
+        consumer_id: &str,
+    ) -> Result<Option<i64>> {
+        self.conn
+            .query_row(
+                "SELECT last_sequence FROM event_cursors WHERE project_id = ?1 AND consumer_id = ?2",
+                rusqlite::params![project_id, consumer_id],
+                |row| row.get(0),
+            )
+            .optional()
             .map_err(StorageError::Db)
     }
 
