@@ -4,7 +4,7 @@
 Every material requirement must be traceable through design, implementation, validation, and certification.
 
 ## Canonical chain
-USER INTENT -> REQUIREMENT -> ACCEPTANCE CRITERIA -> DECISION / HARD_LOCK -> ARCHITECTURE / CONTRACT -> TASK -> TASK LEASE / AGENT -> CHANGESET / ARTIFACT -> TASK-APPROPRIATE CHECKS (EXECUTION / TEST / SOURCE REVIEW / INTEGRITY) -> EVIDENCE -> REVIEW -> VALIDATION -> CERTIFICATION
+USER INTENT -> REQUIREMENT -> ACCEPTANCE CRITERIA -> DECISION / HARD_LOCK -> ARCHITECTURE / CONTRACT -> TASK -> TASK ATTEMPT / TASK LEASE / AGENT -> CHANGESET / ARTIFACT -> TASK-APPROPRIATE CHECKS (EXECUTION / TEST / SOURCE REVIEW / INTEGRITY) -> EVIDENCE -> REVIEW -> VALIDATION -> CERTIFICATION
 
 ## Intent anchor
 USER INTENT is the `ProjectBrief` version that was current when DISCOVERY closed. The existing `INTENT_REQUIREMENT` link type connects that brief version to the requirements derived from it. Because brief versions are immutable, the anchor for a lineage is stable: a later brief version starts a new derivation path rather than rewriting the links of an earlier one.
@@ -95,3 +95,6 @@ Canonical link types:
 Orphan detection is a deterministic SQLite query/service operation, not an LLM judgment.
 
 The canonical admission query is: any integrated changeset whose latest `INTEGRATION_ADMISSION` verdict is not `ADMITTED`, or which has no admission record at all, is an orphan and blocks certification.
+
+### Long-running execution provenance
+The existing trace graph now includes reliability links for `TASK_ATTEMPT`, `ATTEMPT_CHECKPOINT`, `ATTEMPT_EXECUTION`, `EXECUTION_ENVIRONMENT`, and `VALIDATION_ENVIRONMENT`. These connect the canonical TaskAttempt, workspace checkpoint, execution, environment and validation records without creating a second source of truth. Trace history remains append-oriented.
