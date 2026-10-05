@@ -260,6 +260,13 @@ pub async fn spawn_process(
 }
 
 impl SpawnedProcess {
+    /// Terminate the owned process tree. Callers use this when a post-spawn controller transaction fails.
+    pub async fn terminate(&mut self) -> Result<(), ExecutionError> {
+        terminate_owned_tree(self.pid)
+            .await
+            .map_err(ExecutionError::Termination)
+    }
+
     /// Read one stdout line without waiting for the process to exit. This is the primitive used by the agent
     /// gateway to stream structured JSONL events during long-running sessions.
     pub async fn next_stdout_line(&mut self) -> Result<Option<String>, ExecutionError> {
