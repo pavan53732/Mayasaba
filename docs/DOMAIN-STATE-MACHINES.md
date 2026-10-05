@@ -206,3 +206,14 @@ A machine declares its ordered path as `spine`, separately from its `states` set
 Each record's `command` is registered in `registry.json:transition_commands` with its machine, kind and owning service; the owning service is the one named in the ownership matrix above, and the crate it resolves to in `workspace.manifest.json` must equal the machine's owner here. Message delivery is the one machine with no application service — `crates/bus` owns it directly.
 
 `crates/core` coordinates cross-machine transitions but cannot mutate a state machine owned by another crate.
+
+
+## Reliability state semantics
+
+`TaskAttempt` is not a second task lifecycle. It is a durable execution-attempt record whose state is subordinate to the canonical `task` and `execution` machines. The controller may create a new attempt without changing the acceptance identity of the Task.
+
+`TaskLease.lease_version` is the fencing value. A material transition or side effect derived from an attempt is legal only when the presented lease version equals the currently authoritative lease version.
+
+`ResourceReservation`, `WorkspaceRevision` and `EnvironmentSnapshot` are durable records with closed vocabularies, but they do not introduce controller lifecycle machines. Their status describes persisted facts used by the owning scheduler/workspace/execution/validation authority.
+
+`UNKNOWN` is an admissible unresolved execution/attempt fact, never a success state. Positive gates must reject unknown, stale or contradictory physical state.
