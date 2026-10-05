@@ -3657,6 +3657,72 @@ mod tests {
 
 /// Durable retry/recovery identity for a Task. The active lease version is copied as the fencing value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCommandExecution {
+    pub execution_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub workspace_id: String,
+    pub requested_by_agent_id: Option<String>,
+    pub environment_snapshot_id: Option<String>,
+    pub supersedes_binding_id: Option<String>,
+    pub classification: String,
+    pub executable: String,
+    pub arguments_json: String,
+    pub cwd: String,
+    pub status: String,
+    pub exit_code: Option<i64>,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub timeout_seconds: i64,
+    pub stdout_artifact_id: Option<String>,
+    pub stderr_artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandExecutionRecord {
+    pub execution_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub workspace_id: String,
+    pub requested_by_agent_id: Option<String>,
+    pub environment_snapshot_id: Option<String>,
+    pub supersedes_binding_id: Option<String>,
+    pub classification: String,
+    pub executable: String,
+    pub arguments_json: String,
+    pub cwd: String,
+    pub status: String,
+    pub exit_code: Option<i64>,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub timeout_seconds: i64,
+    pub stdout_artifact_id: Option<String>,
+    pub stderr_artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewProcessRecord {
+    pub process_record_id: String,
+    pub execution_id: String,
+    pub pid: i64,
+    pub parent_pid: Option<i64>,
+    pub state: String,
+    pub observed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessRecord {
+    pub process_record_id: String,
+    pub execution_id: String,
+    pub pid: i64,
+    pub parent_pid: Option<i64>,
+    pub state: String,
+    pub observed_at: String,
+}
+
 pub struct NewTaskAttempt {
     pub attempt_id: String,
     pub task_id: String,
@@ -3729,7 +3795,6 @@ pub struct NewEnvironmentSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertificationBindingRecord {
     pub certification_binding_id: String,
     pub project_id: String,
@@ -3763,6 +3828,9 @@ pub struct NewCertificationBinding {
 }
 
 const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
+const EXECUTION_CLASSIFICATIONS: &[&str] = &["READ_ONLY","SAFE_WRITE","PROJECT_WRITE","EXECUTE","INSTALL","ADMIN_REQUIRED"];
+const EXECUTION_STATES: &[&str] = &["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"];
+const PROCESS_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
 const RESOURCE_TYPES: &[&str] = &["CPU","RAM","GPU","DISK","PORT","WORKSPACE","PROCESS_SLOT","AGENT_SLOT","TOOLCHAIN"];
 const RESOURCE_MODES: &[&str] = &["EXCLUSIVE","SHARED"];
 const RESOURCE_STATES: &[&str] = &["HELD","RELEASED","EXPIRED","LOST"];
@@ -3771,6 +3839,232 @@ const REVISION_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
 const CERTIFICATION_STATES: &[&str] = &["ASSERTED","INVALIDATED","EXPIRED"];
 
 impl Storage {
+    /// Persist a command execution after admission. Material attempts are re-fenced against the current lease.
+    pub fn insert_command_execution(&self, new: &NewCommandExecution) -> Result<()> {
+        require_vocabulary("command_executions.classification", &new.classification, EXECUTION_CLASSIFICATIONS)?;
+        require_vocabulary("command_executions.status", &new.status, EXECUTION_STATES)?;
+        if new.timeout_seconds < 1 {
+            return Err(StorageError::Malformed {
+                column: "command_executions.timeout_seconds".to_string(),
+                detail: "timeout_seconds must be positive".to_string(),
+            });
+        }
+        let arguments: serde_json::Value = serde_json::from_str(&new.arguments_json).map_err(|e| StorageError::Malformed {
+            column: "command_executions.arguments_json".to_string(),
+            detail: format!("must be valid JSON: {e}"),
+        })?;
+        if !arguments.is_array() {
+            return Err(StorageError::Malformed {
+                column: "command_executions.arguments_json".to_string(),
+                detail: "arguments_json must be a JSON array".to_string(),
+            });
+        }
+        if new.cwd.trim().is_empty() || new.executable.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "command_executions".to_string(),
+                detail: "executable and cwd must be non-empty".to_string(),
+            });
+        }
+
+        if let Some(task_id) = &new.task_id {
+            let matches: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id = ?1 AND project_id = ?2",
+                rusqlite::params![task_id, new.project_id],
+                |row| row.get(0),
+            ).map_err(StorageError::Db)?;
+            if matches != 1 {
+                return Err(StorageError::Malformed {
+                    column: "command_executions.task_id".to_string(),
+                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                });
+            }
+        }
+
+        if let Some(attempt_id) = &new.attempt_id {
+            let row: Option<(String,String,String,String,i64,String)> = self.conn.query_row(
+                "SELECT project_id, task_id, workspace_id, state, fence_token, lease_id FROM task_attempts WHERE attempt_id = ?1",
+                [attempt_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            ).optional().map_err(StorageError::Db)?;
+            let (project_id, task_id, workspace_id, state, fence_token, _lease_id) =
+                row.ok_or_else(|| StorageError::NotFound(format!("task attempt {attempt_id}")))?;
+            if project_id != new.project_id
+                || new.task_id.as_deref().is_some_and(|id| id != task_id)
+                || workspace_id != new.workspace_id
+                || !matches!(state.as_str(), "STARTED" | "RUNNING" | "CHECKPOINTED")
+            {
+                return Err(StorageError::Malformed {
+                    column: "command_executions.attempt_id".to_string(),
+                    detail: format!("attempt {attempt_id} is not an admitted execution parent"),
+                });
+            }
+            self.verify_attempt_fence(attempt_id, fence_token)?;
+        }
+
+        if let Some(snapshot_id) = &new.environment_snapshot_id {
+            let row: Option<(String,Option<String>,Option<String>,Option<String>)> = self.conn.query_row(
+                "SELECT project_id, workspace_id, task_id, execution_id FROM environment_snapshots WHERE environment_snapshot_id = ?1",
+                [snapshot_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            ).optional().map_err(StorageError::Db)?;
+            let (project_id, workspace_id, task_id, execution_id) =
+                row.ok_or_else(|| StorageError::NotFound(format!("environment snapshot {snapshot_id}")))?;
+            if project_id != new.project_id
+                || workspace_id.as_deref().is_some_and(|id| id != new.workspace_id)
+                || task_id.as_deref().is_some_and(|id| Some(id) != new.task_id.as_ref())
+                || execution_id.as_deref().is_some_and(|id| id != new.execution_id)
+            {
+                return Err(StorageError::Malformed {
+                    column: "command_executions.environment_snapshot_id".to_string(),
+                    detail: "environment snapshot does not match execution provenance".to_string(),
+                });
+            }
+        }
+
+        self.conn.execute(
+            "INSERT INTO command_executions (execution_id,project_id,task_id,attempt_id,workspace_id,requested_by_agent_id,environment_snapshot_id,supersedes_binding_id,classification,executable,arguments_json,cwd,status,exit_code,started_at,ended_at,timeout_seconds,stdout_artifact_id,stderr_artifact_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+            rusqlite::params![
+                new.execution_id, new.project_id, new.task_id, new.attempt_id, new.workspace_id,
+                new.requested_by_agent_id, new.environment_snapshot_id, new.supersedes_binding_id,
+                new.classification, new.executable, new.arguments_json, new.cwd, new.status,
+                new.exit_code, new.started_at, new.ended_at, new.timeout_seconds,
+                new.stdout_artifact_id, new.stderr_artifact_id
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// Read one durable command execution record.
+    pub fn get_command_execution(&self, execution_id: &str) -> Result<Option<CommandExecutionRecord>> {
+        self.conn.query_row(
+            "SELECT execution_id,project_id,task_id,attempt_id,workspace_id,requested_by_agent_id,environment_snapshot_id,supersedes_binding_id,classification,executable,arguments_json,cwd,status,exit_code,started_at,ended_at,timeout_seconds,stdout_artifact_id,stderr_artifact_id FROM command_executions WHERE execution_id = ?1",
+            [execution_id],
+            |row| Ok(CommandExecutionRecord {
+                execution_id: row.get(0)?,
+                project_id: row.get(1)?,
+                task_id: row.get(2)?,
+                attempt_id: row.get(3)?,
+                workspace_id: row.get(4)?,
+                requested_by_agent_id: row.get(5)?,
+                environment_snapshot_id: row.get(6)?,
+                supersedes_binding_id: row.get(7)?,
+                classification: row.get(8)?,
+                executable: row.get(9)?,
+                arguments_json: row.get(10)?,
+                cwd: row.get(11)?,
+                status: row.get(12)?,
+                exit_code: row.get(13)?,
+                started_at: row.get(14)?,
+                ended_at: row.get(15)?,
+                timeout_seconds: row.get(16)?,
+                stdout_artifact_id: row.get(17)?,
+                stderr_artifact_id: row.get(18)?,
+            }),
+        ).optional().map_err(StorageError::Db)
+    }
+
+    /// Compare-and-swap one command-execution state. Material terminal state is never inferred from exit code alone.
+    pub fn transition_command_execution(
+        &self,
+        execution_id: &str,
+        expected_state: &str,
+        next_state: &str,
+        exit_code: Option<i64>,
+        ended_at: Option<&str>,
+    ) -> Result<()> {
+        require_vocabulary("command_executions.expected_state", expected_state, EXECUTION_STATES)?;
+        require_vocabulary("command_executions.next_state", next_state, EXECUTION_STATES)?;
+        let legal = matches!(
+            (expected_state, next_state),
+            ("REQUESTED","POLICY_CHECK")
+            | ("POLICY_CHECK","APPROVED")
+            | ("APPROVED","STARTING")
+            | ("STARTING","RUNNING")
+            | ("RUNNING","EXITED")
+            | ("EXITED","EVIDENCE_CAPTURED")
+            | ("EVIDENCE_CAPTURED","RECORDED")
+            | ("POLICY_CHECK","DENIED")
+            | ("RUNNING","TIMEOUT")
+            | ("RUNNING","CANCELED")
+            | ("RUNNING","CRASHED")
+            | ("CRASHED","CLEANUP_REQUIRED")
+        );
+        if !legal {
+            return Err(StorageError::Malformed {
+                column: "command_executions.status".to_string(),
+                detail: format!("illegal execution transition {expected_state} -> {next_state}"),
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE command_executions SET status=?1, exit_code=COALESCE(?2,exit_code), ended_at=COALESCE(?3,ended_at) WHERE execution_id=?4 AND status=?5",
+            rusqlite::params![next_state, exit_code, ended_at, execution_id, expected_state],
+        ).map_err(StorageError::Db)?;
+        if changed == 0 {
+            let exists = self.conn.query_row(
+                "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
+                [execution_id],
+                |row| row.get::<_,i64>(0),
+            ).map_err(StorageError::Db)?;
+            if exists == 0 {
+                return Err(StorageError::NotFound(format!("command execution {execution_id}")));
+            }
+            return Err(StorageError::Malformed {
+                column: "command_executions.status".to_string(),
+                detail: format!("compare-and-swap failed: expected {expected_state}"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Append one physical-process observation. Observations are append-only; UNKNOWN is explicit uncertainty.
+    pub fn insert_process_record(&self, new: &NewProcessRecord) -> Result<()> {
+        require_vocabulary("process_records.state", &new.state, PROCESS_STATES)?;
+        if new.pid <= 0 || new.parent_pid.is_some_and(|pid| pid <= 0) {
+            return Err(StorageError::Malformed {
+                column: "process_records.pid".to_string(),
+                detail: "pid values must be positive".to_string(),
+            });
+        }
+        let exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
+            [new.execution_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if exists != 1 {
+            return Err(StorageError::NotFound(format!("command execution {}", new.execution_id)));
+        }
+        self.conn.execute(
+            "INSERT INTO process_records (process_record_id,execution_id,pid,parent_pid,state,observed_at) VALUES (?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![
+                new.process_record_id, new.execution_id, new.pid, new.parent_pid, new.state, new.observed_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// Return process observations newest-first so reconciliation can use the latest physical fact.
+    pub fn list_process_records(&self, execution_id: &str) -> Result<Vec<ProcessRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT process_record_id,execution_id,pid,parent_pid,state,observed_at
+             FROM process_records WHERE execution_id=?1 ORDER BY observed_at DESC, process_record_id DESC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([execution_id], |row| Ok(ProcessRecord {
+            process_record_id: row.get(0)?,
+            execution_id: row.get(1)?,
+            pid: row.get(2)?,
+            parent_pid: row.get(3)?,
+            state: row.get(4)?,
+            observed_at: row.get(5)?,
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// The most recent process observation, if any.
+    pub fn latest_process_record(&self, execution_id: &str) -> Result<Option<ProcessRecord>> {
+        Ok(self.list_process_records(execution_id)?.into_iter().next())
+    }
+
     /// Persist one task attempt. Task identity is stable; attempt number is unique per task.
     pub fn insert_task_attempt(&self, new: &NewTaskAttempt) -> Result<()> {
         require_vocabulary("task_attempts.state", &new.state, TASK_ATTEMPT_STATES)?;
