@@ -3712,6 +3712,18 @@ pub struct SchedulableTask {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentInstallationRecord {
+    pub agent_id: String,
+    pub agent_type: String,
+    pub executable: String,
+    pub resolved_path: Option<String>,
+    pub version: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 pub struct NewAgentSession {
     pub session_id: String,
     pub project_id: String,
@@ -3977,6 +3989,47 @@ impl Storage {
     /// the canonical REQUESTED -> ACTIVE transition, while no caller can observe an intermediate half-granted
     /// lease after a crash.
     /// Persist a new agent session at DISCOVERED. The session is the runtime identity anchor for a single process lineage.
+    /// Persist the latest local installation fact for one of the closed agent types.
+    /// This table is runtime discovery state; it is not a second configuration authority.
+    pub fn upsert_agent_installation(
+        &self,
+        agent_id: &str,
+        agent_type: &str,
+        executable: &str,
+        resolved_path: Option<&str>,
+        version: Option<&str>,
+        updated_at: &str,
+    ) -> Result<AgentInstallationRecord> {
+        if !matches!(agent_type, "HERMES_AGENT" | "KILO_CODE" | "OPEN_CODE") {
+            return Err(StorageError::Malformed {
+                column: "agents.agent_type".to_string(),
+                detail: format!("unsupported agent type {agent_type}"),
+            });
+        }
+        if executable.trim().is_empty() || updated_at.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "agents".to_string(),
+                detail: "executable and updated_at are required".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO agents (agent_id,agent_type,executable,resolved_path,version,enabled,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,1,?6,?6)
+             ON CONFLICT(agent_id) DO UPDATE SET agent_type=excluded.agent_type, executable=excluded.executable,
+                 resolved_path=excluded.resolved_path, version=excluded.version, enabled=1, updated_at=excluded.updated_at",
+            rusqlite::params![agent_id,agent_type,executable,resolved_path,version,updated_at],
+        ).map_err(StorageError::Db)?;
+        self.conn.query_row(
+            "SELECT agent_id,agent_type,executable,resolved_path,version,enabled,created_at,updated_at
+             FROM agents WHERE agent_id=?1",
+            [agent_id],
+            |r| Ok(AgentInstallationRecord {
+                agent_id:r.get(0)?,agent_type:r.get(1)?,executable:r.get(2)?,resolved_path:r.get(3)?,
+                version:r.get(4)?,enabled:r.get::<_,i64>(5)? != 0,created_at:r.get(6)?,updated_at:r.get(7)?
+            }),
+        ).map_err(StorageError::Db)
+    }
+
     pub fn create_agent_session(&mut self, new: &NewAgentSession) -> Result<AgentSessionRecord> {
         if new.current_epoch < 0 || new.started_at.trim().is_empty() {
             return Err(StorageError::Malformed {
