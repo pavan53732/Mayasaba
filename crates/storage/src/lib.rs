@@ -4222,6 +4222,22 @@ impl Storage {
         Ok(())
     }
 
+    pub fn set_agent_health(
+        &self,
+        session_id: &str,
+        health_state: &str,
+    ) -> Result<()> {
+        require_vocabulary("agent_sessions.health_state", health_state, AGENT_HEALTH_STATES)?;
+        let changed = self.conn.execute(
+            "UPDATE agent_sessions SET health_state=?1 WHERE session_id=?2",
+            rusqlite::params![health_state,session_id],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!("agent session {session_id}")));
+        }
+        Ok(())
+    }
+
     pub fn insert_agent_capability_snapshot(&self, new: &NewAgentCapabilitySnapshot) -> Result<()> {
         let caps: serde_json::Value = serde_json::from_str(&new.capabilities_json).map_err(|e| StorageError::Malformed {
             column:"agent_capabilities.capabilities_json".to_string(),
