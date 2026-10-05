@@ -3892,22 +3892,28 @@ impl Storage {
         require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
         require_vocabulary("resource_reservations.state", &new.state, RESOURCE_STATES)?;
-        let current: Option<i64> = self.conn.query_row(
-            "SELECT lease_version FROM task_leases WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
+        let lease: Option<(String,String,String,String,String,i64)> = self.conn.query_row(
+            "SELECT task_id, project_id, agent_id, session_id, workspace_id, lease_version
+             FROM task_leases
+             WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
             [new.lease_id.as_str()],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?)),
         ).optional().map_err(StorageError::Db)?;
-        match current {
-            Some(version) if version == new.lease_version => {}
-            Some(version) => {
-                return Err(StorageError::StaleFence {
-                    attempt_id: format!("reservation:{}", new.reservation_id),
-                    attempt_fence: new.lease_version,
-                    current_lease_version: version,
-                    presented: new.lease_version,
-                })
-            }
-            None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
+        let (lease_task,lease_project,_lease_agent,_lease_session,lease_workspace,lease_version) =
+            match lease { Some(v) => v, None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))) };
+        if lease_version != new.lease_version {
+            return Err(StorageError::StaleFence {
+                attempt_id: format!("reservation:{}", new.reservation_id),
+                attempt_fence: new.lease_version,
+                current_lease_version: lease_version,
+                presented: new.lease_version,
+            });
+        }
+        if lease_task != new.task_id || lease_project != new.project_id || lease_workspace != new.resource_key && new.resource_type == "WORKSPACE" {
+            return Err(StorageError::Malformed {
+                column: "resource_reservations".to_string(),
+                detail: format!("reservation {} does not match the authoritative task/project/lease binding", new.reservation_id),
+            });
         }
         self.conn.execute(
             "INSERT INTO resource_reservations (reservation_id, project_id, task_id, lease_id, lease_version, resource_type, resource_key, mode, quantity, state, issued_at, expires_at, released_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
