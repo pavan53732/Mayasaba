@@ -1103,8 +1103,8 @@ claiming something it cannot deliver.
 ### DEC-089 — Live task ownership is unique
 Classification: ADDITIVE. A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it.
 
-### DEC-090 — Lease renewal is versioned and returns to ACTIVE
-Classification: REFINEMENT. A renewal increments lease_version before the lease becomes ACTIVE again. Release, revoke, resource release and material attempt actions require the resulting current version. RENEWING is an internal transactional phase, not a durable stranded state.
+### DEC-090 — Lease renewal returns to ACTIVE
+Classification: REFINEMENT. Renewal extends the current lease and returns it to ACTIVE without changing its fencing token. The lease_version identifies this lease ownership lifetime; a new lease_id starts a new ownership lifetime and therefore cannot inherit the prior lease authority. RENEWING is an internal transactional phase, not a durable stranded state.
 
 ### DEC-091 — Execution persistence is durable-before-side-effect
 Classification: ADDITIVE. A material command must be durably APPROVED before the kernel records STARTING and crosses the OS process boundary. PID observation and RUNNING are persisted immediately after spawn. If post-spawn durability fails, the kernel attempts owned-process termination; it never fabricates success.
@@ -1123,7 +1123,8 @@ Classification: REFINEMENT. Agent adapters may prepare a contract-derived Proces
 Classification: ADDITIVE. `RecoveryService` reports recoverable TaskAttempts and CommandExecutions from durable state plus latest process observations. It may classify the next reconciliation action, but it does not invent process outcomes, grant leases, retry tasks, or certify artifacts. Those mutations remain owned by TaskService, ExecutionService and ValidationService respectively.
 
 ### DEC-096 — Lease admission is atomic across Task and TaskLease lifecycle
-Classification: REFINEMENT. The lease transaction records TASK `READY -> LEASE_REQUESTED`, lease `REQUESTED -> ACTIVE`, and task `LEASE_REQUESTED -> LEASED` in one SQLite transaction. A task cannot become schedulable again while a live lease exists, and the partial unique index is the final concurrent ownership guard.
+Classification: REFINEMENT. The lease transaction records TASK `READY -> LEASE_REQUESTED`, lease `REQUESTED -> ACTIVE`, and task `LEASE_REQUESTED -> LEASED` in one SQLite transaction. A task cannot become schedulable again while a live lease exists, and th### DEC-097 — Lease fence rotates only on ownership change
+Classification: REFINEMENT. A TaskAttempt keeps the lease_version captured when that attempt was admitted. Heartbeat/renewal changes heartbeat and expiry timestamps but does not rotate the fence token, because rotating it would invalidate the still-running attempt without a new ownership event. A new lease acquisition changes authority through a new lease_id; expired, released or revoked leases cannot authorize the old attempt.
 
 ## Change procedure
 
