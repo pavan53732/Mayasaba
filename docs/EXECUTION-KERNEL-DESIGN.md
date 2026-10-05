@@ -84,8 +84,8 @@ Until that exists, unreconciled survivors remain a blocker and may produce UNKNO
 
 ## Reliability refinements
 
-### Process-tree ownership
-Every execution is associated with its process tree. On Windows, graceful cancellation is attempted first; termination then targets the owned process tree/job boundary. Completion of cancellation requires observation that no owned descendant remains, or an explicit `UNKNOWN`/recovery record when observation is impossible.
+### Process-tree termination boundary
+Every execution records a physical process observation. On Windows, the current hard-stop path uses the fully-qualified SystemRoot\\System32\\taskkill.exe with /PID /T /F. This targets the process tree but is not an atomic Job Object ownership guarantee. Completion therefore requires an observation that the process tree is gone; when that observation cannot be established, recovery records UNKNOWN instead of claiming success.
 
 ### Ports and local resources
 Ports, process slots and other scarce machine-local resources are admitted through `ResourceReservation`. The execution kernel must not assume that a port is free because the reservation table says so; admission reconciles the reservation with actual OS/process state.
