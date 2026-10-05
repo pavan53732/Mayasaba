@@ -82,8 +82,8 @@ const MUTATIONS = [
       },
       {
         file: MAIN,
-        find: "            validate_workspace\n        ])",
-        replace: "            validate_workspace,\n            ghost_undeclared\n        ])",
+        find: "            get_event_cursor\n        ])",
+        replace: "            get_event_cursor,\n            ghost_undeclared\n        ])",
       },
     ],
     expect: [
@@ -94,7 +94,7 @@ const MUTATIONS = [
     id: "dec053-b",
     what: "main.rs: a command function is left defined but dropped from generate_handler![...]",
     check: GATE,
-    edits: [{ file: MAIN, find: "            validate_workspace\n        ])", replace: "        ])" }],
+    edits: [{ file: MAIN, find: "            validate_workspace,\n", replace: "" }],
     expect: [
       "defines #[tauri::command] fn validate_workspace but never registers it in generate_handler![...]",
     ],
