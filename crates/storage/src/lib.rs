@@ -3737,6 +3737,7 @@ pub struct NewCertificationBinding {
     pub validator_version: String,
     pub test_suite_version: Option<String>,
     pub status: String,
+    pub supersedes_binding_id: Option<String>,
     pub reason: Option<String>,
     pub created_at: String,
 }
@@ -3841,9 +3842,80 @@ impl Storage {
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
         self.conn.execute(
-            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.reason,new.created_at],
+            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
         ).map_err(StorageError::Db)?;
         Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTraceLink {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+pub struct TraceLinkRecord {
+    pub trace_link_id: String,
+    pub project_id: String,
+    pub link_type: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub created_at: String,
+}
+
+const TRACE_LINK_TYPES: &[&str] = &[
+    "INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION",
+    "DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK",
+    "TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION",
+    "LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT",
+    "EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION",
+    "VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION",
+];
+
+
+
+impl Storage {
+    pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
+        require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
+        if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
+            || new.target_type.trim().is_empty() || new.target_id.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column: "trace_links".to_string(),
+                detail: "source/target type and id must be non-empty".to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO trace_links (trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                new.trace_link_id,new.project_id,new.link_type,new.source_type,
+                new.source_id,new.target_type,new.target_id,new.created_at
+            ],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn list_trace_links(&self, project_id: &str) -> Result<Vec<TraceLinkRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT trace_link_id, project_id, link_type, source_type, source_id, target_type, target_id, created_at
+             FROM trace_links WHERE project_id = ?1
+             ORDER BY created_at ASC, trace_link_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(TraceLinkRecord {
+            trace_link_id:r.get(0)?, project_id:r.get(1)?, link_type:r.get(2)?,
+            source_type:r.get(3)?, source_id:r.get(4)?, target_type:r.get(5)?,
+            target_id:r.get(6)?, created_at:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
     }
 }
