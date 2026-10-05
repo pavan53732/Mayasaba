@@ -438,12 +438,6 @@
         "service": "TaskService",
         "crate": "crates/tasks"
       },
-      "RENEW_LEASE": {
-        "machine": "lease",
-        "kind": "specific",
-        "service": "TaskService",
-        "crate": "crates/tasks"
-      },
       "REVOKE_LEASE": {
         "machine": "lease",
         "kind": "specific",
