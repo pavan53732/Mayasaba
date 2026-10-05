@@ -3977,7 +3977,7 @@ impl Storage {
     /// the canonical REQUESTED -> ACTIVE transition, while no caller can observe an intermediate half-granted
     /// lease after a crash.
     /// Persist a new agent session at DISCOVERED. The session is the runtime identity anchor for a single process lineage.
-    pub fn create_agent_session(&self, new: &NewAgentSession) -> Result<AgentSessionRecord> {
+    pub fn create_agent_session(&mut self, new: &NewAgentSession) -> Result<AgentSessionRecord> {
         if new.current_epoch < 0 || new.started_at.trim().is_empty() {
             return Err(StorageError::Malformed {
                 column: "agent_sessions".to_string(),
