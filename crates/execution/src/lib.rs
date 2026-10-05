@@ -192,22 +192,8 @@ pub async fn spawn_process(
     let child = match command.spawn() {
         Ok(child) => child,
         Err(err) => {
-            // The durable state is already STARTING. Reconcile it through CRASHED rather than silently leaving
-            // a nonterminal record that looks like a process exists.
-            let _ = storage.transition_command_execution(
-                execution_id,
-                "STARTING",
-                "RUNNING",
-                None,
-                None,
-            );
-            let _ = storage.transition_command_execution(
-                execution_id,
-                "RUNNING",
-                "CRASHED",
-                None,
-                Some(started_at),
-            );
+            // STARTING intentionally remains nonterminal: no process crossed the OS boundary, so CRASHED would
+            // fabricate a physical event. Recovery reconciles dangling STARTING rows as a launch failure.
             return Err(ExecutionError::Spawn(err));
         }
     };
@@ -292,7 +278,7 @@ impl SpawnedProcess {
         let stdout_task = tokio::spawn(read_bounded(stdout, limit));
         let stderr_task = tokio::spawn(read_bounded(stderr, limit));
 
-        let timed_out;
+        let mut timed_out = false;
         let status = match timeout {
             Some(limit_duration) => match time::timeout(limit_duration, self.child.wait()).await {
                 Ok(result) => result.map_err(ExecutionError::Spawn)?,
@@ -307,10 +293,6 @@ impl SpawnedProcess {
             },
             None => self.child.wait().await.map_err(ExecutionError::Spawn)?,
         };
-
-        if timeout.is_none() {
-            timed_out = false;
-        }
 
         let stdout = stdout_task.await.map_err(|e| ExecutionError::OutputJoin(e.to_string()))?
             .map_err(ExecutionError::Spawn)?;
