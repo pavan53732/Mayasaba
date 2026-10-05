@@ -47,6 +47,10 @@ const root = path.resolve(here, "..", "..");
 
 const GATE = "gate";
 const RUST = "rust";
+// A rule that only `crates/core` enforces cannot be proven by the desktop check, which never compiles core's
+// `#[cfg(test)]` modules. Without this the proof would have to be weakened to something the desktop check
+// happens to observe, which would test a different rule.
+const CORE = "core";
 
 const MAIN = "apps/desktop/src-tauri/src/main.rs";
 const BRIDGE_TS = "apps/desktop/src/intake/bridge.ts";
@@ -401,7 +405,7 @@ const MUTATIONS = [
   {
     id: "dec075-c",
     what: "recovery_service.rs: the material-action refusal is removed, so replay becomes a route around authorization",
-    check: RUST,
+    check: CORE,
     edits: [
       {
         file: "crates/core/src/recovery_service.rs",
@@ -414,7 +418,7 @@ const MUTATIONS = [
   {
     id: "dec075-d",
     what: "recovery_service.rs: the response claims a context refresh that did not happen",
-    check: RUST,
+    check: CORE,
     edits: [
       {
         file: "crates/core/src/recovery_service.rs",
@@ -533,6 +537,11 @@ const CHECKS = {
     name: "the contract gate",
     command: "npm run verify:contracts",
     run: () => run("node", ["tools/contracts/verify.mjs"]),
+  },
+  [CORE]: {
+    name: "the core crate's tests",
+    command: "cargo test -p mayasaba-core",
+    run: () => run("cargo", ["test", "-p", "mayasaba-core"]),
   },
   [RUST]: {
     name: "the wire-shape conformance test",
