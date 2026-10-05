@@ -366,11 +366,37 @@ const MUTATIONS = [
     edits: [
       {
         file: MAIN,
-        find: '        "validate_workspace",\n    ];',
-        replace: '        "validate_workspace",\n        "ghost_operation",\n    ];',
+        find: '        "get_event_cursor",\n    ];',
+        replace: '        "get_event_cursor",\n        "ghost_operation",\n    ];',
       },
     ],
     expect: ["which generate_handler![...] does not register"],
+  },
+  {
+    id: "dec075-a",
+    what: "main.rs: the shell's From<BusError> mapping stops delegating to code(), so it must be producing codes the gate never reads",
+    check: GATE,
+    edits: [
+      {
+        file: MAIN,
+        find: '            code: error.code(),',
+        replace: '            code: "STORAGE_FAILURE",',
+      },
+    ],
+    expect: ["no longer calls code()"],
+  },
+  {
+    id: "dec075-b",
+    what: "main.rs: a handler stops being registered, so the bridge loses an operation and its shape test no longer guards anything",
+    check: GATE,
+    edits: [
+      {
+        file: MAIN,
+        find: '            get_event_cursor',
+        replace: '',
+      },
+    ],
+    expect: ["defines #[tauri::command] fn get_event_cursor but never registers it"],
   },
   {
     id: "dec056-f",
