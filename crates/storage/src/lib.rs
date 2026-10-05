@@ -3795,6 +3795,23 @@ impl Storage {
         require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
         require_vocabulary("resource_reservations.state", &new.state, RESOURCE_STATES)?;
+        let current: Option<i64> = self.conn.query_row(
+            "SELECT lease_version FROM task_leases WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
+            [new.lease_id.as_str()],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        match current {
+            Some(version) if version == new.lease_version => {}
+            Some(version) => {
+                return Err(StorageError::StaleFence {
+                    attempt_id: format!("reservation:{}", new.reservation_id),
+                    attempt_fence: new.lease_version,
+                    current_lease_version: version,
+                    presented: new.lease_version,
+                })
+            }
+            None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
+        }
         self.conn.execute(
             "INSERT INTO resource_reservations (reservation_id, project_id, task_id, lease_id, lease_version, resource_type, resource_key, mode, quantity, state, issued_at, expires_at, released_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             rusqlite::params![new.reservation_id,new.project_id,new.task_id,new.lease_id,new.lease_version,new.resource_type,new.resource_key,new.mode,new.quantity,new.state,new.issued_at,new.expires_at,new.released_at,new.created_at],
