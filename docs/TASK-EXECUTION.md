@@ -150,3 +150,6 @@ Before a lease is activated, scheduler-controlled reservations are acquired for 
 
 ### Dependency cancellation
 A failed dependency blocks downstream tasks rather than manufacturing downstream failures. Repair of the dependency reopens only the affected dependents whose preconditions become true again.
+
+
+An attempt binds task, lease, agent/session, workspace, project epoch and context snapshot. Its relationship to command executions, checkpoints and admissions is recorded through the existing traceability model; the attempt's `fence_token` equals the lease's `lease_version`.
