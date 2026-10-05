@@ -78,7 +78,8 @@ and any schema or table change.
 ## M3 — Agent gateway
 
 **Status: in progress.** The contract-driven adapter kernel, closed three-agent identity set, launch-proof boundary,
-native-event normalization and process-spec bridge are implemented. Live executable discovery/probing, session
+native-event normalization and process-spec bridge are implemented. Durable task/lease fencing, execution/process
+persistence and restart reconciliation foundations are also landed. Live executable discovery/probing, session
 handshake, capability negotiation, health checks and native transport dispatch remain the next M3 integration tranche.
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
