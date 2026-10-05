@@ -107,6 +107,21 @@ pub fn authorize_material_action(
     storage.verify_attempt_authority(attempt_id, lease_version)
 }
 
+/// Reserve one child-agent execution slot within the task's durable max_parallel_children budget.
+pub fn reserve_child_slot(
+    storage: &mut Storage,
+    reservation_id: &str,
+    task_id: &str,
+    lease_id: &str,
+    lease_version: i64,
+    issued_at: &str,
+    expires_at: &str,
+) -> Result<String> {
+    storage.reserve_child_slot(
+        reservation_id, task_id, lease_id, lease_version, issued_at, expires_at,
+    )
+}
+
 /// Reserve a scarce local resource under the current task lease.
 pub fn reserve_resource(
     storage: &Storage,
