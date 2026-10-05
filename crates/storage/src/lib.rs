@@ -3813,7 +3813,7 @@ impl Storage {
             });
         }
         let changed = self.conn.execute(
-            "UPDATE task_attempts SET state = ?1, heartbeat_at = CASE WHEN ?1 = 'RUNNING' THEN heartbeat_at ELSE heartbeat_at END, ended_at = CASE WHEN ?1 IN ('COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN') THEN COALESCE(ended_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE ended_at END WHERE attempt_id = ?2 AND state = ?3",
+            "UPDATE task_attempts SET state = ?1, ended_at = CASE WHEN ?1 IN ('COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN') THEN COALESCE(ended_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE ended_at END WHERE attempt_id = ?2 AND state = ?3",
             rusqlite::params![next_state, attempt_id, expected_state],
         ).map_err(StorageError::Db)?;
         if changed != 1 {
@@ -3889,13 +3889,10 @@ impl Storage {
 
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
-        for (column, json) in [
-            ("environment_snapshots.runtime_versions_json", None),
-            ("certification_bindings.artifact_hashes_json", Some(new.artifact_hashes_json.as_str())),
-        ] {
-            if let Some(value) = json {
-                let valid: i64 = self.conn.query_row("SELECT json_valid(?1)", [value], |r| r.get(0)).map_err(StorageError::Db)?;
-                if valid != 1 { return Err(StorageError::MalformedJson { column: column.to_string() }); }
+        if let Some(value) = Some(new.artifact_hashes_json.as_str()) {
+            let valid: i64 = self.conn.query_row("SELECT json_valid(?1)", [value], |r| r.get(0)).map_err(StorageError::Db)?;
+            if valid != 1 {
+                return Err(StorageError::MalformedJson { column: "certification_bindings.artifact_hashes_json".to_string() });
             }
         }
         self.conn.execute(
