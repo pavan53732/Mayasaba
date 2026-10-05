@@ -1566,6 +1566,29 @@ mod tests
     }
 
     #[test]
+    fn contract_surface_probe_ignores_dynamic_placeholders_and_checks_flags() {
+        let definition: serde_json::Value = serde_json::json!({
+            "launch":["run","<prompt>","--format","json","--dir","<workspace>"],
+            "resume":["run","<prompt>","--session","<native_session_id>","--format","json","--dir","<workspace>"]
+        });
+        assert!(super::contract_surface_present(
+            &definition,
+            "launch",
+            "Usage: run <message>\n--format <format>\n--dir <path>\n"
+        ));
+        assert!(super::contract_surface_present(
+            &definition,
+            "resume",
+            "Usage: run <message>\n--session <id>\n--format <format>\n--dir <path>\n"
+        ));
+        assert!(!super::contract_surface_present(
+            &definition,
+            "resume",
+            "Usage: run <message>\n--format <format>\n--dir <path>\n"
+        ));
+    }
+
+    #[test]
     fn discovery_options_have_a_bounded_default_probe_window() {
         let options = ProbeOptions::default();
         assert_eq!(options.timeout_ms, 10_000);
