@@ -202,3 +202,13 @@ fn agent_session_lifecycle_is_cas_and_capability_snapshot_is_bound() {
         "sess_discovery","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","AGENT_WORKSPACE_VALIDATING","13"
     ).expect("workspace gate");
 }
+
+#[test]
+fn scheduler_refuses_ready_tasks_from_an_older_project_epoch() {
+    let mut storage = project_storage();
+    storage.conn().execute(
+        "UPDATE projects SET current_epoch=1, updated_at='5' WHERE project_id='prj_exec'", []
+    ).expect("epoch");
+    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector");
+    assert!(rows.iter().all(|r| r.task_id != "task_exec"), "stale task epoch must not be schedulable");
+}
