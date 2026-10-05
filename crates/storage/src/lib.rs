@@ -3781,6 +3781,26 @@ impl Storage {
         Ok(())
     }
 
+    /// Refresh an attempt heartbeat only when its lease fence is still current.
+    pub fn heartbeat_task_attempt(
+        &self,
+        attempt_id: &str,
+        lease_version: i64,
+        heartbeat_at: &str,
+    ) -> Result<()> {
+        self.verify_attempt_fence(attempt_id, lease_version)?;
+        let changed = self.conn.execute(
+            "UPDATE task_attempts
+             SET heartbeat_at = ?1
+             WHERE attempt_id = ?2 AND state IN ('STARTED','RUNNING','CHECKPOINTED')",
+            rusqlite::params![heartbeat_at, attempt_id],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!("active task attempt {attempt_id}")));
+        }
+        Ok(())
+    }
+
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
     pub fn transition_task_attempt(&self, attempt_id: &str, expected_state: &str, next_state: &str) -> Result<()> {
         require_vocabulary("task_attempts.next_state", next_state, TASK_ATTEMPT_STATES)?;
@@ -3961,18 +3981,19 @@ impl Storage {
         lease_version: i64,
         released_at: &str,
     ) -> Result<()> {
-        let row: Option<(String, String, i64)> = self.conn.query_row(
-            "SELECT rr.resource_type, rr.resource_key, rr.lease_version
+        let row: Option<(String, String, i64, i64)> = self.conn.query_row(
+            "SELECT rr.resource_type, rr.resource_key, rr.lease_version, tl.lease_version
              FROM resource_reservations rr
-             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD'",
+             JOIN task_leases tl ON tl.lease_id = rr.lease_id
+             WHERE rr.reservation_id = ?1 AND rr.state = 'HELD' AND tl.status IN ('ACTIVE','RENEWING')",
             [reservation_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (resource_type, resource_key, stored_version) = match row {
+        let (resource_type, resource_key, stored_version, current_version) = match row {
             Some(v) => v,
             None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
         };
-        if stored_version != lease_version {
+        if stored_version != current_version || current_version != lease_version {
             return Err(StorageError::StaleFence {
                 attempt_id: format!("reservation:{reservation_id}"),
                 attempt_fence: stored_version,
