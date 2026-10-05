@@ -529,7 +529,8 @@ CREATE TABLE IF NOT EXISTS command_executions (
   FOREIGN KEY(task_id) REFERENCES tasks(task_id),
   FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
-  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id)
+  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id),
+  FOREIGN KEY(supersedes_binding_id) REFERENCES certification_bindings(certification_binding_id)
 );
 
 CREATE TABLE IF NOT EXISTS process_records (
@@ -677,7 +678,8 @@ CREATE TABLE IF NOT EXISTS certification_bindings (
   artifact_hashes_json TEXT NOT NULL,
   validator_version TEXT NOT NULL,
   test_suite_version TEXT,
-  status TEXT NOT NULL CHECK(status IN ('ACTIVE','SUPERSEDED','INVALIDATED','EXPIRED')),
+  status TEXT NOT NULL CHECK(status IN ('ASSERTED','INVALIDATED','EXPIRED')),
+  supersedes_binding_id TEXT,
   reason TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -780,6 +782,7 @@ CREATE INDEX IF NOT EXISTS idx_workspace_revisions_workspace ON workspace_revisi
 CREATE INDEX IF NOT EXISTS idx_environment_snapshots_project ON environment_snapshots(project_id, captured_at);
 CREATE INDEX IF NOT EXISTS idx_certification_bindings_validation ON certification_bindings(project_id, validation_id, status);
 CREATE INDEX IF NOT EXISTS idx_certification_bindings_artifacts ON certification_bindings(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_certification_bindings_supersedes ON certification_bindings(project_id, supersedes_binding_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_failures_fingerprint ON failures(project_id, fingerprint);
 CREATE INDEX IF NOT EXISTS idx_trace_source ON trace_links(project_id, source_type, source_id);
