@@ -107,8 +107,10 @@ impl AgentVersion {
 
     pub const fn line(self) -> &'static str {
         match self.major {
-            0..=1 => "1.x",
-            _ => "2.x",
+            0 => "0.x",
+            1 => "1.x",
+            2 => "2.x",
+            _ => "unknown",
         }
     }
 }
@@ -652,6 +654,7 @@ mod tests {
         let version = AgentVersion::parse("v2.0.22").expect("valid version");
         assert_eq!((version.major, version.minor, version.patch), (2, 0, 22));
         assert_eq!(version.line(), "2.x");
+        assert_eq!(AgentVersion::parse("0.21.5").unwrap().line(), "0.x");
     }
 
     #[test]
