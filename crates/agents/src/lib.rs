@@ -855,7 +855,7 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
 
     pub async fn wait(
         self,
-        storage: &mayasaba_storage::Storage,
+        storage: &mut mayasaba_storage::Storage,
         observed_at: &str,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
         let result = self.process.wait(storage, observed_at).await;
@@ -888,7 +888,7 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
 
     pub async fn wait_timeout(
         self,
-        storage: &mayasaba_storage::Storage,
+        storage: &mut mayasaba_storage::Storage,
         observed_at: &str,
         timeout: Duration,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
