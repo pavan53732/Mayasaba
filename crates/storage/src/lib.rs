@@ -4798,6 +4798,33 @@ impl Storage {
             });
         }
 
+        let effective_existing: Option<String> = self.conn.query_row(
+            "SELECT a.admission_id
+             FROM admissions a
+             WHERE a.project_id=?1 AND a.task_id=?2 AND a.workspace_id=?3 AND a.kind=?4
+               AND NOT EXISTS (
+                   SELECT 1 FROM admissions newer WHERE newer.supersedes_admission_id=a.admission_id
+               )
+             ORDER BY a.created_at DESC, a.admission_id DESC LIMIT 1",
+            rusqlite::params![new.project_id,new.task_id,new.workspace_id,new.kind],
+            |row| row.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        match (effective_existing, new.supersedes_admission_id.as_deref()) {
+            (Some(existing), Some(parent)) if existing != parent => {
+                return Err(StorageError::Malformed {
+                    column:"admissions.supersedes_admission_id".to_string(),
+                    detail:format!("admission {parent} is not the current effective admission; current is {existing}"),
+                });
+            }
+            (Some(existing), None) => {
+                return Err(StorageError::Malformed {
+                    column:"admissions.supersedes_admission_id".to_string(),
+                    detail:format!("re-evaluation must supersede current admission {existing}"),
+                });
+            }
+            _ => {}
+        }
+
         if let Some(parent_id) = new.supersedes_admission_id.as_deref() {
             let parent: Option<(String,String,String,String)> = self.conn.query_row(
                 "SELECT project_id,task_id,workspace_id,kind FROM admissions WHERE admission_id=?1",
