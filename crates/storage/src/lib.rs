@@ -3977,15 +3977,18 @@ impl Storage {
             });
         }
 
-        let context_project: Option<String> = tx.query_row(
-            "SELECT project_id FROM context_snapshots WHERE context_snapshot_id=?1",
+        let context: Option<(String,i64,Option<String>)> = tx.query_row(
+            "SELECT project_id, epoch, invalidated_at FROM context_snapshots WHERE context_snapshot_id=?1",
             [new.context_snapshot_id.as_str()],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         ).optional().map_err(StorageError::Db)?;
-        if context_project.as_deref() != Some(new.project_id.as_str()) {
+        let (context_project, context_epoch, invalidated_at) = context.ok_or_else(|| {
+            StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
+        })?;
+        if context_project != new.project_id || context_epoch != new.project_epoch || invalidated_at.is_some() {
             return Err(StorageError::Malformed {
                 column: "task_leases.context_snapshot_id".to_string(),
-                detail: "context snapshot does not belong to the lease project".to_string(),
+                detail: "context snapshot is missing, stale for the task epoch, or invalidated".to_string(),
             });
         }
 
