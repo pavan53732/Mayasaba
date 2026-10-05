@@ -587,6 +587,137 @@ fn bounded_text(text: &str, limit: usize) -> String {
     text.chars().take(limit).collect()
 }
 
+
+#[derive(Debug)]
+pub enum AgentRuntimeError {
+    Adapter(AdapterError),
+    Execution(mayasaba_execution::ExecutionError),
+    Storage(mayasaba_storage::StorageError),
+}
+
+impl From<AdapterError> for AgentRuntimeError {
+    fn from(value: AdapterError) -> Self { Self::Adapter(value) }
+}
+impl From<mayasaba_execution::ExecutionError> for AgentRuntimeError {
+    fn from(value: mayasaba_execution::ExecutionError) -> Self { Self::Execution(value) }
+}
+impl From<mayasaba_storage::StorageError> for AgentRuntimeError {
+    fn from(value: mayasaba_storage::StorageError) -> Self { Self::Storage(value) }
+}
+
+/// A running local agent session. The agent adapter normalizes its stdout events; ExecutionService owns the process.
+pub struct LiveAgentSession<A: AgentAdapter> {
+    adapter: A,
+    process: mayasaba_execution::SpawnedProcess,
+    event_sequence: u64,
+    session_id: String,
+}
+
+impl<A: AgentAdapter> LiveAgentSession<A> {
+    pub async fn next_event(
+        &mut self,
+        received_at: &str,
+    ) -> Result<Option<NativeEvent>, AgentRuntimeError> {
+        loop {
+            let Some(line) = self.process.next_stdout_line().await? else {
+                return Ok(None);
+            };
+            self.event_sequence = self.event_sequence.saturating_add(1);
+            let raw_ref = format!(
+                "execution://{}/stdout/{}",
+                self.process.execution_id, self.event_sequence
+            );
+            match self.adapter.normalize_event(&line, received_at, &raw_ref) {
+                Ok(event) => return Ok(Some(event)),
+                Err(error) => {
+                    // Unknown/malformed vendor data must never become a canonical success signal. Preserve the
+                    // failure through the adapter error path and require the controller to decide whether recovery
+                    // can continue.
+                    return Err(AgentRuntimeError::Adapter(error));
+                }
+            }
+        }
+    }
+
+    pub async fn stderr_line(&mut self) -> Result<Option<String>, AgentRuntimeError> {
+        Ok(self.process.next_stderr_line().await?)
+    }
+
+    pub async fn wait(
+        self,
+        storage: &mayasaba_storage::Storage,
+        observed_at: &str,
+    ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
+        Ok(self.process.wait(storage, observed_at).await?)
+    }
+
+    pub async fn wait_timeout(
+        self,
+        storage: &mayasaba_storage::Storage,
+        observed_at: &str,
+        timeout: Duration,
+    ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
+        Ok(self.process.wait_timeout(storage, observed_at, timeout).await?)
+    }
+}
+
+/// Launch one agent process after the caller has persisted its command as APPROVED and its session as READY.
+/// The execution kernel re-checks the task-attempt fence immediately before spawn; after spawn, this function binds
+/// the physical PID and activates the session. Any failure after spawn triggers owned-tree termination.
+pub async fn launch_live_session(
+    storage: &mut mayasaba_storage::Storage,
+    agent: AnyAgentAdapter,
+    request: &SessionLaunch,
+    version: &AgentVersion,
+    prompt: &str,
+    native_session_id: Option<&str>,
+    proof: LaunchProof,
+    execution_id: &str,
+    attempt_id: Option<&str>,
+    lease_version: Option<i64>,
+    started_at: &str,
+) -> Result<LiveAgentSession<AnyAgentAdapter>, AgentRuntimeError> {
+    let prepared = agent.prepare_launch(request, version, prompt, native_session_id, proof)?;
+    let spec = prepared.process_spec();
+    let mut process = mayasaba_execution::spawn_process(
+        storage,
+        execution_id,
+        attempt_id,
+        lease_version,
+        &spec,
+        None,
+        started_at,
+    ).await?;
+
+    if let Err(error) = storage.bind_agent_process(
+        &request.session_id,
+        i64::from(process.pid),
+        None,
+    ) {
+        let _ = process.terminate().await;
+        return Err(AgentRuntimeError::Storage(error));
+    }
+
+    let transition_result = storage.transition_agent_session(
+        &request.session_id,
+        "READY",
+        "ACTIVE",
+        "AGENT_ACTIVATED",
+        started_at,
+    );
+    if let Err(error) = transition_result {
+        let _ = process.terminate().await;
+        return Err(AgentRuntimeError::Storage(error));
+    }
+
+    Ok(LiveAgentSession {
+        adapter: agent,
+        process,
+        event_sequence: 0,
+        session_id: request.session_id.clone(),
+    })
+}
+
 impl PreparedLaunch {
     /// Convert the adapter-owned launch description into the process-neutral execution specification.
     /// Execution remains the sole owner of actual spawn/termination.
@@ -870,8 +1001,10 @@ fn is_absolute_windows_path(path: &str) -> bool {
         || path.starts_with("\\\\\\\\")
 }
 
+
 #[cfg(test)]
-mod tests {
+mod tests
+ {
     use super::*;
 
     fn proof() -> LaunchProof {
