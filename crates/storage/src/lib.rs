@@ -65,6 +65,8 @@ pub enum StorageError {
     },
     /// A task attempt presents a lease fence that is no longer authoritative.
     StaleFence { attempt_id: String, attempt_fence: i64, current_lease_version: i64, presented: i64 },
+    /// A task-attempt state change is not allowed by the attempt lifecycle.
+    InvalidAttemptTransition { attempt_id: String, from: String, to: String },
 
     /// A write named a project that does not exist.
     ///
@@ -91,6 +93,7 @@ impl std::fmt::Display for StorageError {
             StorageError::Schema(e) => write!(f, "canonical schema could not be applied: {e}"),
             StorageError::Db(e) => write!(f, "storage operation failed: {e}"),
             StorageError::StaleFence { attempt_id, attempt_fence, current_lease_version, presented } => write!(f, "stale task-attempt fence: attempt={attempt_id}, attempt_fence={attempt_fence}, current_lease_version={current_lease_version}, presented={presented}"),
+            StorageError::InvalidAttemptTransition { attempt_id, from, to } => write!(f, "invalid task-attempt transition: {attempt_id}: {from} -> {to}"),
             StorageError::NotFound(what) => write!(f, "not found: {what}"),
             StorageError::NotTerminal {
                 message_id,
@@ -3748,7 +3751,7 @@ const RESOURCE_MODES: &[&str] = &["EXCLUSIVE","SHARED"];
 const RESOURCE_STATES: &[&str] = &["HELD","RELEASED","EXPIRED","LOST"];
 const REVISION_SOURCES: &[&str] = &["CONTROLLER","AGENT","USER","EXTERNAL","GIT"];
 const REVISION_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
-const CERTIFICATION_STATES: &[&str] = &["ACTIVE","SUPERSEDED","INVALIDATED","EXPIRED"];
+const CERTIFICATION_STATES: &[&str] = &["ASSERTED","INVALIDATED","EXPIRED"];
 
 impl Storage {
     /// Persist one task attempt. Task identity is stable; attempt number is unique per task.
@@ -3775,6 +3778,51 @@ impl Storage {
             "INSERT INTO task_attempts (attempt_id, task_id, project_id, attempt_no, lease_id, agent_id, session_id, workspace_id, fence_token, project_epoch, context_snapshot_id, state, checkpoint_id, failure_id, started_at, heartbeat_at, ended_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             rusqlite::params![new.attempt_id,new.task_id,new.project_id,new.attempt_no,new.lease_id,new.agent_id,new.session_id,new.workspace_id,new.fence_token,new.project_epoch,new.context_snapshot_id,new.state,new.checkpoint_id,new.failure_id,new.started_at,new.heartbeat_at,new.ended_at,new.created_at],
         ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
+    pub fn transition_task_attempt(&self, attempt_id: &str, expected_state: &str, next_state: &str) -> Result<()> {
+        require_vocabulary("task_attempts.next_state", next_state, TASK_ATTEMPT_STATES)?;
+        let allowed = match (expected_state, next_state) {
+            ("CREATED","STARTED")
+            | ("STARTED","RUNNING")
+            | ("STARTED","FAILED")
+            | ("STARTED","CANCELLED")
+            | ("STARTED","UNKNOWN")
+            | ("RUNNING","CHECKPOINTED")
+            | ("RUNNING","COMPLETED")
+            | ("RUNNING","FAILED")
+            | ("RUNNING","TIMED_OUT")
+            | ("RUNNING","LOST")
+            | ("RUNNING","CANCELLED")
+            | ("RUNNING","UNKNOWN")
+            | ("CHECKPOINTED","RUNNING")
+            | ("CHECKPOINTED","COMPLETED")
+            | ("CHECKPOINTED","FAILED")
+            | ("CHECKPOINTED","LOST")
+            | ("CHECKPOINTED","CANCELLED")
+            | ("CHECKPOINTED","UNKNOWN") => true,
+            _ => false,
+        };
+        if !allowed {
+            return Err(StorageError::InvalidAttemptTransition {
+                attempt_id: attempt_id.to_string(),
+                from: expected_state.to_string(),
+                to: next_state.to_string(),
+            });
+        }
+        let changed = self.conn.execute(
+            "UPDATE task_attempts SET state = ?1, heartbeat_at = CASE WHEN ?1 = 'RUNNING' THEN heartbeat_at ELSE heartbeat_at END, ended_at = CASE WHEN ?1 IN ('COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN') THEN COALESCE(ended_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE ended_at END WHERE attempt_id = ?2 AND state = ?3",
+            rusqlite::params![next_state, attempt_id, expected_state],
+        ).map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::InvalidAttemptTransition {
+                attempt_id: attempt_id.to_string(),
+                from: expected_state.to_string(),
+                to: next_state.to_string(),
+            });
+        }
         Ok(())
     }
 
@@ -3841,6 +3889,15 @@ impl Storage {
 
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        for (column, json) in [
+            ("environment_snapshots.runtime_versions_json", None),
+            ("certification_bindings.artifact_hashes_json", Some(new.artifact_hashes_json.as_str())),
+        ] {
+            if let Some(value) = json {
+                let valid: i64 = self.conn.query_row("SELECT json_valid(?1)", [value], |r| r.get(0)).map_err(StorageError::Db)?;
+                if valid != 1 { return Err(StorageError::MalformedJson { column: column.to_string() }); }
+            }
+        }
         self.conn.execute(
             "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
