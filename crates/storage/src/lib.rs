@@ -3673,7 +3673,6 @@ mod tests {
 
 /// Durable retry/recovery identity for a Task. The active lease version is copied as the fencing value.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTaskLease {
     pub lease_id: String,
     pub task_id: String,
