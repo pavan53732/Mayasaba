@@ -5224,6 +5224,109 @@ impl Storage {
         }
     }
 
+    /// Validate both the lease fence and the context snapshot carried by the attempt.
+    ///
+    /// This is the final material-action gate: a worker with a current lease but stale project context is refused,
+    /// and a worker with a fresh context but a stale lease is refused. No caller should have to compose these checks
+    /// manually.
+    pub fn verify_attempt_authority(
+        &self,
+        attempt_id: &str,
+        presented_lease_version: i64,
+    ) -> Result<()> {
+        let row: Option<(String,String,String,String,String,i64,i64,String,String,Option<String>,Option<String>)> =
+            self.conn.query_row(
+                "SELECT ta.project_id, ta.task_id, ta.workspace_id, ta.lease_id, ta.context_snapshot_id,
+                        ta.fence_token, ta.project_epoch, tl.status, tl.state_digest,
+                        cs.superseded_at, cs.invalidated_at
+                 FROM task_attempts ta
+                 JOIN task_leases tl ON tl.lease_id = ta.lease_id
+                 LEFT JOIN context_snapshots cs ON cs.context_snapshot_id = ta.context_snapshot_id
+                 WHERE ta.attempt_id=?1
+                   AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED')
+                   AND tl.status IN ('ACTIVE','RENEWING')",
+                [attempt_id],
+                |r| Ok((
+                    r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,
+                    r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?,r.get(9)?,r.get(10)?
+                )),
+            ).optional().map_err(StorageError::Db)?;
+
+        let (
+            project_id,
+            _task_id,
+            _workspace_id,
+            _lease_id,
+            context_snapshot_id,
+            fence_token,
+            attempt_epoch,
+            lease_status,
+            lease_digest,
+            superseded_at,
+            invalidated_at,
+        ) = row.ok_or_else(|| StorageError::NotFound(format!("active task attempt {attempt_id}")))?;
+
+        if fence_token != presented_lease_version {
+            let current_lease_version: i64 = self.conn.query_row(
+                "SELECT lease_version FROM task_leases WHERE lease_id=(SELECT lease_id FROM task_attempts WHERE attempt_id=?1)",
+                [attempt_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            return Err(StorageError::StaleFence {
+                attempt_id: attempt_id.to_owned(),
+                attempt_fence: fence_token,
+                current_lease_version,
+                presented: presented_lease_version,
+            });
+        }
+
+        if lease_status != "ACTIVE" && lease_status != "RENEWING" {
+            return Err(StorageError::NotFound(format!("active lease for task attempt {attempt_id}")));
+        }
+
+        let project_epoch: i64 = self.conn.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [project_id.as_str()],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?
+        .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
+
+        if attempt_epoch != project_epoch {
+            return Err(StorageError::Malformed {
+                column: "task_attempts.project_epoch".to_string(),
+                detail: format!(
+                    "attempt epoch {} is stale against authoritative project epoch {}",
+                    attempt_epoch, project_epoch
+                ),
+            });
+        }
+
+        let context: Option<(String,i64,String,Option<String>,Option<String>)> = self.conn.query_row(
+            "SELECT project_id,epoch,state_digest,superseded_at,invalidated_at
+             FROM context_snapshots WHERE context_snapshot_id=?1",
+            [context_snapshot_id.as_str()],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (context_project, context_epoch, context_digest, context_superseded, context_invalidated) =
+            context.ok_or_else(|| StorageError::NotFound(format!("context snapshot {context_snapshot_id}")))?;
+
+        if context_project != project_id
+            || context_epoch != attempt_epoch
+            || context_digest != lease_digest
+            || superseded_at.is_some()
+            || invalidated_at.is_some()
+            || context_superseded.is_some()
+            || context_invalidated.is_some()
+        {
+            return Err(StorageError::Malformed {
+                column: "task_attempts.context_snapshot_id".to_string(),
+                detail: "task attempt context is stale, invalidated, superseded or inconsistent with the lease digest".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     pub fn insert_resource_reservation(&self, new: &NewResourceReservation) -> Result<()> {
         require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
