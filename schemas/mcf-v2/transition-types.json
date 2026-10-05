@@ -2641,6 +2641,45 @@
         "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
         "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
         "failure_transition": null
+      },
+      {
+        "transition_id": "task.RECOVERY_PENDING->READY",
+        "owner": "crates/tasks",
+        "source_state": "RECOVERY_PENDING",
+        "event_type": "TASK_READY",
+        "command": "RECOVER_EXPIRED_TASK",
+        "guards": [
+          {
+            "project": "current phase == LEASE_EXPIRED; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task state == RECOVERY_PENDING; no live lease, nonterminal attempt or recoverable execution remains",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "task.state = READY",
+        "emitted_events": [
+          "TASK_READY"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
       }
     ],
     "lease": [
