@@ -25,7 +25,7 @@ impl ContextService {
     }
 
     pub fn create_snapshot(
-        &self,
+        &mut self,
         snapshot: &NewContextSnapshot,
     ) -> Result<ContextSnapshotRecord> {
         let record = self.storage.create_context_snapshot(snapshot)?;
@@ -57,7 +57,7 @@ impl ContextService {
     }
 
     pub fn supersede(
-        &self,
+        &mut self,
         context_snapshot_id: &str,
         at: &str,
     ) -> Result<()> {
@@ -78,7 +78,7 @@ impl ContextService {
     }
 
     pub fn invalidate(
-        &self,
+        &mut self,
         context_snapshot_id: &str,
         at: &str,
     ) -> Result<()> {
@@ -105,8 +105,7 @@ impl ContextService {
         payload_json: &str,
         created_at: &str,
     ) -> Result<()> {
-        let mut writer = self.storage.clone_for_event_write();
-        writer.append_event(&NewEvent {
+        self.storage.append_event(&NewEvent {
             event_id: format!("evt_ctx_{}_{}", snapshot.context_snapshot_id, event_type),
             project_id: Some(snapshot.project_id.clone()),
             session_id: None,
