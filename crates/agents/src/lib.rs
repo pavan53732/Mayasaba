@@ -12,6 +12,7 @@ use std::process::Stdio;
 use tokio::{process::Command, time::{self, Duration}};
 
 const NATIVE_TRANSPORT_CONTRACT: &str =
+const NATIVE_TO_MCF_REGISTRY: &str = include_str!("../../../schemas/agent-adapter-v1/native-to-mcf.registry.json");
     include_str!("../../../schemas/agent-adapter-v1/native-transport-contract.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,6 +174,23 @@ pub enum HealthState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandshakeEnvelopeInput {
+    pub message_id: String,
+    pub event_id: String,
+    pub correlation_id: String,
+    pub project_id: String,
+    pub session_id: String,
+    pub agent_id: String,
+    pub agent_type: AgentType,
+    pub adapter_version: String,
+    pub protocol_versions: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub native_transport: Transport,
+    pub workspace_id: Option<String>,
+    pub project_epoch: i64,
+    pub created_at: String,
+}
 pub struct SessionLaunch {
     pub project_id: String,
     pub session_id: String,
