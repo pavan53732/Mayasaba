@@ -258,6 +258,35 @@ CREATE TABLE IF NOT EXISTS task_leases (
   FOREIGN KEY(task_id) REFERENCES tasks(task_id)
 );
 
+-- Reliability persistence (orchestration refinement).
+-- TaskAttempt is distinct from Task: retries/recovery create a new attempt identity while the task remains stable.
+-- The active TaskLease's lease_version is the fencing token; no second fencing authority is introduced.
+CREATE TABLE IF NOT EXISTS task_attempts (
+  attempt_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  lease_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  fence_token INTEGER NOT NULL,
+  project_epoch INTEGER NOT NULL,
+  context_snapshot_id TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('CREATED','STARTED','RUNNING','CHECKPOINTED','COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN')),
+  checkpoint_id TEXT,
+  failure_id TEXT,
+  started_at TEXT,
+  heartbeat_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(task_id, attempt_no),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(lease_id) REFERENCES task_leases(lease_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(checkpoint_id) REFERENCES workspace_checkpoints(checkpoint_id),
+  FOREIGN KEY(failure_id) REFERENCES failures(failure_id)
+);
 CREATE TABLE IF NOT EXISTS handoffs (
   handoff_id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL,
