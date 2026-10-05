@@ -454,8 +454,8 @@ const MUTATIONS = [
     edits: [
       {
         file: BRIDGE_TS,
-        find: "      project_id: projectId,\n      consumer_id: consumerId,",
-        replace: "      projectId: projectId,\n      consumer_id: consumerId,",
+        find: "      consumer_id: consumerId,",
+        replace: "      consumerId: consumerId,",
       },
     ],
     expect: ["project_id"],
