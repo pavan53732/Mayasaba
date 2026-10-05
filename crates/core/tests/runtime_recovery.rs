@@ -24,6 +24,10 @@ fn storage() -> Storage {
         "INSERT INTO tasks (task_id, project_id, objective, status, priority, risk, workspace_id, current_epoch, created_at, updated_at) VALUES ('task_1','prj_recovery','test','READY',1,'LOW','ws_1',0,'1','1')", []
     ).expect("task");
     s.conn().execute(
+        "INSERT INTO task_scopes (task_id,allowed_paths_json,required_capabilities_json,validation_requirements_json,policy_scope,max_attempts,max_parallel_children,created_at,updated_at)
+         VALUES ('task_1','[]','[]','[]','PROJECT_WRITE',3,2,'1','1')", []
+    ).expect("scope");
+    s.conn().execute(
         "INSERT INTO agent_sessions (session_id, project_id, agent_id, state, health_state, workspace_id, current_epoch, started_at) VALUES ('sess_1','prj_recovery','agent_1','READY','HEALTHY','ws_1',0,'1')", []
     ).expect("session");
     s.conn().execute(
