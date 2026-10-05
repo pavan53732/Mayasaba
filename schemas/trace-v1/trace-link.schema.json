@@ -6,7 +6,7 @@
   "required":["trace_link_id","project_id","link_type","source_type","source_id","target_type","target_id"],
   "properties":{
     "trace_link_id":{"type":"string","format":"uuid"},"project_id":{"type":"string","format":"uuid"},
-    "link_type":{"enum":["INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION","DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK","TASK_LEASE","LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION","VALIDATION_CERTIFICATION"]},
+    "link_type":{"enum":["INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION","DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK","TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION","LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT","EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION","VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION"]},
     "source_type":{"type":"string"},"source_id":{"type":"string","format":"uuid"},"target_type":{"type":"string"},"target_id":{"type":"string","format":"uuid"}
   }
 }
