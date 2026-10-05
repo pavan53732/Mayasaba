@@ -63,6 +63,9 @@ pub enum StorageError {
         channel: String,
         sequence: i64,
     },
+    /// A task attempt presents a lease fence that is no longer authoritative.
+    StaleFence { attempt_id: String, attempt_fence: i64, current_lease_version: i64, presented: i64 },
+
     /// A write named a project that does not exist.
     ///
     /// `messages`, `outbox`, `message_receipts` and `dead_letters` each carry a foreign key to `projects`, so
@@ -87,6 +90,7 @@ impl std::fmt::Display for StorageError {
         match self {
             StorageError::Schema(e) => write!(f, "canonical schema could not be applied: {e}"),
             StorageError::Db(e) => write!(f, "storage operation failed: {e}"),
+            StorageError::StaleFence { attempt_id, attempt_fence, current_lease_version, presented } => write!(f, "stale task-attempt fence: attempt={attempt_id}, attempt_fence={attempt_fence}, current_lease_version={current_lease_version}, presented={presented}"),
             StorageError::NotFound(what) => write!(f, "not found: {what}"),
             StorageError::NotTerminal {
                 message_id,
@@ -3757,12 +3761,11 @@ impl Storage {
         match current {
             Some(version) if version == new.fence_token => {}
             Some(version) => {
-                return Err(StorageError::Malformed {
-                    column: "task_leases.lease_version".to_string(),
-                    detail: format!(
-                        "cannot create task attempt {} with stale fence {} while current lease version is {}",
-                        new.attempt_id, new.fence_token, version
-                    ),
+                return Err(StorageError::StaleFence {
+                    attempt_id: new.attempt_id.clone(),
+                    attempt_fence: new.fence_token,
+                    current_lease_version: version,
+                    presented: new.fence_token,
                 })
             }
             None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
@@ -3783,7 +3786,7 @@ impl Storage {
         ).optional().map_err(StorageError::Db)?;
         match row {
             Some((fence_token, current)) if fence_token == current && presented_lease_version == current => Ok(()),
-            Some((fence_token, current)) => Err(StorageError::Malformed { column: "task_leases.lease_version".to_string(), detail: format!("stale task-attempt fence: attempt={attempt_id}, attempt_fence={fence_token}, current_lease_version={current}, presented={presented_lease_version}"), }),
+            Some((fence_token, current)) => Err(StorageError::StaleFence { attempt_id: attempt_id.to_string(), attempt_fence: fence_token, current_lease_version: current, presented: presented_lease_version }),
             None => Err(StorageError::NotFound(format!("active lease for task attempt {attempt_id}"))),
         }
     }
