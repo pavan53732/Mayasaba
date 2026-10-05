@@ -15,3 +15,5 @@ pub use project_service::{
     validate_workspace, CreateProjectError, CreateProjectOutcome, ProjectService,
     ProjectValidationError,
 };
+
+pub use recovery_service::{build_runtime_recovery_plan, RuntimeRecoveryAction, RuntimeRecoveryCandidate, RuntimeRecoveryPlan};
