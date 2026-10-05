@@ -4691,8 +4691,6 @@ impl Storage {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-
 /// Durable recovery candidate for a non-terminal task attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoverableAttempt {
@@ -4704,6 +4702,17 @@ pub struct RecoverableAttempt {
     pub fence_token: i64,
     pub current_lease_version: Option<i64>,
     pub lease_status: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverableExecution {
+    pub execution_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub status: String,
+    pub pid: Option<i64>,
+    pub process_state: Option<String>,
 }
 
 pub struct NewTraceLink {
@@ -4808,6 +4817,31 @@ impl Storage {
             attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
             state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
             current_lease_version:r.get(6)?, lease_status:r.get(7)?
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// List nonterminal or cleanup-relevant executions and their newest physical process observation.
+    pub fn list_recoverable_executions(&self, project_id: &str) -> Result<Vec<RecoverableExecution>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.execution_id, ce.project_id, ce.task_id, ce.attempt_id, ce.status,
+                    pr.pid, pr.state
+             FROM command_executions ce
+             LEFT JOIN process_records pr
+               ON pr.process_record_id = (
+                   SELECT p2.process_record_id
+                   FROM process_records p2
+                   WHERE p2.execution_id = ce.execution_id
+                   ORDER BY p2.observed_at DESC, p2.process_record_id DESC
+                   LIMIT 1
+               )
+             WHERE ce.project_id = ?1
+               AND ce.status IN ('STARTING','RUNNING','TIMEOUT','CANCELED','CRASHED','CLEANUP_REQUIRED')
+             ORDER BY ce.execution_id ASC"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map([project_id], |r| Ok(RecoverableExecution {
+            execution_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
+            attempt_id:r.get(3)?, status:r.get(4)?, pid:r.get(5)?, process_state:r.get(6)?
         })).map_err(StorageError::Db)?;
         rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
     }
