@@ -180,3 +180,14 @@ phase is the project lifecycle phase or UNSCOPED for messages not tied to a proj
 ## Idempotency
 
 operation_id identifies one logical material operation across delivery retries. message_id identifies one envelope/delivery record. A retry may create a new message_id while retaining the same operation_id and idempotency key.
+
+
+## 13. Long-running attempt fencing
+
+`authorization_context.lease_version` is the fencing value for material task actions. It must equal the current durable `TaskLease.lease_version` at admission and before every material side effect. A message that carries an older lease version may be observed for recovery/audit but must not authorize a write.
+
+`TaskAttempt` identity is domain state and need not become a new MCF message family. Attempt identity should be carried in the existing task/execution payloads where required; adding a wire type only to mirror persistence would create protocol duplication.
+
+## 14. Integration and external-effect boundary
+
+MCF transactions make controller state, events and outbox records durable; they do not make Git/filesystem/build/test operations ACID. Integration therefore remains a controller-coordinated protocol with checkpoints, observed workspace revisions, validation and promotion/rollback. A successful message ACK never implies that an external workspace effect succeeded.
