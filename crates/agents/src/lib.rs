@@ -331,6 +331,20 @@ pub struct KiloAdapter;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenCodeAdapter;
 
+impl PreparedLaunch {
+    /// Convert the adapter-owned launch description into the process-neutral execution specification.
+    /// Execution remains the sole owner of actual spawn/termination.
+    pub fn process_spec(&self) -> mayasaba_execution::ProcessSpec {
+        mayasaba_execution::ProcessSpec {
+            executable: self.executable.clone(),
+            argv: self.argv.clone(),
+            cwd: self.cwd.clone(),
+            environment: self.environment.clone(),
+            scrub_inherited_environment: self.scrub_inherited_environment.clone(),
+        }
+    }
+}
+
 impl AgentAdapter for HermesAdapter {
     fn agent_type(&self) -> AgentType { AgentType::Hermes }
     fn prepare_launch(&self, request: &SessionLaunch, version: &AgentVersion, prompt: &str,
