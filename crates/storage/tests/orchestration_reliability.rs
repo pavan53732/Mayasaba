@@ -257,9 +257,9 @@ fn attempt_transition_is_compare_and_swap_and_heartbeat_is_fenced() {
         state:"CREATED".into(), checkpoint_id:None, failure_id:None,
         started_at:None, heartbeat_at:Some("1".into()), ended_at:None, created_at:"1".into()
     }).expect("attempt");
-    storage.transition_task_attempt("att_transition","CREATED","STARTED").expect("start");
-    assert!(storage.transition_task_attempt("att_transition","CREATED","RUNNING").is_err(), "CAS must reject a stale expected state");
-    storage.transition_task_attempt("att_transition","STARTED","RUNNING").expect("running");
+    storage.transition_task_attempt("att_transition","CREATED","STARTED",None).expect("start");
+    assert!(storage.transition_task_attempt("att_transition","CREATED","RUNNING",None).is_err(), "CAS must reject a stale expected state");
+    storage.transition_task_attempt("att_transition","STARTED","RUNNING",None).expect("running");
     storage.heartbeat_task_attempt("att_transition",7,"2").expect("heartbeat");
     storage.conn().execute("UPDATE task_leases SET lease_version=8 WHERE lease_id='lease_1'",[]).expect("renew");
     assert!(storage.heartbeat_task_attempt("att_transition",7,"3").is_err(), "stale fence cannot heartbeat after lease rollover");
