@@ -1140,3 +1140,6 @@ Classification: REFINEMENT. Reconciliation must distinguish desired, reported an
 
 ### DEC-084 — No duplicate mission/journal/cell/supervisor authorities
 Classification: REFINEMENT. Project remains the durable lifecycle root; events remain the journal; AgentSession/process records represent runtime identity; existing task/lease/workspace/context/execution records compose execution cells. Mission, Worker, ExecutionCell, SwarmCell and Supervisor may be used as controller views/groupings but do not become competing sources of truth without a separately justified future requirement.
+
+### DEC-085 — Reliability additions do not require non-migratable alterations to existing tables
+Classification: REFINEMENT. New durability records are additive tables. Relationships from `TaskAttempt` to pre-existing execution/checkpoint/admission records use the existing traceability tables rather than adding columns to existing SQLite tables while the repository has no general migration runner. A future schema migration may normalize these relationships only through an explicit compatibility decision.
