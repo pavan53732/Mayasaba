@@ -118,7 +118,8 @@ A round's termination result is persisted in `council_outcomes` with exactly one
 
 ## Traceability persistence
 
-Trace links are first-class durable relationships represented by `trace_links` and coverage projections. Traceability indexes authoritative objects and is not a second source of truth.
+Trace links are first-class durable relationships represented by `trace_links` and coverage projections. Traceability indexes authoritative objects and is not a second source of truth. Reliability provenance uses the closed `trace-v1` vocabulary to connect TaskAttempts to checkpoints and executions, and execution/validation records to environment snapshots.
+
 
 ## Message persistence
 
