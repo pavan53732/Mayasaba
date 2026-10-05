@@ -1427,6 +1427,61 @@ mod tests
     }
 
     #[test]
+    fn handshake_builder_refuses_missing_mcf2() {
+        let input = HandshakeEnvelopeInput {
+            message_id:"11111111-1111-4111-8111-111111111111".into(),
+            event_id:"22222222-2222-4222-8222-222222222222".into(),
+            correlation_id:"33333333-3333-4333-8333-333333333333".into(),
+            project_id:"44444444-4444-4444-8444-444444444444".into(),
+            session_id:"55555555-5555-4555-8555-555555555555".into(),
+            agent_id:"66666666-6666-4666-8666-666666666666".into(),
+            agent_type:AgentType::Hermes,
+            adapter_version:"1.0.0".into(),
+            protocol_versions:vec!["MCF-1".into()],
+            capabilities:vec![],
+            native_transport:Transport::HermesStreamJson,
+            workspace_id:None,
+            project_epoch:0,
+            created_at:"2026-10-05T17:00:00Z".into(),
+        };
+        let error = build_handshake_envelope(&input).expect_err("MCF-2 is mandatory");
+        assert_eq!(error.code,"HANDSHAKE_PROTOCOL_VERSION_MISSING");
+    }
+
+    #[test]
+    fn handshake_builder_produces_protocol_valid_envelope() {
+        let input = HandshakeEnvelopeInput {
+            message_id:"11111111-1111-4111-8111-111111111111".into(),
+            event_id:"22222222-2222-4222-8222-222222222222".into(),
+            correlation_id:"33333333-3333-4333-8333-333333333333".into(),
+            project_id:"44444444-4444-4444-8444-444444444444".into(),
+            session_id:"55555555-5555-4555-8555-555555555555".into(),
+            agent_id:"66666666-6666-4666-8666-666666666666".into(),
+            agent_type:AgentType::Kilo,
+            adapter_version:"1.0.0".into(),
+            protocol_versions:vec!["MCF-2".into()],
+            capabilities:vec!["version_probe".into(),"structured_transport".into()],
+            native_transport:Transport::KiloJson,
+            workspace_id:Some("77777777-7777-4777-8777-777777777777".into()),
+            project_epoch:2,
+            created_at:"2026-10-05T17:00:00Z".into(),
+        };
+        let text = build_handshake_envelope(&input).expect("valid");
+        let parsed = mayasaba_protocol::envelope::parse_envelope(&text).expect("validator");
+        assert_eq!(parsed.message_type(),"HANDSHAKE");
+        assert_eq!(parsed.project_epoch(),2);
+        assert_eq!(parsed.channel(),"agent");
+    }
+
+    #[test]
+    fn native_mapping_comes_from_registry_and_preserves_unmapped_telemetry() {
+        assert_eq!(native_event_mcf_type(NativeEventKind::SESSION_STARTED).as_deref(),Some("HANDSHAKE_ACK"));
+        assert_eq!(native_event_mcf_type(NativeEventKind::HEARTBEAT).as_deref(),Some("HEARTBEAT"));
+        assert_eq!(native_event_mcf_type(NativeEventKind::REASONING),None);
+        assert_eq!(native_event_mcf_type(NativeEventKind::UNKNOWN),None);
+    }
+
+    #[test]
     fn probe_version_parser_accepts_vendor_prefixes() {
         assert_eq!((super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().major,
                     super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().minor), (0,21));
