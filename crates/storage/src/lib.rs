@@ -5034,15 +5034,30 @@ impl Storage {
         }
 
         let unresolved_executions: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM command_executions
-             WHERE task_id=?1 AND status IN ('STARTING','RUNNING','TIMEOUT','CANCELED','CRASHED','CLEANUP_REQUIRED')",
+            "SELECT COUNT(*)
+             FROM command_executions ce
+             WHERE ce.task_id=?1
+               AND (
+                   ce.status IN ('STARTING','RUNNING','CLEANUP_REQUIRED')
+                   OR EXISTS (
+                       SELECT 1
+                       FROM process_records pr
+                       WHERE pr.execution_id=ce.execution_id
+                         AND pr.state='UNKNOWN'
+                         AND pr.observed_at = (
+                             SELECT MAX(pr2.observed_at)
+                             FROM process_records pr2
+                             WHERE pr2.execution_id=ce.execution_id
+                         )
+                   )
+               )",
             [task_id],
-            |row| row.get(0),
+            |row| get::<_, i64>(row, 0),
         ).map_err(StorageError::Db)?;
         if unresolved_executions != 0 {
             return Err(StorageError::Malformed {
                 column: "command_executions.status".to_string(),
-                detail: format!("task {task_id} still has {unresolved_executions} recoverable execution(s)"),
+                detail: format!("task {task_id} still has {unresolved_executions} live/cleanup/unknown execution(s)"),
             });
         }
 
