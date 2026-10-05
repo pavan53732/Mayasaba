@@ -6072,7 +6072,26 @@ impl Storage {
             });
         }
 
-        let slot = held + 1;
+        let mut slot = 1_i64;
+        while slot <= max_children {
+            let key = format!("task:{task_id}:child:{slot}");
+            let occupied: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM resource_reservations
+                 WHERE task_id=?1 AND resource_type='PROCESS_SLOT' AND resource_key=?2 AND state='HELD'",
+                rusqlite::params![task_id,key],
+                |row| row.get(0),
+            ).map_err(StorageError::Db)?;
+            if occupied == 0 {
+                break;
+            }
+            slot += 1;
+        }
+        if slot > max_children {
+            return Err(StorageError::Malformed {
+                column:"task_scopes.max_parallel_children".to_string(),
+                detail:format!("task {task_id} has no free child slot despite budget accounting"),
+            });
+        }
         tx.execute(
             "INSERT INTO resource_reservations (
                 reservation_id,project_id,task_id,lease_id,lease_version,resource_type,resource_key,mode,
