@@ -57,3 +57,21 @@ Execution evidence contains command metadata, result, exit status, timestamps, o
 
 ## Recovery
 After controller restart, running executions are reconciled against actual OS process state before they can be resumed, canceled or marked failed.
+
+
+## Reliability refinements
+
+### Process-tree ownership
+Every execution is associated with its process tree. On Windows, graceful cancellation is attempted first; termination then targets the owned process tree/job boundary. Completion of cancellation requires observation that no owned descendant remains, or an explicit `UNKNOWN`/recovery record when observation is impossible.
+
+### Ports and local resources
+Ports, process slots and other scarce machine-local resources are admitted through `ResourceReservation`. The execution kernel must not assume that a port is free because the reservation table says so; admission reconciles the reservation with actual OS/process state.
+
+### Environment provenance
+At execution/validation start, capture an `EnvironmentSnapshot` containing observed OS identity, relevant runtime/toolchain versions and the environment-policy hash. The snapshot ID is carried into execution evidence and later certification binding.
+
+### Command provenance
+Each command remains tied to project/task/attempt/session/workspace and causal identifiers. The kernel records the exact cwd and effective non-secret environment policy. Secret values are never copied into command evidence.
+
+### Unknown physical state
+If a process disappears before its terminal result is observed, the kernel records `UNKNOWN` rather than guessing success or failure. Reconciliation may later map the attempt to a terminal outcome after filesystem/process evidence is checked.
