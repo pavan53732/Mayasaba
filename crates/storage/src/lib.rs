@@ -3229,6 +3229,20 @@ const OUTCOME_SOURCE_VOCABULARY: &[&str] =
 ///
 /// The returned reference borrows `allowed`, which is always one of this crate's own `const` tables, so the
 /// caller gets the canonical spelling rather than the string it passed in.
+fn task_lease_task_event_payload(
+    project_id: &str,
+    task_id: &str,
+    lease_id: &str,
+    state: &str,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("task_id", canonical::JcsValue::Str(task_id)),
+        ("lease_id", canonical::JcsValue::Str(lease_id)),
+        ("state", canonical::JcsValue::Str(state)),
+    ])
+}
+
 fn lease_event_payload(
     project_id: &str,
     task_id: &str,
@@ -3902,8 +3916,6 @@ impl Storage {
     /// lease after a crash.
     pub fn lease_task(&mut self, new: &NewTaskLease) -> Result<TaskLeaseRecord> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        require_vocabulary("task_leases.status", "REQUESTED", LEASE_STATES)?;
-
         let task: Option<(String,Option<String>,i64,String)> = tx.query_row(
             "SELECT project_id, workspace_id, current_epoch, status FROM tasks WHERE task_id=?1",
             [new.task_id.as_str()],
@@ -3911,7 +3923,10 @@ impl Storage {
         ).optional().map_err(StorageError::Db)?;
         let (task_project, task_workspace, task_epoch, task_status) =
             task.ok_or_else(|| StorageError::NotFound(format!("task {}", new.task_id)))?;
-        if task_project != new.project_id || task_workspace.as_deref() != Some(new.workspace_id.as_str()) || task_epoch != new.project_epoch {
+        if task_project != new.project_id
+            || task_workspace.as_deref() != Some(new.workspace_id.as_str())
+            || task_epoch != new.project_epoch
+        {
             return Err(StorageError::Malformed {
                 column: "task_leases".to_string(),
                 detail: "lease does not match task project/workspace/epoch".to_string(),
@@ -3929,7 +3944,7 @@ impl Storage {
             [new.agent_id.as_str()],
             |row| row.get(0),
         ).map_err(StorageError::Db)?;
-        let session: Option<(String,String,String,String, i64)> = tx.query_row(
+        let session: Option<(String,String,String,String,i64)> = tx.query_row(
             "SELECT project_id, agent_id, state, health_state, current_epoch FROM agent_sessions WHERE session_id=?1",
             [new.session_id.as_str()],
             |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
@@ -3939,8 +3954,11 @@ impl Storage {
         }
         let (session_project, session_agent, session_state, health, session_epoch) =
             session.ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))?;
-        if session_project != new.project_id || session_agent != new.agent_id || !matches!(session_state.as_str(), "READY" | "ACTIVE")
-            || health != "HEALTHY" || session_epoch != new.project_epoch
+        if session_project != new.project_id
+            || session_agent != new.agent_id
+            || !matches!(session_state.as_str(), "READY" | "ACTIVE")
+            || health != "HEALTHY"
+            || session_epoch != new.project_epoch
         {
             return Err(StorageError::Malformed {
                 column: "agent_sessions".to_string(),
@@ -3972,25 +3990,51 @@ impl Storage {
             });
         }
 
-        for json_field in [&new.allowed_paths_json, &new.required_capabilities_json] {
+        for (column, json_field) in [
+            ("task_leases.allowed_paths_json", &new.allowed_paths_json),
+            ("task_leases.required_capabilities_json", &new.required_capabilities_json),
+        ] {
             let value: serde_json::Value = serde_json::from_str(json_field).map_err(|e| StorageError::Malformed {
-                column: "task_leases".to_string(),
-                detail: format!("lease JSON must be valid: {e}"),
+                column: column.to_string(),
+                detail: format!("must be valid JSON: {e}"),
             })?;
             if !value.is_array() {
                 return Err(StorageError::Malformed {
-                    column: "task_leases".to_string(),
-                    detail: "allowed_paths_json and required_capabilities_json must be JSON arrays".to_string(),
+                    column: column.to_string(),
+                    detail: "must be a JSON array".to_string(),
                 });
             }
         }
-        if new.issued_at.trim().is_empty() || new.heartbeat_at.trim().is_empty() || new.expires_at.trim().is_empty()
-            || new.state_digest.trim().is_empty() || new.policy_scope.trim().is_empty()
+        if new.issued_at.trim().is_empty()
+            || new.heartbeat_at.trim().is_empty()
+            || new.expires_at.trim().is_empty()
+            || new.state_digest.trim().is_empty()
+            || new.policy_scope.trim().is_empty()
         {
             return Err(StorageError::Malformed {
                 column: "task_leases".to_string(),
                 detail: "lease timestamps, state_digest and policy_scope are required".to_string(),
             });
+        }
+
+        // Make the task's lease-request transition and the lease's request/grant transitions one SQLite transaction.
+        // The event IDs use different identities so TASK and LEASE lifecycle events cannot collide.
+        if task_status == "READY" {
+            tx.execute(
+                "UPDATE tasks SET status='LEASE_REQUESTED', updated_at=?1 WHERE task_id=?2 AND status='READY'",
+                rusqlite::params![new.issued_at, new.task_id],
+            ).map_err(StorageError::Db)?;
+            append_event_in(&tx, &transition_event(
+                &tx,
+                &format!("task_{}", new.task_id),
+                "LEASE_REQUESTED",
+                &new.project_id,
+                &new.session_id,
+                &new.lease_id,
+                None,
+                task_lease_task_event_payload(&new.project_id, &new.task_id, &new.lease_id, "LEASE_REQUESTED")?,
+                &new.issued_at,
+            )?)?;
         }
 
         tx.execute(
@@ -4004,8 +4048,15 @@ impl Storage {
         ).map_err(StorageError::Db)?;
 
         append_event_in(&tx, &transition_event(
-            &tx,&new.lease_id,"LEASE_REQUESTED",&new.project_id,&new.session_id,&new.lease_id,None,
-            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"REQUESTED")?,&new.issued_at
+            &tx,
+            &format!("lease_{}", new.lease_id),
+            "LEASE_REQUESTED",
+            &new.project_id,
+            &new.session_id,
+            &new.lease_id,
+            None,
+            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"REQUESTED")?,
+            &new.issued_at,
         )?)?;
 
         tx.execute(
@@ -4013,8 +4064,31 @@ impl Storage {
             [new.lease_id.as_str()],
         ).map_err(StorageError::Db)?;
         append_event_in(&tx, &transition_event(
-            &tx,&new.lease_id,"LEASE_ACTIVE",&new.project_id,&new.session_id,&new.lease_id,None,
-            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"ACTIVE")?,&new.issued_at
+            &tx,
+            &format!("lease_{}", new.lease_id),
+            "LEASE_ACTIVE",
+            &new.project_id,
+            &new.session_id,
+            &new.lease_id,
+            None,
+            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"ACTIVE")?,
+            &new.issued_at,
+        )?)?;
+
+        tx.execute(
+            "UPDATE tasks SET status='LEASED', updated_at=?1 WHERE task_id=?2 AND status='LEASE_REQUESTED'",
+            rusqlite::params![new.issued_at, new.task_id],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,
+            &format!("task_{}", new.task_id),
+            "TASK_LEASED",
+            &new.project_id,
+            &new.session_id,
+            &new.lease_id,
+            None,
+            task_lease_task_event_payload(&new.project_id,&new.task_id,&new.lease_id,"LEASED")?,
+            &new.issued_at,
         )?)?;
 
         tx.commit().map_err(StorageError::Db)?;
