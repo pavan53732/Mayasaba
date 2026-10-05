@@ -212,3 +212,26 @@ fn scheduler_refuses_ready_tasks_from_an_older_project_epoch() {
     let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector");
     assert!(rows.iter().all(|r| r.task_id != "task_exec"), "stale task epoch must not be schedulable");
 }
+
+
+#[test]
+fn child_agent_slot_budget_is_atomic_and_reuses_free_slots() {
+    let mut storage = project_storage();
+    storage.conn().execute(
+        "INSERT INTO task_scopes (task_id,allowed_paths_json,required_capabilities_json,validation_requirements_json,policy_scope,max_attempts,max_parallel_children,created_at,updated_at)
+         VALUES ('task_exec','[]','[]','[]','PROJECT_WRITE',3,2,'1','1')", []
+    ).expect("scope");
+
+    let first = storage.reserve_child_slot("slot_1","task_exec","lease_exec",3,"2","99")
+        .expect("first slot");
+    let second = storage.reserve_child_slot("slot_2","task_exec","lease_exec",3,"2","99")
+        .expect("second slot");
+    assert_eq!(first, "task:task_exec:child:1");
+    assert_eq!(second, "task:task_exec:child:2");
+    assert!(storage.reserve_child_slot("slot_3","task_exec","lease_exec",3,"2","99").is_err());
+
+    storage.release_resource_reservation("slot_1",3,"3").expect("release first");
+    let reused = storage.reserve_child_slot("slot_3","task_exec","lease_exec",3,"4","99")
+        .expect("reuse first free slot");
+    assert_eq!(reused, "task:task_exec:child:1");
+}
