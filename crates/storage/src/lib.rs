@@ -5052,7 +5052,7 @@ impl Storage {
                    )
                )",
             [task_id],
-            |row| get::<_, i64>(row, 0),
+            |row| row.get(0),
         ).map_err(StorageError::Db)?;
         if unresolved_executions != 0 {
             return Err(StorageError::Malformed {
