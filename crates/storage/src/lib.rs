@@ -3243,6 +3243,20 @@ fn context_event_payload(
     ])
 }
 
+fn agent_health_event_payload(
+    session_id: &str,
+    project_id: &str,
+    agent_id: &str,
+    health_state: &str,
+) -> Result<String> {
+    canonical::jcs_object(&[
+        ("session_id", canonical::JcsValue::Str(session_id)),
+        ("project_id", canonical::JcsValue::Str(project_id)),
+        ("agent_id", canonical::JcsValue::Str(agent_id)),
+        ("health_state", canonical::JcsValue::Str(health_state)),
+    ])
+}
+
 fn agent_session_event_payload(
     project_id: &str,
     session_id: &str,
@@ -4349,20 +4363,21 @@ impl Storage {
                 detail: format!("illegal agent-session transition {expected_state} -> {next_state}"),
             });
         }
-        let expected_event = match next_state {
-            "HANDSHAKING" => "AGENT_HANDSHAKING",
-            "CAPABILITY_VALIDATING" => "AGENT_CAPABILITY_VALIDATING",
-            "WORKSPACE_VALIDATING" => "AGENT_WORKSPACE_VALIDATING",
-            "READY" => "AGENT_READY",
-            "ACTIVE" => "AGENT_ACTIVATED",
-            "PAUSED" => "AGENT_PAUSED",
-            "DRAINING" => "AGENT_DRAINING",
-            "STOPPED" => "AGENT_STOPPED",
-            "LOST" => "AGENT_LOST",
-            "RECONNECTING" => "AGENT_RECONNECTING",
-            "SYNCING" => "AGENT_SYNCED",
-            "FAILED" => "AGENT_FAILED",
-            "DISCOVERED" => "AGENT_DISCOVERED",
+        let expected_event = match (expected_state, next_state) {
+            ("DISCOVERED","HANDSHAKING") => "AGENT_HANDSHAKING",
+            ("HANDSHAKING","CAPABILITY_VALIDATING") => "AGENT_CAPABILITY_VALIDATING",
+            ("CAPABILITY_VALIDATING","WORKSPACE_VALIDATING") => "AGENT_WORKSPACE_VALIDATING",
+            ("WORKSPACE_VALIDATING","READY") => "AGENT_READY",
+            ("READY","ACTIVE") => "AGENT_ACTIVATED",
+            ("ACTIVE","PAUSED") => "AGENT_PAUSED",
+            ("PAUSED","DRAINING") => "AGENT_DRAINING",
+            ("DRAINING","STOPPED") => "AGENT_STOPPED",
+            ("READY","LOST") | ("ACTIVE","LOST") => "AGENT_LOST",
+            ("LOST","RECONNECTING") => "AGENT_RECONNECTING",
+            ("RECONNECTING","SYNCING") => "AGENT_SYNCED",
+            ("SYNCING","READY") => "AGENT_READY",
+            ("SYNCING","ACTIVE") => "AGENT_ACTIVATED",
+            ("SYNCING","FAILED") => "AGENT_FAILED",
             _ => "AGENT_SESSION_CHANGED",
         };
         if event_type != expected_event {
@@ -4434,18 +4449,39 @@ impl Storage {
     }
 
     pub fn set_agent_health(
-        &self,
+        &mut self,
         session_id: &str,
         health_state: &str,
+        now: &str,
     ) -> Result<()> {
         require_vocabulary("agent_sessions.health_state", health_state, AGENT_HEALTH_STATES)?;
-        let changed = self.conn.execute(
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let row: Option<(String,String,String,String)> = tx.query_row(
+            "SELECT project_id,agent_id,state,health_state FROM agent_sessions WHERE session_id=?1",
+            [session_id],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,agent_id,_state,current) =
+            row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+        if current == health_state {
+            return Ok(());
+        }
+        tx.execute(
             "UPDATE agent_sessions SET health_state=?1 WHERE session_id=?2",
             rusqlite::params![health_state,session_id],
         ).map_err(StorageError::Db)?;
-        if changed != 1 {
-            return Err(StorageError::NotFound(format!("agent session {session_id}")));
-        }
+        append_event_in(&tx, &NewEvent {
+            event_id: format!("evt_agent_{}_HEALTH_{}", session_id, health_state),
+            project_id: Some(project_id.clone()),
+            session_id: Some(session_id.to_owned()),
+            event_type: "AGENT_HEALTH_CHANGED".to_owned(),
+            correlation_id: Some(session_id.to_owned()),
+            causation_id: None,
+            epoch: None,
+            payload_json: agent_health_event_payload(session_id,&project_id,&agent_id,health_state)?,
+            created_at: now.to_owned(),
+        })?;
+        tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
 
