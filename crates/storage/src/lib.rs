@@ -4619,6 +4619,32 @@ impl Storage {
                 detail: format!("compare-and-swap failed: expected {expected_state}, found {current}"),
             });
         }
+        if next_state == "READY" {
+            let ready_facts: (String,Option<String>,Option<String>,String,i64) = tx.query_row(
+                "SELECT project_id,workspace_id,capability_snapshot_id,health_state,current_epoch
+                 FROM agent_sessions WHERE session_id=?1",
+                [session_id],
+                |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)),
+            ).map_err(StorageError::Db)?;
+            let (ready_project,ready_workspace,ready_caps,ready_health,ready_epoch) = ready_facts;
+            if ready_workspace.is_none() || ready_caps.is_none() || ready_health != "HEALTHY" {
+                return Err(StorageError::Malformed {
+                    column:"agent_sessions".to_string(),
+                    detail:"READY requires workspace binding, capability snapshot and HEALTHY status".to_string(),
+                });
+            }
+            let project_epoch: i64 = tx.query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [ready_project.as_str()],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if project_epoch != ready_epoch {
+                return Err(StorageError::Malformed {
+                    column:"agent_sessions.current_epoch".to_string(),
+                    detail:format!("session epoch {ready_epoch} is stale against project epoch {project_epoch}"),
+                });
+            }
+        }
         let changed = tx.execute(
             "UPDATE agent_sessions SET state=?1 WHERE session_id=?2 AND state=?3",
             rusqlite::params![next_state,session_id,expected_state],
