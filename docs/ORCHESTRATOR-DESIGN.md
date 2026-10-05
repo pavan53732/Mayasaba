@@ -155,3 +155,28 @@ Every authoritative transition is atomic with its event and required outbox reco
 
 ## Failure semantics
 Unknown state is not success. Missing evidence is not success. Agent claims are not validation. A failed gate blocks advancement.
+
+
+## Reliability refinement
+
+The long-running runtime uses a controller loop rather than a workflow script. The `Project` remains the durable lifecycle root; a run or execution grouping is represented by existing correlation/event/task records unless a future requirement proves that multiple independently live project runs need their own lifecycle.
+
+### Task attempts and lease fencing
+Task identity survives retries. Each attempt is independently identifiable and durable. The current task lease's `lease_version` is the fencing token for that attempt. Every material mutation derived from the lease must present the current lease version; a stale attempt is rejected before side effects.
+
+### Desired vs observed reconciliation
+Authoritative desired state is compared periodically with observed state from SQLite, adapter/process probes and workspace inspection. The reconciler may move work into recovery, requeue, reassign or block, but it never infers success from an agent report alone.
+
+Explicit unresolved state is permitted. When the controller cannot determine whether an external effect completed, the relevant execution/attempt is `UNKNOWN` until reconciliation establishes a safe outcome. `UNKNOWN` is not success and does not consume a hidden retry.
+
+### Plan invalidation
+A plan is valid only against the requirement/decision/contract/context state it consumed. A material architecture or requirement change invalidates affected plans and prevents further material admissions from the stale plan until the dependency graph has been recomputed.
+
+### Admission and resource arbitration
+The scheduler performs admission before spawning work. Capability, policy, workspace, retry budget and dependency checks are joined with durable resource reservations. Ports and process slots are treated as resources, not implicit side effects.
+
+### Liveness and convergence
+The controller must not livelock. For a stable project epoch and sufficient resources, every admitted task execution must eventually reach a terminal result, an explicit recovery state, or a human/capacity blocker; repeated non-progress without one of those states is a controller defect. Swarm and repair budgets are finite.
+
+### No duplicate architecture
+`Project` supplies mission semantics, `events` supply the durable journal, `AgentSession` plus `process_records` supply worker/runtime identity, and existing task/lease/workspace/execution rows supply execution-cell composition. New labels may be used as views/correlation groupings but do not create competing authorities.
