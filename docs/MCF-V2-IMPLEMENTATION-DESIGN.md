@@ -111,7 +111,7 @@ Before the bus is considered buildable:
 
 ## Routing and authorization boundary
 
-The bus performs transport/schema/project/recipient routing only. It does not depend on domain policy. Core/PolicyService performs authorization before a material message becomes dispatchable and persists the authorization decision with the outbox record. The bus verifies the envelope contains the required authorization context fields but does not independently reimplement policy rules.
+The bus performs transport/schema/project/recipient routing only. It does not depend on domain policy. Core/PolicyService performs authorization before a material message becomes dispatchable and persists the authorization decision by appending an AUTHORIZATION_VALIDATED event to the immutable event chain. The bus verifies the envelope contains the required authorization context fields but does not independently reimplement policy rules.
 
 ## Idempotency scope
 

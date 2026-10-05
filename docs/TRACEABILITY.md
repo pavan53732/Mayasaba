@@ -53,9 +53,7 @@ through the tests named, and each decision is a record in `docs/DECISION-REGISTE
 **Not addressed, and recorded as such rather than implied.** Backpressure does not refuse an enqueue, because the
 error registry has no code for transient capacity (DEC-064); no production clock, transport or identity source is
 shipped, because the bus performs no I/O (DEC-058, DEC-065); four of the machine's thirteen edges are not read by
-the gate, because they are inline SQL where the from-state is implied by a `WHERE` clause (DEC-066); and the
-authorization decision `docs/MCF-V2-IMPLEMENTATION-DESIGN.md` places "with the outbox record" has no column to live
-in, which is an open architecture gap awaiting a decision.
+the gate, because they are inline SQL where the from-state is implied by a `WHERE` clause (DEC-066). The authorization decision is persisted as the canonical `AUTHORIZATION_VALIDATED` event in the immutable event chain (owned by `PolicyService`) rather than as an outbox table column, resolving that gap.
 
 
 ## Persistence implementation
