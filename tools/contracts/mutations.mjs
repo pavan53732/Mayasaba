@@ -51,6 +51,12 @@ const RUST = "rust";
 // `#[cfg(test)]` modules. Without this the proof would have to be weakened to something the desktop check
 // happens to observe, which would test a different rule.
 const CORE = "core";
+// The frontend tests are a check the harness could not previously use, so a rule only they hold could not be
+// proven. The file list is read from `apps/desktop/package.json` rather than repeated here, because a second
+// copy of "which tests exist" is exactly the drift this tool exists to catch. `npm` itself is not invoked:
+// it is `npm.cmd` on Windows, and `spawnSync` without a shell cannot resolve it - the same reason the gate
+// check calls node directly.
+const UI = "ui";
 
 const MAIN = "apps/desktop/src-tauri/src/main.rs";
 const BRIDGE_TS = "apps/desktop/src/intake/bridge.ts";
@@ -442,6 +448,19 @@ const MUTATIONS = [
     expect: ["AUTHORIZATION_MISSING"],
   },
   {
+    id: "dec075-f",
+    what: "bridge.ts: a wrapper sends a camelCase argument name, so the wire spelling drifts from the contract (DEC-054)",
+    check: UI,
+    edits: [
+      {
+        file: BRIDGE_TS,
+        find: "      project_id: projectId,\n      consumer_id: consumerId,",
+        replace: "      projectId: projectId,\n      consumer_id: consumerId,",
+      },
+    ],
+    expect: ["project_id"],
+  },
+  {
     id: "dec056-f",
     what: "main.rs: a command stops declaring rename_all, so Tauri's camelCase default decides the wire names",
     check: GATE,
@@ -532,6 +551,28 @@ const run = (cmd, args) => {
   return { code: result.status, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
 };
 
+/**
+ * The frontend test files, read from the script that runs them.
+ *
+ * Returns them as repo-relative paths, because the harness runs every command from the repository root. Throws
+ * rather than returning an empty list: a check that silently runs no tests would report success, which is the
+ * one failure mode a check must not have.
+ */
+function uiTestFiles() {
+  const script = JSON.parse(
+    fs.readFileSync(`${root}/apps/desktop/package.json`, "utf8"),
+  ).scripts.test;
+  const files = script
+    .replace(/^node\s+--experimental-strip-types\s+--test\s+/, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((file) => `apps/desktop/${file}`);
+  if (files.length === 0 || !script.startsWith("node --experimental-strip-types --test ")) {
+    throw new Error(`could not read the frontend test file list from apps/desktop/package.json: ${script}`);
+  }
+  return files;
+}
+
 const CHECKS = {
   [GATE]: {
     name: "the contract gate",
@@ -542,6 +583,11 @@ const CHECKS = {
     name: "the core crate's tests",
     command: "cargo test -p mayasaba-core",
     run: () => run("cargo", ["test", "-p", "mayasaba-core"]),
+  },
+  [UI]: {
+    name: "the frontend bridge tests",
+    command: "npm --prefix apps/desktop test",
+    run: () => run("node", ["--experimental-strip-types", "--test", ...uiTestFiles()]),
   },
   [RUST]: {
     name: "the wire-shape conformance test",

@@ -67,11 +67,10 @@ material-action messages until `PolicyService` exists; the Bus holds its own `St
 handlers are `async` with work on `spawn_blocking`; no background dispatch runs; the production `Clock` and
 `IdSource` live outside `crates/bus`.
 
-**Status: in progress.** Tranches 0 to 3 have landed and are validated: the decisions are recorded
+**Status: in progress.** Tranches 0 to 4 have landed and are validated: the decisions are recorded
 (`025183b`), the shell holds a bus with a production clock and identity source and nothing dispatches
 (`cd27580`), and the two read-only diagnostics are wired (`get_communication_health`, `get_event_cursor`). The
-gate reports 7 of 59 declared operations implemented. Tranche 4 - the frontend bridge - is
-not built, so no part of this milestone may be read as complete. `replay_event` stays declared with no handler, and `cancellable` is declared on 24 operations and honoured by none (DEC-075).
+gate reports 7 of 59 declared operations implemented. Tranche 4 added the typed frontend bridge functions and their tests, which no component renders yet: the milestone is complete for its declared tranches, and nothing in the Control Room displays these answers. `replay_event` stays declared with no handler, and `cancellable` is declared on 24 operations and honoured by none (DEC-075).
 
 Deliberately out of scope: agent adapters and any real CLI process (M3), a real transport, a background
 dispatch loop, `request_event_resync`, `PolicyService`, `ContextService`, an enqueue command, council runtime,

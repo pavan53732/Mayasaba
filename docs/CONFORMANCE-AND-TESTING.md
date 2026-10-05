@@ -309,8 +309,8 @@ rather than the four state vocabularies.
 
 ## Shell integration tests (M2.5, DEC-069 to DEC-074)
 
-The test surfaces this milestone adds. **The Tranche 1 to 3 rows exist and pass** (`cd27580`, the T2
-commit, and the T3 commit); the Tranche 4 rows do not exist yet. They are kept here so the plan and the tests can be compared
+The test surfaces this milestone adds. **The Tranche 1 to 4 rows exist and pass** (`cd27580`, the T2
+commit, and the T3 commit); every row below is now backed by a test. They are kept here so the plan and the tests can be compared
 rather than assumed to match, and so a row that quietly never lands is visible as a gap rather than an omission.
 
 Two rows were strengthened rather than merely satisfied. "Identity uniqueness" also covers 8 threads and two
@@ -333,6 +333,7 @@ is measured with SQLite's own `total_changes` rather than asserted, so a query t
 | Replay idempotence | Replaying twice does not produce two messages | 3 |
 | Replay freshness honesty | The response carries `context_refreshed: false` with the original snapshot and digest | 3 |
 | Bridge shape | Every new handler has a wire shape test and is listed in `COVERED_OPERATIONS` | 2, 3 |
+ | Frontend wire names | Every wrapper sends the declared snake_case argument names and nothing translates them. The argument names are not in the `Transport` type, so only a test can hold them | 4 | | Frontend refusals | A registered refusal code survives the wrapper, and a rejection that is not a `CommandError` becomes `TRANSPORT_FAILURE` rather than a value shaped like success | 4 |
 | Bridge two-way agreement | The gate finds every new handler in both the contract and the shell | 2, 3 |
 | Error mapping | Every code the `BusError` to `CommandError` mapping can emit resolves in the error registry | 2, 3 |
 

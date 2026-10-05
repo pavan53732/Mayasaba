@@ -28,7 +28,22 @@ export function resetTransport(): void {
   transport = tauriTransport;
 }
 
-/** The request shape declared by create_projectRequest. Whitespace is preserved on the way out. */
+/**
+ * Normalize a rejection into a `CommandError`.
+ *
+ * A rejection that is not already a `CommandError` is a contract violation on the Rust side, so it is surfaced
+ * as one rather than swallowed into an optimistic success - which is how a UI ends up displaying authority it
+ * never received. Every wrapper goes through this, so one place decides what a rejection means; when each
+ * wrapper carried its own copy, the copies were free to disagree about the same condition.
+ */
+function asCommandError(thrown: unknown): CommandError {
+  const candidate = thrown as Partial<CommandError>;
+  if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
+    return candidate as CommandError;
+  }
+  return { code: "TRANSPORT_FAILURE", message: thrown instanceof Error ? thrown.message : String(thrown) };
+}
+
 /**
  * List every persisted project, newest first.
  *
@@ -40,11 +55,7 @@ export async function listProjects(): Promise<ProjectView[] | CommandError> {
     const result = await transport("list_projects", {});
     return result as ProjectView[];
   } catch (thrown) {
-    const candidate = thrown as Partial<CommandError>;
-    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
-      return candidate as CommandError;
-    }
-    return { code: "TRANSPORT_FAILURE", message: thrown instanceof Error ? thrown.message : String(thrown) };
+    return asCommandError(thrown);
   }
 }
 
@@ -53,11 +64,7 @@ export async function getRecoveryStatus(): Promise<RecoveryReport | CommandError
   try {
     return (await transport("get_recovery_status", {})) as RecoveryReport;
   } catch (thrown) {
-    const candidate = thrown as Partial<CommandError>;
-    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
-      return candidate as CommandError;
-    }
-    return { code: "TRANSPORT_FAILURE", message: thrown instanceof Error ? thrown.message : String(thrown) };
+    return asCommandError(thrown);
   }
 }
 
@@ -123,16 +130,124 @@ export async function createProject(
     const result = await transport("create_project", request);
     return result as ProjectView;
   } catch (thrown) {
-    const candidate = thrown as Partial<CommandError>;
-    if (typeof candidate?.code === "string" && typeof candidate?.message === "string") {
-      return candidate as CommandError;
-    }
-    // A rejection that is not already a CommandError would be a contract violation on the Rust side. Surface
-    // it as one rather than inventing an optimistic success, which is how a UI ends up displaying authority
-    // it never received.
-    return {
-      code: "TRANSPORT_FAILURE",
-      message: thrown instanceof Error ? thrown.message : String(thrown),
-    };
+    return asCommandError(thrown);
+  }
+}
+
+// -----------------------------------------------------------------------------------------------------------
+// The M2.5 shell surface: diagnostics and replay.
+//
+// These mirror the Tauri view structs field for field, snake_case, because that is the wire (DEC-054) and a
+// second spelling here is the drift this file exists to prevent. They are the typed surface only: no component
+// renders them yet, and wiring them into the Control Room is not part of this milestone.
+// -----------------------------------------------------------------------------------------------------------
+
+/** One open ordering gap. The code is `SEQUENCE_GAP`, and the gap is derived rather than stored. */
+export interface OpenGap {
+  code: string;
+  session_id: string;
+  channel: string;
+  expected: number;
+  found: number;
+}
+
+/** Per-project delivery counts. */
+export interface DeliveryCounts {
+  queued: number;
+  retrying: number;
+  expired: number;
+  dead_lettered: number;
+}
+
+/**
+ * Mirrors CommunicationHealthView.
+ *
+ * `backlog` and `enqueue_limit` are global while `counts` and `open_gaps` are per project, because the capacity
+ * bound the bus enforces is global (DEC-068). That asymmetry is stated rather than left for a reader to infer.
+ */
+export interface CommunicationHealth {
+  project_id: string;
+  backlog: number;
+  enqueue_limit: number;
+  counts: DeliveryCounts;
+  open_gaps: OpenGap[];
+  /** `"not_connected"` until M3. A constant, not a probe: there is no transport to ask. */
+  transport_status: string;
+}
+
+/** Mirrors EventCursorView. */
+export interface EventCursor {
+  project_id: string;
+  consumer_id: string;
+  last_sequence: number;
+  /** Always null: nothing durable records it and no contract defines how it would be derived. */
+  next_sequence: number | null;
+  gap_detected: boolean;
+  resync_from: number | null;
+}
+
+/** Mirrors ReplayDeadLetterView. */
+export interface ReplayOutcome {
+  replayed_message_id: string;
+  source_message_id: string;
+  context_snapshot_id: string | null;
+  state_digest: string | null;
+  /** Always false. A replay re-enqueues the original envelope, so the context it carries is the original's. */
+  context_refreshed: boolean;
+  /** True when an earlier replay of the same operation was found and no new message was produced. */
+  deduplicated: boolean;
+}
+
+/**
+ * Read a project's communication health. Read-only.
+ *
+ * A query, not state: the UI renders what Rust answers and keeps no second copy, because a second copy of a
+ * queue's depth is a second number that can disagree with the queue.
+ */
+export async function getCommunicationHealth(
+  projectId: string,
+): Promise<CommunicationHealth | CommandError> {
+  try {
+    return (await transport("get_communication_health", {
+      project_id: projectId,
+    })) as CommunicationHealth;
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Read one consumer's durable event position. Read-only: it never advances the cursor.
+ */
+export async function getEventCursor(
+  projectId: string,
+  consumerId: string,
+): Promise<EventCursor | CommandError> {
+  try {
+    return (await transport("get_event_cursor", {
+      project_id: projectId,
+      consumer_id: consumerId,
+    })) as EventCursor;
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Re-enqueue a dead-lettered message as a new message.
+ *
+ * A material-action message is refused with `AUTHORIZATION_NOT_IMPLEMENTED` and **nothing is enqueued**, so a
+ * caller must render the refusal rather than assume the replay happened. The refusal is a returned error rather
+ * than a thrown one, because it is an expected outcome of asking.
+ */
+export async function replayDeadLetter(
+  messageId: string,
+): Promise<ReplayOutcome | CommandError> {
+  try {
+    return (await transport("replay_dead_letter", {
+      message_id: messageId,
+    })) as ReplayOutcome;
+  } catch (thrown) {
+    return asCommandError(thrown);
   }
 }

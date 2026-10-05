@@ -59,8 +59,7 @@ the gate, because they are inline SQL where the from-state is implied by a `WHER
 ## Shell integration coverage (M2.5)
 
 Requirements for wiring the bus into the shell, mapped to the decisions that govern them and to the evidence
-that exists once each tranche lands. **Tranches 1 to 3 are validated** (`cd27580`, the T2 commit and the T3 commit); the Tranche 4
-rows are still DECIDED, so their evidence cells name work to be done rather than work observed.
+that exists once each tranche lands. **Tranches 1 to 4 are validated** (`cd27580`, the T2 commit and the T3 commit); every row below is backed by an observed test.
 
 | Requirement | Decision | Evidence | State |
 | --- | --- | --- | --- |
