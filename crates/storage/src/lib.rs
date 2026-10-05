@@ -6269,7 +6269,20 @@ impl Storage {
                    LIMIT 1
                )
              WHERE ce.project_id = ?1
-               AND ce.status IN ('STARTING','RUNNING','TIMEOUT','CANCELED','CRASHED','CLEANUP_REQUIRED')
+               AND (
+                   ce.status IN ('STARTING','RUNNING','CLEANUP_REQUIRED')
+                   OR EXISTS (
+                       SELECT 1
+                       FROM process_records pu
+                       WHERE pu.execution_id=ce.execution_id
+                         AND pu.state='UNKNOWN'
+                         AND pu.observed_at = (
+                             SELECT MAX(pu2.observed_at)
+                             FROM process_records pu2
+                             WHERE pu2.execution_id=ce.execution_id
+                         )
+                   )
+               )
              ORDER BY ce.execution_id ASC"
         ).map_err(StorageError::Db)?;
         let rows = stmt.query_map([project_id], |r| Ok(RecoverableExecution {
