@@ -1012,24 +1012,17 @@ pub async fn launch_live_session(
         started_at,
     ).await?;
 
-    if let Err(error) = storage.bind_agent_process(
-        &request.session_id,
-        i64::from(process.pid),
-        None,
-    ) {
+    if let Err(error) = storage.set_agent_health(&request.session_id, "HEALTHY", started_at) {
         let _ = process.terminate().await;
         return Err(AgentRuntimeError::Storage(error));
     }
 
-    storage.set_agent_health(&request.session_id, "HEALTHY", started_at)?;
-    let transition_result = storage.transition_agent_session(
+    if let Err(error) = storage.activate_agent_process(
         &request.session_id,
-        "READY",
-        "ACTIVE",
-        "AGENT_ACTIVATED",
+        i64::from(process.pid),
+        None,
         started_at,
-    );
-    if let Err(error) = transition_result {
+    ) {
         let _ = process.terminate().await;
         return Err(AgentRuntimeError::Storage(error));
     }
