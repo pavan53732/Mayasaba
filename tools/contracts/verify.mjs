@@ -936,16 +936,16 @@ if(danglingFk.length) fail(`schema.sql declares foreign keys to non-existent tab
 // whose local column was never declared. Require every FOREIGN KEY(local...) item to name a column in the
 // same CREATE TABLE block. This is structural validation of the canonical SQL, not a second schema authority.
 const sqliteFkLocalProblems=[];
-for(const tableMatch of sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\\s+(\\w+)\\s*\\(([\\s\\S]*?)\\n\\);/g)){
+for(const tableMatch of sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g)){
   const [,tableName,body]=tableMatch;
   const columns=new Set();
-  for(const line of body.split(/\\r?\\n/)){
+  for(const line of body.split(/\r?\n/)){
     const trimmed=line.trim();
-    if(!trimmed || /^(?:PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK|CONSTRAINT)\\b/i.test(trimmed)) continue;
-    const column=trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s+/);
+    if(!trimmed || /^(?:PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK|CONSTRAINT)\b/i.test(trimmed)) continue;
+    const column=trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+/);
     if(column) columns.add(column[1]);
   }
-  for(const fk of body.matchAll(/FOREIGN KEY\\s*\\(([^)]+)\\)/gi)){
+  for(const fk of body.matchAll(/FOREIGN KEY\s*\(([^)]+)\)/gi)){
     for(const local of fk[1].split(",").map(v=>v.trim()).filter(Boolean)){
       if(!columns.has(local)){
         sqliteFkLocalProblems.push(`table ${tableName}: FOREIGN KEY local column "${local}" is not declared in the table`);
@@ -954,8 +954,8 @@ for(const tableMatch of sqlText.matchAll(/CREATE TABLE IF NOT EXISTS\\s+(\\w+)\\
   }
 }
 if(sqliteFkLocalProblems.length) fail(
-  "schema.sql declares foreign keys whose local columns do not exist:\\n  - "+
-  sqliteFkLocalProblems.join("\\n  - ")
+  "schema.sql declares foreign keys whose local columns do not exist:\n  - "+
+  sqliteFkLocalProblems.join("\n  - ")
 );
 console.log(`SQLite schema foreign-key structure: checked ${sqlTablesArr.length} table(s); every local FOREIGN KEY column is declared`);
 
