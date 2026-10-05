@@ -70,3 +70,29 @@ After crash/restart, re-read actual filesystem/Git state, reconcile checkpoint a
 
 ## Integration invariant
 Only controller-integrated and validated state contributes to certification. Integration is reachable only through a persisted `INTEGRATION_ADMISSION` record whose verdict is `ADMITTED`, so "integrated" implies "admitted" and the certification boundary is auditable rather than assumed.
+
+
+## Integration transaction model
+
+Integration is a persisted protocol, not one ACID transaction across Git/filesystem/build/test. SQLite transactions make the controller's admission/state/evidence writes atomic; external workspace operations are reconciled separately.
+
+Canonical integration protocol:
+
+```text
+ADMISSION
+→ CHECKPOINT
+→ PREPARE CHANGESET
+→ APPLY/MERGE
+→ OBSERVE WORKSPACE REVISION
+→ BUILD/TEST AS APPLICABLE
+→ VALIDATE
+→ PROMOTE OR ROLLBACK
+```
+
+Failure during any external step leaves the changeset auditable and resolves through checkpoint restore, compensating revert, isolation or explicit human/recovery block. Event/evidence history is never rolled back.
+
+### Workspace revisions and external change
+Every integration boundary records a `WorkspaceRevision`. The controller compares the expected revision with the observed filesystem/Git state. A user/IDE/other-process modification that is not part of the admitted changeset creates a `DRIFTED` revision and blocks affected integration rather than overwriting it.
+
+### Stale integration
+An integration admission pins project epoch, context digest and base checkpoint. If any of those no longer match, the admission is stale and cannot be reused; a new admission must be evaluated.
