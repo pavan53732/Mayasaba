@@ -76,7 +76,17 @@ impl Transport {
             "ACP_STDIO" => Some(Self::AcpStdio),
             "UNSUPPORTED" => Some(Self::Unsupported),
             _ => None,
+    
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::HermesStreamJson => "HERMES_STREAM_JSON",
+            Self::KiloJson => "KILO_JSON",
+            Self::OpenCodeJson => "OPEN_CODE_JSON",
+            Self::AcpStdio => "ACP_STDIO",
+            Self::Unsupported => "UNSUPPORTED",
         }
+    }
+    }
     }
 }
 
@@ -995,7 +1005,7 @@ pub fn build_handshake_envelope(input: &HandshakeEnvelopeInput) -> Result<String
         "adapter_version": input.adapter_version,
         "protocol_versions": input.protocol_versions,
         "capabilities": input.capabilities,
-        "native_transport": format!("{:?}", input.native_transport),
+        "native_transport": input.native_transport.as_str(),
         "workspace_id": input.workspace_id,
     });
     let envelope = serde_json::json!({
