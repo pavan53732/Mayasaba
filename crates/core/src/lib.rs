@@ -16,4 +16,4 @@ pub use project_service::{
     ProjectValidationError,
 };
 
-pub use recovery_service::{build_runtime_recovery_plan, RuntimeRecoveryAction, RuntimeRecoveryCandidate, RuntimeRecoveryPlan};
+pub use recovery_service::{build_runtime_recovery_plan, RuntimeRecoveryAction, RuntimeRecoveryCandidate, RuntimeRecoveryExecutionCandidate, RuntimeRecoveryPlan};
