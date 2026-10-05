@@ -31,6 +31,16 @@ impl ContextService {
         self.storage.create_context_snapshot(snapshot)
     }
 
+    /// Material project-truth change: increment the epoch and invalidate all older contexts transactionally.
+    pub fn advance_epoch(
+        &mut self,
+        project_id: &str,
+        reason: &str,
+        now: &str,
+    ) -> Result<mayasaba_storage::ProjectEpochAdvance> {
+        self.storage.advance_project_epoch(project_id, reason, now)
+    }
+
     pub fn is_fresh(
         &self,
         context_snapshot_id: &str,
