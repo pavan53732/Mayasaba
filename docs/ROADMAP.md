@@ -191,7 +191,7 @@ No release is considered production-ready until protocol, adapter, recovery, wor
 
 ## Cross-cutting reliability gate
 
-The following reliability capabilities are acceptance requirements across M3-M10; they are not a replacement milestone and do not alter the locked agent set (DEC-029):
+The following reliability capabilities are acceptance requirements across M3-M10; their durable storage/contracts and controller recovery-planning foundations are now implemented, while live adapter/process enforcement lands with the corresponding milestones. They are not a replacement milestone and do not alter the locked agent set (DEC-029):
 - durable TaskAttempt identity across retry/reassignment;
 - lease-version fencing on every material write derived from a lease;
 - scheduler resource admission for ports/process slots and other scarce local resources;
