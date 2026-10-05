@@ -306,7 +306,26 @@ pub enum NativeEventKind {
     SESSION_ENDED,
     HEARTBEAT,
     UNKNOWN,
-}
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SESSION_STARTED => "SESSION_STARTED",
+            Self::TEXT => "TEXT",
+            Self::REASONING => "REASONING",
+            Self::STEP_START => "STEP_START",
+            Self::STEP_FINISH => "STEP_FINISH",
+            Self::TOOL_CALL => "TOOL_CALL",
+            Self::TOOL_RESULT => "TOOL_RESULT",
+            Self::FILE_CHANGE => "FILE_CHANGE",
+            Self::COMMAND_REQUEST => "COMMAND_REQUEST",
+            Self::COMMAND_RESULT => "COMMAND_RESULT",
+            Self::ERROR => "ERROR",
+            Self::RESULT => "RESULT",
+            Self::SESSION_ENDED => "SESSION_ENDED",
+            Self::HEARTBEAT => "HEARTBEAT",
+            Self::UNKNOWN => "UNKNOWN",
+        }
+    }}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NativeEvent {
@@ -950,6 +969,81 @@ pub async fn launch_live_session(
     })
 }
 
+/// Build a legal MCF-v2 HANDSHAKE envelope from runtime-discovered agent facts.
+/// The envelope is passed through the protocol validator before it is released to the bus layer.
+pub fn build_handshake_envelope(input: &HandshakeEnvelopeInput) -> Result<String, AdapterError> {
+    if input.protocol_versions.is_empty() || !input.protocol_versions.iter().any(|v| v == "MCF-2") {
+        return Err(adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "HANDSHAKE_PROTOCOL_VERSION_MISSING",
+            Retryability::NEVER,
+            "handshake must advertise MCF-2",
+        ));
+    }
+    if input.project_epoch < 0 || input.created_at.trim().is_empty() {
+        return Err(adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "HANDSHAKE_METADATA_INVALID",
+            Retryability::NEVER,
+            "handshake project epoch and created_at must be valid",
+        ));
+    }
+    let payload = serde_json::json!({
+        "agent_id": input.agent_id,
+        "agent_type": input.agent_type.as_str(),
+        "adapter_version": input.adapter_version,
+        "protocol_versions": input.protocol_versions,
+        "capabilities": input.capabilities,
+        "native_transport": format!("{:?}", input.native_transport),
+        "workspace_id": input.workspace_id,
+    });
+    let envelope = serde_json::json!({
+        "protocol_version": "MCF-2",
+        "schema_version": "2.0.0",
+        "message_id": input.message_id,
+        "event_id": input.event_id,
+        "project_id": input.project_id,
+        "session_id": input.session_id,
+        "sender": {
+            "actor_type": "AGENT",
+            "actor_id": input.agent_id,
+            "agent_id": input.agent_id,
+            "agent_type": input.agent_type.as_str(),
+            "session_id": input.session_id,
+        },
+        "recipients": [{"actor_type":"MAYASABA","actor_id":"mayasaba-controller"}],
+        "channel": "agent",
+        "message_type": "HANDSHAKE",
+        "phase": "UNSCOPED",
+        "correlation_id": input.correlation_id,
+        "sequence": 0,
+        "project_epoch": input.project_epoch,
+        "priority": "SYNCHRONIZATION",
+        "created_at": input.created_at,
+        "requires_ack": true,
+        "requires_response": true,
+        "blocking": false,
+        "payload": payload,
+        "security": {
+            "classification": "INTERNAL_PROJECT",
+            "secret_refs": [],
+            "contains_secret_material": false,
+        }
+    });
+    let text = serde_json::to_string(&envelope).map_err(|e| adapter_error(
+        AdapterErrorCategory::PROTOCOL, "HANDSHAKE_SERIALIZE_FAILED", Retryability::NEVER,
+        format!("cannot serialize handshake envelope: {e}")))?;
+    let parsed = mayasaba_protocol::envelope::parse_envelope(&text).map_err(|e| adapter_error(
+        AdapterErrorCategory::PROTOCOL, "HANDSHAKE_ENVELOPE_INVALID", Retryability::NEVER,
+        format!("protocol validator rejected handshake envelope: {e}")))?;
+    Ok(parsed.to_json_text())
+}
+
+/// Convert a normalized native event into the canonical MCF message type using the registry.
+pub fn native_event_mcf_type(kind: NativeEventKind) -> Option<String> {
+    let registry: Value = serde_json::from_str(NATIVE_TO_MCF_REGISTRY).ok()?;
+    registry.get("mappings")?.get(kind.as_str())?.as_str().map(ToOwned::to_owned)
+}
 impl PreparedLaunch {
     /// Convert the adapter-owned launch description into the process-neutral execution specification.
     /// Execution remains the sole owner of actual spawn/termination.
