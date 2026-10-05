@@ -229,6 +229,21 @@ CREATE TABLE IF NOT EXISTS tasks (
   FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
+-- Task scope is the durable source for filesystem/capability/validation constraints used before lease admission.
+-- Keeping this separate from the Task lifecycle avoids adding optional security fields to the lifecycle row.
+CREATE TABLE IF NOT EXISTS task_scopes (
+  task_id TEXT PRIMARY KEY,
+  allowed_paths_json TEXT NOT NULL,
+  required_capabilities_json TEXT NOT NULL,
+  validation_requirements_json TEXT NOT NULL,
+  policy_scope TEXT NOT NULL,
+  max_attempts INTEGER NOT NULL CHECK(max_attempts > 0),
+  max_parallel_children INTEGER NOT NULL CHECK(max_parallel_children > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+);
+
 CREATE TABLE IF NOT EXISTS task_dependencies (
   task_id TEXT NOT NULL,
   depends_on_task_id TEXT NOT NULL,
