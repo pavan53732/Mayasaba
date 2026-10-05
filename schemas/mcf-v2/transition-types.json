@@ -2524,6 +2524,123 @@
         "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
         "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
         "failure_transition": null
+      },
+      {
+        "transition_id": "task.LEASED->LEASE_EXPIRED",
+        "owner": "crates/tasks",
+        "source_state": "LEASED",
+        "event_type": "LEASE_EXPIRED",
+        "command": "MARK_TASK_LEASE_EXPIRED",
+        "guards": [
+          {
+            "project": "current phase == REPAIR_PENDING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task state == LEASED; live lease has expired and no newer live lease exists",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "task.state = LEASE_EXPIRED",
+        "emitted_events": [
+          "LEASE_EXPIRED"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
+      },
+      {
+        "transition_id": "task.ACCEPTED->LEASE_EXPIRED",
+        "owner": "crates/tasks",
+        "source_state": "ACCEPTED",
+        "event_type": "LEASE_EXPIRED",
+        "command": "MARK_TASK_LEASE_EXPIRED",
+        "guards": [
+          {
+            "project": "current phase == REPAIR_PENDING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task state == ACCEPTED; live lease has expired and no newer live lease exists",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "task.state = LEASE_EXPIRED",
+        "emitted_events": [
+          "LEASE_EXPIRED"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
+      },
+      {
+        "transition_id": "task.IN_PROGRESS->LEASE_EXPIRED",
+        "owner": "crates/tasks",
+        "source_state": "IN_PROGRESS",
+        "event_type": "LEASE_EXPIRED",
+        "command": "MARK_TASK_LEASE_EXPIRED",
+        "guards": [
+          {
+            "project": "current phase == REPAIR_PENDING; next phase admission gates satisfied",
+            "agent_session": "session identity valid; target transition supported by adapter/process state",
+            "task": "task state == IN_PROGRESS; live lease has expired and no newer live lease exists",
+            "lease": "lease version and persisted timestamps satisfy transition",
+            "council_round": "round ownership and required participation predicates satisfy transition",
+            "handoff": "sender/receiver/task ownership predicates satisfy transition",
+            "execution": "execution request authorized and process state matches",
+            "validation": "validation scope is immutable and required evidence predicates are met",
+            "repair": "failure fingerprint and repair budget permit transition",
+            "context": "project epoch and state dependencies satisfy transition",
+            "message_delivery": "delivery record exists and transition guard is idempotent",
+            "barrier": "predicate evaluation is derived from durable authoritative facts"
+          }
+        ],
+        "authorization": "controller-owned transition; identity/project/ownership/policy gates must pass",
+        "required_fields": [
+          "project_id",
+          "correlation_id",
+          "task_id"
+        ],
+        "forbidden_fields": [],
+        "state_mutation": "task.state = LEASE_EXPIRED",
+        "emitted_events": [
+          "LEASE_EXPIRED"
+        ],
+        "epoch_effect": "NONE",
+        "outbox_effect": true,
+        "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
+        "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
+        "failure_transition": null
       }
     ],
     "lease": [
