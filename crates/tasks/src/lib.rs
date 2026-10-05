@@ -9,6 +9,17 @@ use mayasaba_storage::{
 
 pub const CRATE_NAME: &str = "mayasaba-tasks";
 
+/// Deterministically select READY tasks whose dependency and live-lease gates are already satisfied.
+/// TaskService still owns the subsequent lease admission; selection itself performs no mutation.
+pub fn select_schedulable_tasks(
+    storage: &Storage,
+    project_id: &str,
+    limit: usize,
+) -> Result<Vec<mayasaba_storage::SchedulableTask>> {
+    storage.list_schedulable_tasks(project_id, limit)
+}
+
+
 /// Admit one task lease and atomically advance REQUESTED -> ACTIVE.
 pub fn lease_task(storage: &mut Storage, lease: &NewTaskLease) -> Result<mayasaba_storage::TaskLeaseRecord> {
     storage.lease_task(lease)
