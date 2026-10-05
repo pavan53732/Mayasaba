@@ -4466,6 +4466,87 @@ impl Storage {
     }
 
     /// CAS transition for the agent-session machine. The event is emitted in the same transaction as the state mutation.
+    /// Bind the spawned process, mark the session healthy and activate it in one durable transaction.
+    ///
+    /// If any guard fails, the transaction rolls back and the caller still owns the unrecorded process and must
+    /// terminate it. This avoids a READY session with a missing process or a process running behind an inactive
+    /// session record.
+    pub fn activate_agent_process(
+        &mut self,
+        session_id: &str,
+        process_id: i64,
+        native_session_id: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
+        if process_id <= 0 || now.trim().is_empty() {
+            return Err(StorageError::Malformed {
+                column:"agent_sessions.process_id".to_string(),
+                detail:"activation requires a positive process_id and non-empty timestamp".to_string(),
+            });
+        }
+
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let row: Option<(String,String,String,String,Option<String>,Option<String>,Option<String>,i64)> =
+            tx.query_row(
+                "SELECT project_id,agent_id,state,health_state,workspace_id,capability_snapshot_id,native_session_id,current_epoch
+                 FROM agent_sessions WHERE session_id=?1",
+                [session_id],
+                |r| Ok((
+                    r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,
+                    r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?
+                )),
+            ).optional().map_err(StorageError::Db)?;
+
+        let (project_id,agent_id,state,health,workspace_id,capability_snapshot_id,_old_native_epoch,current_epoch) =
+            row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+
+        if state != "READY" {
+            return Err(StorageError::Malformed {
+                column:"agent_sessions.state".to_string(),
+                detail:format!("agent session {session_id} must be READY before activation; found {state}"),
+            });
+        }
+        if health != "HEALTHY" || workspace_id.is_none() || capability_snapshot_id.is_none() {
+            return Err(StorageError::Malformed {
+                column:"agent_sessions".to_string(),
+                detail:"agent activation requires HEALTHY session, workspace binding and capability snapshot".to_string(),
+            });
+        }
+
+        let project_epoch: i64 = tx.query_row(
+            "SELECT current_epoch FROM projects WHERE project_id=?1",
+            [project_id.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if project_epoch != current_epoch {
+            return Err(StorageError::Malformed {
+                column:"agent_sessions.current_epoch".to_string(),
+                detail:format!("session epoch {current_epoch} is stale against project epoch {project_epoch}"),
+            });
+        }
+
+        tx.execute(
+            "UPDATE agent_sessions
+             SET process_id=?1,native_session_id=COALESCE(?2,native_session_id),state='ACTIVE'
+             WHERE session_id=?3 AND state='READY' AND health_state='HEALTHY'",
+            rusqlite::params![process_id,native_session_id,session_id],
+        ).map_err(StorageError::Db)?;
+
+        append_event_in(&tx, &transition_event(
+            &tx,
+            session_id,
+            "AGENT_ACTIVATED",
+            &project_id,
+            session_id,
+            session_id,
+            None,
+            agent_session_event_payload(&project_id,session_id,&agent_id,"ACTIVE")?,
+            now,
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     pub fn transition_agent_session(
         &mut self,
         session_id: &str,
