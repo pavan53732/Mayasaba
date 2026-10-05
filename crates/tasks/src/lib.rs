@@ -25,7 +25,7 @@ pub fn lease_task(storage: &mut Storage, lease: &NewTaskLease) -> Result<mayasab
     storage.lease_task(lease)
 }
 
-/// Renew a lease using the current fence version; storage increments the version atomically.
+/// Renew a lease using the current stable fence version; heartbeat/expiry are extended without rotating ownership.
 pub fn renew_lease(
     storage: &mut Storage,
     lease_id: &str,
