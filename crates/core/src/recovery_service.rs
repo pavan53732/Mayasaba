@@ -10,7 +10,7 @@
 //! copies it, so a decision taken afterwards would be a decision about a replay that had already happened.
 
 use mayasaba_bus::{Bus, BusError, Clock, IdSource};
-use mayasaba_storage::{RecoverableAttempt, Storage};
+use mayasaba_storage::{RecoverableAttempt, RecoverableExecution, Storage};
 use mayasaba_protocol::generated::envelope::MATERIAL_ACTION_MESSAGE_TYPES;
 use serde::Serialize;
 
@@ -359,9 +359,17 @@ pub struct RuntimeRecoveryCandidate {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeRecoveryExecutionCandidate {
+    pub execution_id: String,
+    pub attempt_id: Option<String>,
+    pub action: RuntimeRecoveryAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeRecoveryPlan {
     pub expired_resource_reservations: u64,
     pub candidates: Vec<RuntimeRecoveryCandidate>,
+    pub execution_candidates: Vec<RuntimeRecoveryExecutionCandidate>,
 }
 
 /// Deterministic post-restart reconciliation plan. It observes durable state only; the caller still owns
@@ -385,10 +393,38 @@ pub fn build_runtime_recovery_plan(
         });
     }
 
+    let executions = storage.list_recoverable_executions(project_id)?;
+    let mut execution_candidates = Vec::with_capacity(executions.len());
+    for execution in executions {
+        execution_candidates.push(RuntimeRecoveryExecutionCandidate {
+            execution_id: execution.execution_id,
+            attempt_id: execution.attempt_id,
+            action: classify_recovery_execution(&execution),
+        });
+    }
+
     Ok(RuntimeRecoveryPlan {
         expired_resource_reservations,
         candidates,
+        execution_candidates,
     })
+}
+
+fn classify_recovery_execution(execution: &RecoverableExecution) -> RuntimeRecoveryAction {
+    if execution.process_state.as_deref() == Some("UNKNOWN") {
+        return RuntimeRecoveryAction::InspectUnknown;
+    }
+    // A missing PID after STARTING means the OS side effect may have happened just before the crash or the durable
+    // observation failed. Re-read physical process state before deciding whether to retry, deny or mark failed.
+    if execution.pid.is_none() {
+        return RuntimeRecoveryAction::VerifyProcess;
+    }
+    match execution.status.as_str() {
+        "TIMEOUT" | "CANCELED" | "CRASHED" | "CLEANUP_REQUIRED" | "STARTING" | "RUNNING" => {
+            RuntimeRecoveryAction::VerifyProcess
+        }
+        _ => RuntimeRecoveryAction::InspectUnknown,
+    }
 }
 
 fn classify_recovery_attempt(attempt: &RecoverableAttempt) -> RuntimeRecoveryAction {
