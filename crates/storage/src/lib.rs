@@ -3687,6 +3687,17 @@ mod tests {
 
 /// Durable retry/recovery identity for a Task. The active lease version is copied as the fencing value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulableTask {
+    pub task_id: String,
+    pub project_id: String,
+    pub workspace_id: String,
+    pub priority: i64,
+    pub risk: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTaskLease {
     pub lease_id: String,
     pub task_id: String,
@@ -4235,6 +4246,44 @@ impl Storage {
         )?)?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
+    }
+
+    /// Return READY tasks whose dependencies are COMPLETED and which have no live lease.
+    ///
+    /// Ordering is deterministic: higher explicit priority first, then oldest update, then oldest creation and
+    /// finally task_id. The selector does not mutate state; TaskService remains the owner of lease admission.
+    pub fn list_schedulable_tasks(&self, project_id: &str, limit: usize) -> Result<Vec<SchedulableTask>> {
+        let limit = limit.max(1).min(256) as i64;
+        let mut stmt = self.conn.prepare(
+            "SELECT t.task_id, t.project_id, t.workspace_id, t.priority, t.risk, t.created_at, t.updated_at
+             FROM tasks t
+             WHERE t.project_id = ?1
+               AND t.status = 'READY'
+               AND t.workspace_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM task_dependencies d
+                   JOIN tasks dep ON dep.task_id = d.depends_on_task_id
+                   WHERE d.task_id = t.task_id
+                     AND dep.status <> 'COMPLETED'
+               )
+               AND NOT EXISTS (
+                   SELECT 1 FROM task_leases l
+                   WHERE l.task_id = t.task_id
+                     AND l.status IN ('ACTIVE','RENEWING')
+               )
+             ORDER BY t.priority DESC, t.updated_at ASC, t.created_at ASC, t.task_id ASC
+             LIMIT ?2"
+        ).map_err(StorageError::Db)?;
+        let rows = stmt.query_map(rusqlite::params![project_id, limit], |row| Ok(SchedulableTask {
+            task_id: row.get(0)?,
+            project_id: row.get(1)?,
+            workspace_id: row.get(2)?,
+            priority: row.get(3)?,
+            risk: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })).map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
     }
 
     /// Persist a command execution after admission. Material attempts are re-fenced against the current lease.
