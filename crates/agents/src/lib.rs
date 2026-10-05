@@ -296,6 +296,9 @@ pub struct PreparedLaunch {
     pub argv: Vec<String>,
     pub cwd: String,
     pub environment: Environment,
+    /// Variables the execution kernel must remove from the inherited child environment before spawn.
+    pub scrub_inherited_environment: Vec<String>,
+    /// Effective vendor config document to inject through the contract-declared channel.
     pub required_config: Value,
     pub transport: Transport,
     pub resume: bool,
@@ -463,15 +466,47 @@ fn prepare_from_contract(
             }
         }
     }
+
+    let mut required_config = definition.get("required_config").cloned()
+        .unwrap_or_else(|| Value::Object(Default::default()));
+
+    // required_config_injection is contract metadata. Only its actual config-bearing fields belong in the
+    // vendor config document: the permission map is inserted as "permission", while audit rationale and probe
+    // instructions remain controller metadata and must never be handed to the CLI as unknown config keys.
     if let Some(injection) = definition.get("required_config_injection") {
         let channel = injection.get("channel").and_then(Value::as_str).ok_or_else(|| adapter_error(
             AdapterErrorCategory::PROTOCOL, "CONFIG_INJECTION_CHANNEL_MISSING", Retryability::NEVER,
             "required_config_injection has no channel"))?;
-        let encoded = serde_json::to_string(injection).map_err(|e| adapter_error(
+        if let Some(object) = required_config.as_object_mut() {
+            if let Some(permission) = injection.get("permission") {
+                object.insert("permission".to_owned(), permission.clone());
+            }
+            if let Some(must_include) = injection.get("must_include").and_then(Value::as_object) {
+                for (key, value) in must_include {
+                    object.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        let encoded = serde_json::to_string(&required_config).map_err(|e| adapter_error(
             AdapterErrorCategory::PROTOCOL, "CONFIG_INJECTION_SERIALIZE_FAILED", Retryability::NEVER,
-            format!("cannot serialize required config injection: {e}")))?;
+            format!("cannot serialize effective config document: {e}")))?;
         environment.insert(channel.to_owned(), encoded);
     }
+
+    // The inherited parent environment is outside Mayasaba authority. The execution kernel must scrub these
+    // keys before spawn; setting replacement values alone is insufficient when a stale inherited value activates
+    // an approval bypass or wrong workspace.
+    let mut scrub_inherited_environment = Vec::new();
+    if agent == AgentType::Hermes {
+        scrub_inherited_environment.extend([
+            "HERMES_YOLO_MODE".to_owned(),
+            "HERMES_ACCEPT_HOOKS".to_owned(),
+        ]);
+    }
+    // Kilo and OpenCode resolve workspace from PWD on the relevant lineage; explicitly bind it to the authorized
+    // workspace rather than inheriting a stale shell value (especially from MSYS/Git Bash on Windows).
+    scrub_inherited_environment.push("PWD".to_owned());
+    environment.insert("PWD".to_owned(), request.cwd.clone());
 
     let transport_text = definition.get("transport").and_then(Value::as_str).ok_or_else(|| adapter_error(
         AdapterErrorCategory::PROTOCOL, "ADAPTER_TRANSPORT_MISSING", Retryability::NEVER,
@@ -492,6 +527,7 @@ fn prepare_from_contract(
         argv,
         cwd: request.cwd.clone(),
         environment,
+        scrub_inherited_environment,
         required_config,
         transport,
         resume,
@@ -641,7 +677,10 @@ mod tests {
         assert_eq!(prepared.executable, "kilo");
         assert_eq!(prepared.environment.get("KILO_DISABLE_SHARE"), Some(&"1".to_owned()));
         assert!(prepared.environment.contains_key("KILO_CONFIG_CONTENT"));
+        assert!(prepared.scrub_inherited_environment.contains(&"PWD".to_owned()));
         assert_eq!(prepared.required_config.get("share").and_then(Value::as_str), Some("disabled"));
+        assert!(prepared.required_config.get("permission").is_some());
+        assert!(prepared.required_config.get("rationale").is_none());
     }
 
     #[test]
