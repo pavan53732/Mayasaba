@@ -820,3 +820,35 @@ Implementation source-of-truth artifacts are:
 - simulation: `schemas/simulation-v1/simulation.schema.json` (scenario IDs and the required fault-class vocabulary are enumerated in `schemas/simulation-v1/scenario-registry.json`)
 
 No service or UI implementation may define a competing machine-readable contract outside these owners.
+
+
+## 21. Long-running reliability composition
+
+The runtime composes existing services rather than introducing a second hierarchy of authorities:
+
+```text
+PROJECT
+  ├─ lifecycle/orchestration state
+  ├─ durable event history
+  └─ current requirement/decision/context epoch
+       │
+       ├─ TASK → TASK ATTEMPT → LEASE/FENCE
+       ├─ AGENT SESSION → PROCESS TREE
+       ├─ WORKSPACE → WORKSPACE REVISION/CHECKPOINT
+       ├─ RESOURCE RESERVATION
+       ├─ EXECUTION → ENVIRONMENT SNAPSHOT
+       └─ VALIDATION → CERTIFICATION BINDING
+```
+
+`TaskAttempt` is the retry/recovery identity. `lease_version` is its fencing token. `ResourceReservation` prevents restart-time double allocation. `WorkspaceRevision` makes actual filesystem/Git state observable. `EnvironmentSnapshot` and `CertificationBinding` make validation reproducible.
+
+`Mission`, `Worker`, `ExecutionCell`, `SwarmCell` and `Supervisor` remain composition/view concepts unless a future requirement establishes independent durable state that cannot be represented by the existing owned entities.
+
+### Reconciliation loops
+The controller periodically reconciles desired state with observed state for buses, leases, agent processes, workspaces, resources, executions and validations. Every reconciliation outcome is deterministic and auditable.
+
+### Scheduler fairness
+The scheduler orders ready work deterministically using configured priority plus fairness/aging among otherwise eligible work. Admission never violates capability, policy, lease, workspace or resource constraints to satisfy fairness.
+
+### Liveness invariant
+For a stable epoch and available required resources, an execution cannot remain silently `RUNNING` forever. Non-progress must transition to progress evidence, checkpoint/recovery, terminal state, capacity/human blocker or explicit failure.
