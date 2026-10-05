@@ -56,6 +56,29 @@ shipped, because the bus performs no I/O (DEC-058, DEC-065); four of the machine
 the gate, because they are inline SQL where the from-state is implied by a `WHERE` clause (DEC-066). The authorization decision is persisted as the canonical `AUTHORIZATION_VALIDATED` event in the immutable event chain (owned by `PolicyService`) rather than as an outbox table column, resolving that gap.
 
 
+## Shell integration coverage (M2.5)
+
+Requirements for wiring the bus into the shell, mapped to the decisions that govern them and to the evidence
+that will exist once each tranche lands. **No row in this table is validated yet**: the decisions are recorded
+and the code is not written, so every evidence cell names work still to be done rather than work observed.
+
+| Requirement | Decision | Evidence | State |
+| --- | --- | --- | --- |
+| A reported ordering gap is visible to the operator | DEC-069 | Communication-health response carries `SEQUENCE_GAP` entries derived from `messages` | DECIDED |
+| A gap is not repaired by discarding the arrival | DEC-069 | Health test over a stream with a hole reports the gap and the arrival remains durable | DECIDED |
+| Resynchronisation is not claimed | DEC-069 | `request_event_resync` remains declared with no handler; the gate's implemented count does not include it | DECIDED |
+| Capacity refusal is transient to the caller | DEC-070 | Retry helper returns the last error at its bound; the registry marks the code `BACKOFF` | DECIDED |
+| Capacity is not rendered as failure | DEC-070 | UI renders queued/busy; the code is never mapped to a non-backoff registry code | DECIDED |
+| Replay cannot bypass authorization | DEC-071 | Material-action replay is refused with a registered code; a mutation proves dropping the refusal fails | DECIDED |
+| A replayed message is not presented as context-fresh | DEC-071 | Response carries the original snapshot and digest with `context_refreshed: false` | DECIDED |
+| SQLite work does not block the IPC thread | DEC-072 | New handlers are `async`; the vendored macro source shows a sync command runs inline on the delivery thread | DECIDED |
+| Two connections to one file are safe | DEC-072 | The M2 concurrent-writer test observes two writers landing without loss under the rollback journal and a 5000 ms busy timeout | OBSERVED (M2) |
+| No message is dead-lettered by a dispatcher that cannot deliver | DEC-073 | A test constructs the shell state and asserts nothing is dead-lettered | DECIDED |
+| Clock and identity are real outside the bus | DEC-074 | Format-validity and uniqueness tests; `crates/bus` gains no I/O | DECIDED |
+
+Not addressed by this milestone: a real transport, adapters, `PolicyService`, `ContextService`,
+`request_event_resync`, and an enqueue command. Each is out of scope by decision rather than by omission, and
+each is named in DEC-069 to DEC-074.
 ## Persistence implementation
 
 Traceability is persisted by the SQLite storage owner.

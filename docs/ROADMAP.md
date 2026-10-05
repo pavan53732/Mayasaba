@@ -55,6 +55,24 @@ implied: backpressure does not **refuse** an enqueue, because the error registry
 (DEC-058, DEC-065).
 - explicit replay
 
+## M2.5 — Shell integration for the durable bus
+
+M2 built the bus and validated it; nothing in the running application reaches it. This milestone wires it into
+the Tauri shell **without faking delivery**. There is no transport until M3, so no dispatch loop runs and no
+message is handed to something that cannot carry it.
+
+Decided in DEC-069 to DEC-074: a reported ordering gap is surfaced as a diagnostic rather than resynchronised;
+`CAPACITY_EXCEEDED` is retried by the shell and rendered as busy rather than failed; replay refuses
+material-action messages until `PolicyService` exists; the Bus holds its own `Storage` connection and new
+handlers are `async` with work on `spawn_blocking`; no background dispatch runs; the production `Clock` and
+`IdSource` live outside `crates/bus`.
+
+**Status: decided, not implemented.** The six records above are written and this milestone's code has not been
+built yet. Nothing here may be read as working until the tranches land and each is validated.
+
+Deliberately out of scope: agent adapters and any real CLI process (M3), a real transport, a background
+dispatch loop, `request_event_resync`, `PolicyService`, `ContextService`, an enqueue command, council runtime,
+and any schema or table change.
 ## M3 — Agent gateway
 
 M3 is blocked until M0.5, M1 and the native adapter probe contract are complete.

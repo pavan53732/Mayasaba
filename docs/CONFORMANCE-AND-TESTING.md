@@ -307,6 +307,33 @@ Known limits: it covers the nine edges routed through `advance_in` of the machin
 inline SQL where the from-state is implied by a `WHERE` clause rather than named as a pair - and it checks edges
 rather than the four state vocabularies.
 
+## Shell integration tests (M2.5, DEC-069 to DEC-074)
+
+The test surfaces this milestone adds. **None of these exist yet**: the decisions are recorded in Tranche 0 and
+the tests land with the code in Tranches 1 to 4. They are listed here so that the plan and the eventual tests
+can be compared rather than assumed to match.
+
+| Surface | What it establishes | Tranche |
+| --- | --- | --- |
+| Nothing is dead-lettered at rest | Constructing the shell state and running it against `NotConnectedTransport` dead-letters nothing, and the transport reports not-connected rather than success | 1 |
+| Retry helper bound | The helper stops at its bound and returns the last error rather than looping | 1 |
+| Retry helper backoff | Delays are monotonically non-decreasing under `BackoffPolicy` | 1 |
+| Retry helper propagation | A non-capacity error is returned unchanged and is not retried | 1 |
+| Clock format | A generated timestamp has the fixed-width UTC shape the due-time comparison depends on | 1 |
+| Identity uniqueness | Generated ids are unique across a run and satisfy the envelope validator's shape rules | 1 |
+| Health shape | The health response conforms to its declared payload type | 2 |
+| Health is read-only | Both diagnostic queries leave every bus table unchanged | 2 |
+| Gap surfaced | A stream with a hole reports `SEQUENCE_GAP` with session, channel, expected and found | 2 |
+| Non-material replay | A non-material terminal message re-enters the outbox | 3 |
+| Material replay refused | A material-action message is refused with a registered code, and a mutation proves removing that refusal fails the suite | 3 |
+| Replay idempotence | Replaying twice does not produce two messages | 3 |
+| Replay freshness honesty | The response carries `context_refreshed: false` with the original snapshot and digest | 3 |
+| Bridge shape | Every new handler has a wire shape test and is listed in `COVERED_OPERATIONS` | 2, 3 |
+| Bridge two-way agreement | The gate finds every new handler in both the contract and the shell | 2, 3 |
+| Error mapping | Every code the `BusError` to `CommandError` mapping can emit resolves in the error registry | 2, 3 |
+
+The existing rule that no registered handler may lack a shape test is enforced by
+`every_registered_handler_is_covered`, which reads this repository's own `generate_handler![...]` list.
 ## Project intent and user-contribution tests
 
 Must prove:
