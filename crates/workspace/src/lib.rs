@@ -17,4 +17,7 @@ pub use validation::{validate_workspace_candidate, WorkspaceRejection, Workspace
 /// Crate identity, retained for the workspace manifest check.
 pub const CRATE_NAME: &str = "mayasaba-workspace";
 
-/// Persist an observed workspace revision through the canonical storage owner.\npub fn record_revision(storage: &mayasaba_storage::Storage, revision: &mayasaba_storage::NewWorkspaceRevision) -> mayasaba_storage::Result<()> {\n    storage.insert_workspace_revision(revision)\n}\n
+/// Persist an observed workspace revision through the canonical storage owner.
+pub fn record_revision(storage: &mayasaba_storage::Storage, revision: &mayasaba_storage::NewWorkspaceRevision) -> mayasaba_storage::Result<()> {
+    storage.insert_workspace_revision(revision)
+}
