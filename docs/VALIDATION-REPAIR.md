@@ -98,3 +98,28 @@ COMPLETE is unreachable by agent declaration. It is a controller-owned terminal 
 ## Machine-readable validation contracts
 
 Failure packets, diagnoses, repairs, reviews and controller certification use schemas under schemas/validation-v1/. Repair retry and anti-loop limits are defined by repair-policies.json.
+
+
+## Certification provenance and regression locks
+
+Validation is binding-specific. A passing validation result is not a timeless statement about a project; it is a statement about an observed artifact/workspace/environment under a particular validator and test-suite version.
+
+Every certification record must bind, where applicable:
+- validation run
+- exact artifact content hashes
+- exact workspace revision
+- exact environment snapshot
+- validator implementation/version
+- test-suite/version
+- applicable requirement/decision/contract epoch
+
+Any load-bearing binding change supersedes the certification. Historical certification remains immutable for audit.
+
+### Regression locks
+Capabilities and high-risk fixes may attach regression suites through the existing traceability/task validation model. Any integration touching a capability's affected dependency set reruns the registered regression checks before promotion.
+
+### Evidence admissibility
+Evidence is not ordered by one universal truth ladder. Admissibility is claim-specific: filesystem observations prove different facts from compiler output, runtime probes, source citations or architecture decisions. A validator may accept only the evidence kinds required by the task's acceptance contract.
+
+### Repair convergence
+Repair consumes a bounded budget. Repeated identical fingerprints, repeated no-op repairs or repeated regressions cause escalation/blocking instead of another unconstrained agent loop.
