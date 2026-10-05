@@ -8,6 +8,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::process::Stdio;
+use tokio::{process::Command, time::{self, Duration}};
 
 const NATIVE_TRANSPORT_CONTRACT: &str =
     include_str!("../../../schemas/agent-adapter-v1/native-transport-contract.json");
@@ -117,6 +119,34 @@ impl AgentVersion {
 
 pub type CapabilitySet = BTreeMap<String, bool>;
 pub type Environment = BTreeMap<String, String>;
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeOptions {
+    pub cwd: String,
+    pub probe_time: String,
+    pub timeout_ms: u64,
+}
+
+impl Default for ProbeOptions {
+    fn default() -> Self {
+        Self {
+            cwd: std::env::current_dir().ok()
+                .and_then(|p| p.to_str().map(ToOwned::to_owned))
+                .unwrap_or_else(|| r"C:\".to_owned()),
+            probe_time: String::new(),
+            timeout_ms: 10_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiscoveryReport {
+    pub agent_type: AgentType,
+    pub installation: Option<AgentInstallation>,
+    pub probe: Option<ProbeResult>,
+    pub health: HealthStatus,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentInstallation {
@@ -332,6 +362,230 @@ pub struct HermesAdapter;
 pub struct KiloAdapter;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenCodeAdapter;
+
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum AnyAgentAdapter {
+    #[default]
+    Hermes,
+    Kilo,
+    OpenCode,
+}
+
+impl AnyAgentAdapter {
+    pub const fn for_agent(agent_type: AgentType) -> Self {
+        match agent_type {
+            AgentType::Hermes => Self::Hermes,
+            AgentType::Kilo => Self::Kilo,
+            AgentType::OpenCode => Self::OpenCode,
+        }
+    }
+}
+
+impl AgentAdapter for AnyAgentAdapter {
+    fn agent_type(&self) -> AgentType {
+        match self {
+            Self::Hermes => AgentType::Hermes,
+            Self::Kilo => AgentType::Kilo,
+            Self::OpenCode => AgentType::OpenCode,
+        }
+    }
+
+    fn prepare_launch(
+        &self,
+        request: &SessionLaunch,
+        version: &AgentVersion,
+        prompt: &str,
+        native_session_id: Option<&str>,
+        proof: LaunchProof,
+    ) -> Result<PreparedLaunch, AdapterError> {
+        match self {
+            Self::Hermes => HermesAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
+            Self::Kilo => KiloAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
+            Self::OpenCode => OpenCodeAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
+        }
+    }
+
+    fn normalize_event(&self, raw: &str, received_at: &str, raw_ref: &str)
+        -> Result<NativeEvent, AdapterError> {
+        match self {
+            Self::Hermes => HermesAdapter.normalize_event(raw,received_at,raw_ref),
+            Self::Kilo => KiloAdapter.normalize_event(raw,received_at,raw_ref),
+            Self::OpenCode => OpenCodeAdapter.normalize_event(raw,received_at,raw_ref),
+        }
+    }
+}
+
+/// Discover and minimally probe one installed agent. This performs only local executable discovery and --version.
+/// Interactive credential/auth surfaces and network-capable commands are deliberately not invoked here.
+pub async fn discover_agent(
+    agent_type: AgentType,
+    options: &ProbeOptions,
+) -> Result<DiscoveryReport, AdapterError> {
+    let definition = agent_contract(agent_type)?;
+    let executable = definition.get("executable").and_then(Value::as_str).ok_or_else(|| adapter_error(
+        AdapterErrorCategory::PROTOCOL,"ADAPTER_EXECUTABLE_MISSING",Retryability::NEVER,
+        format!("contract has no executable for {}",agent_type.as_str())))?;
+
+    let where_result = Command::new("where.exe")
+        .arg(executable)
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
+        .map_err(|e| adapter_error(
+            AdapterErrorCategory::DETECTION,"DISCOVERY_COMMAND_FAILED",Retryability::AFTER_USER_ACTION,
+            format!("where.exe failed: {e}")))?;
+
+    let resolved_path = String::from_utf8_lossy(&where_result.stdout)
+        .lines().map(str::trim).find(|v| !v.is_empty()).map(ToOwned::to_owned);
+
+    let Some(resolved_path) = resolved_path else {
+        return Ok(DiscoveryReport {
+            agent_type, installation: None, probe: None,
+            health: HealthStatus {
+                state: HealthState::UNKNOWN,
+                checked_at: options.probe_time.clone(),
+                detail: Some(format!("{executable} was not found on PATH")),
+            },
+        });
+    };
+
+    let version_tokens = definition.get("version").and_then(Value::as_array).ok_or_else(|| adapter_error(
+        AdapterErrorCategory::PROTOCOL,"VERSION_PROBE_MISSING",Retryability::NEVER,
+        format!("version probe missing for {}",agent_type.as_str())))?;
+    let version_args = version_tokens.iter().map(|v| v.as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| adapter_error(
+            AdapterErrorCategory::PROTOCOL,"VERSION_PROBE_INVALID",Retryability::NEVER,
+            "version probe contains a non-string token")))
+        .collect::<Result<Vec<_>,_>>()?;
+
+    let output = match time::timeout(
+        Duration::from_millis(options.timeout_ms.max(100)),
+        Command::new(&resolved_path)
+            .args(&version_args).current_dir(&options.cwd)
+            .stdout(Stdio::piped()).stderr(Stdio::piped()).output()
+    ).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(e)) => {
+            return Ok(DiscoveryReport {
+                agent_type,
+                installation: None,
+                probe: None,
+                health: HealthStatus {
+                    state: HealthState::UNHEALTHY,
+                    checked_at: options.probe_time.clone(),
+                    detail: Some(format!("version probe failed: {e}")),
+                },
+            })
+        }
+        Err(_) => {
+            return Ok(DiscoveryReport {
+                agent_type,
+                installation: None,
+                probe: None,
+                health: HealthStatus {
+                    state: HealthState::UNHEALTHY,
+                    checked_at: options.probe_time.clone(),
+                    detail: Some("version probe timed out".to_owned()),
+                },
+            })
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let version = parse_version_from_probe(&format!("{stdout}\n{stderr}"))
+        .ok_or_else(|| adapter_error(
+            AdapterErrorCategory::DETECTION,"VERSION_PARSE_FAILED",Retryability::AFTER_USER_ACTION,
+            format!("could not parse a semantic version from {} output",agent_type.as_str())))?;
+
+    let transport = definition.get("transport").and_then(Value::as_str)
+        .and_then(Transport::parse).unwrap_or(Transport::Unsupported);
+
+    let mut capabilities = CapabilitySet::new();
+    capabilities.insert("version_probe".into(), true);
+    capabilities.insert("local_process".into(), true);
+    capabilities.insert("working_directory".into(), true);
+    capabilities.insert("structured_transport".into(), transport != Transport::Unsupported);
+    capabilities.insert("resume_vector".into(), definition.get("resume").is_some());
+
+    let probe = ProbeResult {
+        schema_version: "1.0.0".into(),
+        agent_type,
+        probe_time: options.probe_time.clone(),
+        executable: executable.into(),
+        resolved_path: Some(resolved_path.clone()),
+        version: version.clone(),
+        platform: "windows".into(),
+        transport,
+        invocation: ProbeInvocation {
+            argv: version_args,
+            cwd: options.cwd.clone(),
+            stdin_mode: "NONE".into(),
+            stdout_mode: "CAPTURED".into(),
+            stderr_mode: "CAPTURED".into(),
+        },
+        capabilities,
+        exit_semantics: ExitSemantics {
+            exit_code: output.status.code(),
+            terminated_by_signal: false,
+            timeout: false,
+        },
+        authentication: AuthenticationProbe {
+            detected: false,
+            method: "NOT_PROBED".into(),
+        },
+        raw_probe_evidence: vec![bounded_text(&stdout,4096), bounded_text(&stderr,4096)],
+        warnings: vec![
+            "Credential-bearing or interactive auth commands are not invoked by discovery.".into(),
+            "Capability claims are provisional until contract-specific runtime capability probes complete.".into(),
+        ],
+    };
+
+    Ok(DiscoveryReport {
+        agent_type,
+        installation: Some(AgentInstallation {
+            agent_type, executable: executable.into(), resolved_path, version,
+            platform: "windows".into(),
+        }),
+        probe: Some(probe),
+        health: HealthStatus {
+            state: if output.status.success() { HealthState::HEALTHY } else { HealthState::UNHEALTHY },
+            checked_at: options.probe_time.clone(),
+            detail: if output.status.success() { None } else { Some(bounded_text(&stderr,1024)) },
+        },
+    })
+}
+
+pub async fn discover_all_agents(options: &ProbeOptions) -> Vec<DiscoveryReport> {
+    let mut reports = Vec::with_capacity(AgentType::ALL.len());
+    for agent_type in AgentType::ALL {
+        match discover_agent(agent_type, options).await {
+            Ok(report) => reports.push(report),
+            Err(error) => reports.push(DiscoveryReport {
+                agent_type,
+                installation: None,
+                probe: None,
+                health: HealthStatus {
+                    state: HealthState::UNHEALTHY,
+                    checked_at: options.probe_time.clone(),
+                    detail: Some(format!("{}: {}",error.code,error.message)),
+                },
+            }),
+        }
+    }
+    reports
+}
+
+fn parse_version_from_probe(text: &str) -> Option<AgentVersion> {
+    text.split_whitespace().find_map(|token| {
+        let token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-' && c != '+');
+        AgentVersion::parse(token)
+    })
+}
+
+fn bounded_text(text: &str, limit: usize) -> String {
+    text.chars().take(limit).collect()
+}
 
 impl PreparedLaunch {
     /// Convert the adapter-owned launch description into the process-neutral execution specification.
