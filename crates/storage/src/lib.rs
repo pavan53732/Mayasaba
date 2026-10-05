@@ -3647,3 +3647,164 @@ mod tests {
         );
     }
 }
+
+/// Durable retry/recovery identity for a Task. The active lease version is copied as the fencing value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTaskAttempt {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub project_id: String,
+    pub attempt_no: i64,
+    pub lease_id: String,
+    pub agent_id: String,
+    pub session_id: String,
+    pub workspace_id: String,
+    pub fence_token: i64,
+    pub project_epoch: i64,
+    pub context_snapshot_id: String,
+    pub state: String,
+    pub checkpoint_id: Option<String>,
+    pub failure_id: Option<String>,
+    pub started_at: Option<String>,
+    pub heartbeat_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewResourceReservation {
+    pub reservation_id: String,
+    pub project_id: String,
+    pub task_id: String,
+    pub lease_id: String,
+    pub lease_version: i64,
+    pub resource_type: String,
+    pub resource_key: String,
+    pub mode: String,
+    pub quantity: i64,
+    pub state: String,
+    pub issued_at: String,
+    pub expires_at: String,
+    pub released_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewWorkspaceRevision {
+    pub revision_id: String,
+    pub project_id: String,
+    pub workspace_id: String,
+    pub task_id: Option<String>,
+    pub session_id: Option<String>,
+    pub revision_no: i64,
+    pub parent_revision_id: Option<String>,
+    pub repository_head: Option<String>,
+    pub manifest_hash: Option<String>,
+    pub tree_hash: Option<String>,
+    pub source: String,
+    pub status: String,
+    pub observed_at: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewEnvironmentSnapshot {
+    pub environment_snapshot_id: String,
+    pub project_id: String,
+    pub workspace_id: Option<String>,
+    pub task_id: Option<String>,
+    pub execution_id: Option<String>,
+    pub os_identity: String,
+    pub runtime_versions_json: String,
+    pub environment_policy_hash: String,
+    pub source: String,
+    pub captured_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCertificationBinding {
+    pub certification_binding_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub validation_id: String,
+    pub workspace_revision_id: Option<String>,
+    pub environment_snapshot_id: Option<String>,
+    pub artifact_hashes_json: String,
+    pub validator_version: String,
+    pub test_suite_version: Option<String>,
+    pub status: String,
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
+const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
+const RESOURCE_TYPES: &[&str] = &["CPU","RAM","GPU","DISK","PORT","WORKSPACE","PROCESS_SLOT","AGENT_SLOT","TOOLCHAIN"];
+const RESOURCE_MODES: &[&str] = &["EXCLUSIVE","SHARED"];
+const RESOURCE_STATES: &[&str] = &["HELD","RELEASED","EXPIRED","LOST"];
+const REVISION_SOURCES: &[&str] = &["CONTROLLER","AGENT","USER","EXTERNAL","GIT"];
+const REVISION_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
+const CERTIFICATION_STATES: &[&str] = &["ACTIVE","SUPERSEDED","INVALIDATED","EXPIRED"];
+
+impl Storage {
+    /// Persist one task attempt. Task identity is stable; attempt number is unique per task.
+    pub fn insert_task_attempt(&self, new: &NewTaskAttempt) -> Result<()> {
+        require_vocabulary("task_attempts.state", &new.state, TASK_ATTEMPT_STATES)?;
+        self.conn.execute(
+            "INSERT INTO task_attempts (attempt_id, task_id, project_id, attempt_no, lease_id, agent_id, session_id, workspace_id, fence_token, project_epoch, context_snapshot_id, state, checkpoint_id, failure_id, started_at, heartbeat_at, ended_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+            rusqlite::params![new.attempt_id,new.task_id,new.project_id,new.attempt_no,new.lease_id,new.agent_id,new.session_id,new.workspace_id,new.fence_token,new.project_epoch,new.context_snapshot_id,new.state,new.checkpoint_id,new.failure_id,new.started_at,new.heartbeat_at,new.ended_at,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
+    pub fn verify_attempt_fence(&self, attempt_id: &str, presented_lease_version: i64) -> Result<()> {
+        let row: Option<(i64, i64)> = self.conn.query_row(
+            "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND tl.status = 'ACTIVE'",
+            [attempt_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).optional().map_err(StorageError::Db)?;
+        match row {
+            Some((fence_token, current)) if fence_token == current && presented_lease_version == current => Ok(()),
+            Some((fence_token, current)) => Err(StorageError::Malformed { column: "task_leases.lease_version".to_string(), detail: format!("stale task-attempt fence: attempt={attempt_id}, attempt_fence={fence_token}, current_lease_version={current}, presented={presented_lease_version}"), }),
+            None => Err(StorageError::NotFound(format!("active lease for task attempt {attempt_id}"))),
+        }
+    }
+
+    pub fn insert_resource_reservation(&self, new: &NewResourceReservation) -> Result<()> {
+        require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
+        require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
+        require_vocabulary("resource_reservations.state", &new.state, RESOURCE_STATES)?;
+        self.conn.execute(
+            "INSERT INTO resource_reservations (reservation_id, project_id, task_id, lease_id, lease_version, resource_type, resource_key, mode, quantity, state, issued_at, expires_at, released_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+            rusqlite::params![new.reservation_id,new.project_id,new.task_id,new.lease_id,new.lease_version,new.resource_type,new.resource_key,new.mode,new.quantity,new.state,new.issued_at,new.expires_at,new.released_at,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_workspace_revision(&self, new: &NewWorkspaceRevision) -> Result<()> {
+        require_vocabulary("workspace_revisions.source", &new.source, REVISION_SOURCES)?;
+        require_vocabulary("workspace_revisions.status", &new.status, REVISION_STATES)?;
+        self.conn.execute(
+            "INSERT INTO workspace_revisions (revision_id, project_id, workspace_id, task_id, session_id, revision_no, parent_revision_id, repository_head, manifest_hash, tree_hash, source, status, observed_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+            rusqlite::params![new.revision_id,new.project_id,new.workspace_id,new.task_id,new.session_id,new.revision_no,new.parent_revision_id,new.repository_head,new.manifest_hash,new.tree_hash,new.source,new.status,new.observed_at,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_environment_snapshot(&self, new: &NewEnvironmentSnapshot) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
+        require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        self.conn.execute(
+            "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.reason,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+}
