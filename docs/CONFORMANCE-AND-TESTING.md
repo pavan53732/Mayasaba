@@ -589,3 +589,40 @@ The conformance test and the argument-name check were mutation-tested in eight d
 
 One control was run alongside them: the unmutated tree passes both the test suite and the gate. Mutations (a)–(e) were chosen to **compile**, so a non-zero exit is the conformance test failing rather than the crate failing to build — a mutation that breaks the build proves nothing about the check.
 
+
+
+## Long-running orchestration reliability tests
+
+These tests extend the existing protocol/recovery suites without creating a second state model.
+
+### Task attempt and fencing
+- two attempts of one task have distinct identities and immutable attempt numbers;
+- the attempt fence token equals the durable lease version;
+- an old fence token is rejected after a newer lease version is issued;
+- a task remains the same acceptance unit across retry/reassignment;
+- an `UNKNOWN` attempt is never treated as success.
+
+### Resource/process reconciliation
+- an expired/lost reservation is reconstructed correctly after restart;
+- two admissions cannot simultaneously hold an exclusive port/resource;
+- a stale reservation is not considered free until observed state agrees;
+- process-tree cancellation leaves no owned descendant, or records explicit unresolved recovery;
+- an execution whose process disappeared before terminal observation enters `UNKNOWN` and is reconciled before completion.
+
+### Workspace/environment provenance
+- each execution/validation can resolve its environment snapshot and workspace revision;
+- unexpected external file/Git changes create a drifted revision and block affected integration;
+- an integration admission for an old epoch/base checkpoint cannot be reused;
+- certification binds exact artifact hashes, workspace revision and environment snapshot;
+- changing any load-bearing binding supersedes the certification.
+
+### Plan invalidation
+- a material requirement/decision/contract change invalidates affected plans/contexts;
+- stale results from an earlier epoch are rejected rather than merged;
+- unaffected tasks remain schedulable when the dependency graph proves they are independent.
+
+### Liveness/convergence
+- repeated no-progress execution reaches an explicit recovery/block/terminal outcome;
+- repair loops stop at their configured budget;
+- swarm/parallelism quotas prevent unbounded child creation;
+- deterministic replay of injected crashes, duplicates, reordering and lease loss reaches the same logical outcome.
