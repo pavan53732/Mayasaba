@@ -454,6 +454,7 @@ Outcomes
 Storage
 29. opening a database created from the previous `schema.sql` adds the six new tables idempotently and leaves existing data intact, and opening twice is safe;
 30. the DDL's `CHECK` vocabularies and the contract vocabularies are the same sets, so a value the contract permits is not refused by the database and a value it forbids is not stored.
+31. every `FOREIGN KEY(local_columns) REFERENCES table(target_columns)` declaration names existing local and target columns with matching cardinality; the contract gate checks this structurally before runtime can discover a malformed relationship.
 
 Contracts
 31. `npm run verify:contracts` passes with every new council schema invariant-checked rather than parse-only, and `npm run codegen` produces no diff.
