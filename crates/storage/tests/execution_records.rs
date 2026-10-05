@@ -129,3 +129,37 @@ fn process_observations_are_append_only_and_unknown_is_preserved() {
         parent_pid:None, state:"VERIFIED".into(), observed_at:"4".into()
     }).is_err());
 }
+
+
+#[test]
+fn schedulable_selector_is_dependency_safe_and_deterministic() {
+    let storage = project_storage();
+    storage.conn().execute(
+        "INSERT INTO tasks (task_id,project_id,objective,status,priority,risk,workspace_id,current_epoch,created_at,updated_at)
+         VALUES
+         ('task_low','prj_exec','low','READY',1,'LOW','ws_exec',0,'1','1'),
+         ('task_high','prj_exec','high','READY',5,'LOW','ws_exec',0,'2','2'),
+         ('task_blocked','prj_exec','blocked','READY',99,'LOW','ws_exec',0,'3','3')", [],
+    ).expect("tasks");
+    storage.conn().execute(
+        "INSERT INTO task_dependencies (task_id, depends_on_task_id) VALUES ('task_blocked','task_high')", []
+    ).expect("dependency");
+    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector");
+    assert_eq!(rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
+               vec!["task_high","task_low"]);
+    assert!(!rows.iter().any(|r| r.task_id == "task_blocked"));
+
+    storage.conn().execute("UPDATE tasks SET status='COMPLETED', updated_at='4' WHERE task_id='task_high'", [])
+        .expect("complete dependency");
+    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector after dependency");
+    assert_eq!(rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
+               vec!["task_blocked","task_low"]);
+
+    storage.conn().execute(
+        "INSERT INTO task_leases (lease_id,task_id,project_id,agent_id,session_id,workspace_id,lease_version,project_epoch,context_snapshot_id,state_digest,allowed_paths_json,required_capabilities_json,policy_scope,issued_at,heartbeat_at,expires_at,status)
+         VALUES ('lease_high','task_low','prj_exec','agent_exec','sess_exec','ws_exec',1,0,'ctx_exec',
+                 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','[]','[]','PROJECT_WRITE','1','1','9999','ACTIVE')", []
+    ).expect("live lease");
+    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector with live lease");
+    assert!(!rows.iter().any(|r| r.task_id == "task_low"));
+}
