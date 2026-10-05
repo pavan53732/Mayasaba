@@ -12,8 +12,9 @@ use std::process::Stdio;
 use tokio::{process::Command, time::{self, Duration}};
 
 const NATIVE_TRANSPORT_CONTRACT: &str =
-const NATIVE_TO_MCF_REGISTRY: &str = include_str!("../../../schemas/agent-adapter-v1/native-to-mcf.registry.json");
     include_str!("../../../schemas/agent-adapter-v1/native-transport-contract.json");
+const NATIVE_TO_MCF_REGISTRY: &str =
+    include_str!("../../../schemas/agent-adapter-v1/native-to-mcf.registry.json");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentType {
@@ -76,7 +77,9 @@ impl Transport {
             "ACP_STDIO" => Some(Self::AcpStdio),
             "UNSUPPORTED" => Some(Self::Unsupported),
             _ => None,
-    
+        }
+    }
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::HermesStreamJson => "HERMES_STREAM_JSON",
@@ -85,8 +88,6 @@ impl Transport {
             Self::AcpStdio => "ACP_STDIO",
             Self::Unsupported => "UNSUPPORTED",
         }
-    }
-    }
     }
 }
 
@@ -184,7 +185,6 @@ pub enum HealthState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandshakeEnvelopeInput {
     pub message_id: String,
     pub event_id: String,
@@ -201,6 +201,8 @@ pub struct HandshakeEnvelopeInput {
     pub project_epoch: i64,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionLaunch {
     pub project_id: String,
     pub session_id: String,
@@ -316,7 +318,9 @@ pub enum NativeEventKind {
     SESSION_ENDED,
     HEARTBEAT,
     UNKNOWN,
+}
 
+impl NativeEventKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::SESSION_STARTED => "SESSION_STARTED",
@@ -335,7 +339,8 @@ pub enum NativeEventKind {
             Self::HEARTBEAT => "HEARTBEAT",
             Self::UNKNOWN => "UNKNOWN",
         }
-    }}
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NativeEvent {
@@ -1315,7 +1320,6 @@ fn prepare_from_contract(
             format!("request transport {:?} does not match contract transport {:?}", request.transport, transport)));
     }
 
-    let required_config = definition.get("required_config").cloned().unwrap_or_else(|| Value::Object(Default::default()));
     Ok(PreparedLaunch {
         agent_type: agent,
         executable: definition.get("executable").and_then(Value::as_str).unwrap_or_default().to_owned(),
