@@ -1143,3 +1143,13 @@ Classification: REFINEMENT. Project remains the durable lifecycle root; events r
 
 ### DEC-085 — Reliability additions do not require non-migratable alterations to existing tables
 Classification: REFINEMENT. New durability records are additive tables. Relationships from `TaskAttempt` to pre-existing execution/checkpoint/admission records use the existing traceability tables rather than adding columns to existing SQLite tables while the repository has no general migration runner. A future schema migration may normalize these relationships only through an explicit compatibility decision.
+
+
+### DEC-086 — Certification supersession is append-only
+Classification: REFINEMENT. Certification bindings are immutable claims. A later invalidation or expiry is represented by a new binding row carrying `supersedes_binding_id`; historical rows are never updated in place. The effective binding is the terminal row of the supersession chain.
+
+### DEC-087 — Attempt state transitions use compare-and-swap
+Classification: ADDITIVE. TaskAttempt transitions require an expected current state and update only that exact state, so concurrent/reordered controller actions cannot silently overwrite a newer attempt state. Invalid edges fail explicitly.
+
+### DEC-088 — Reliability provenance uses the existing trace authority
+Classification: ADDITIVE. TaskAttempt relationships to checkpoints, executions, admissions, environments and certification are recorded with the existing `trace_links` authority. New tables are only introduced for genuinely durable state; provenance does not create a parallel relationship store.
