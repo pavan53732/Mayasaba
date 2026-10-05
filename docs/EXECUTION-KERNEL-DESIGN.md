@@ -76,16 +76,20 @@ A launch failure before a process exists leaves STARTING for recovery; it is not
 
 ### Current Windows termination boundary
 
-Windows cancellation currently uses the fully-qualified SystemRoot\\System32\\taskkill.exe with /PID /T /F. This is a
-recovery-oriented process-tree termination path, not a kernel-level Job Object ownership guarantee. The remaining
-hardening requirement is atomic process-tree ownership so descendants cannot escape between spawn and supervision.
-Until that exists, unreconciled survivors remain a blocker and may produce UNKNOWN recovery state.
+Windows process containment now uses an atomic Job Object ownership boundary. The child is created suspended,
+assigned to a private Job Object configured with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and only then is its primary
+thread resumed. Timeout, cancellation and post-spawn durability failure terminate the Job Object rather than a
+shell utility. Descendants created by the contained process remain in the job by default. If containment setup
+or terminal process observation fails, recovery preserves UNKNOWN rather than claiming success.
 
 
 ## Reliability refinements
 
 ### Process-tree termination boundary
-Every execution records a physical process observation. On Windows, the current hard-stop path uses the fully-qualified SystemRoot\\System32\\taskkill.exe with /PID /T /F. This targets the process tree but is not an atomic Job Object ownership guarantee. Completion therefore requires an observation that the process tree is gone; when that observation cannot be established, recovery records UNKNOWN instead of claiming success.
+Every execution records a physical process observation. On Windows, the kernel creates the child suspended, assigns it to a
+private Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and resumes it only after assignment succeeds.
+Termination uses TerminateJobObject. Completion still requires observation; if physical state cannot be established,
+recovery records UNKNOWN.
 
 ### Ports and local resources
 Ports, process slots and other scarce machine-local resources are admitted through `ResourceReservation`. The execution kernel must not assume that a port is free because the reservation table says so; admission reconciles the reservation with actual OS/process state.

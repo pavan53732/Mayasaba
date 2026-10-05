@@ -1179,3 +1179,7 @@ Classification: ADDITIVE. TaskAttempt transitions require an expected current st
 
 ### DEC-088 — Reliability provenance uses the existing trace authority
 Classification: ADDITIVE. TaskAttempt relationships to checkpoints, executions, admissions, environments and certification are recorded with the existing `trace_links` authority. New tables are only introduced for genuinely durable state; provenance does not create a parallel relationship store.
+
+ 
+### DEC-098 — Windows execution uses atomic Job Object containment
+Classification: REFINEMENT. `crates/execution` is the sole owner of Windows process containment. A material child is created suspended, assigned to a private Job Object configured with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and only then resumed. Termination uses TerminateJobObject; closing the ownership handle also terminates any remaining job members. PID-based `taskkill /T` is removed from the material execution path. The supported product agent set remains exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI; this decision does not modify DEC-029.

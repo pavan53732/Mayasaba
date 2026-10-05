@@ -14,6 +14,9 @@ use std::{
     time::Duration,
 };
 
+mod process_tree;
+use process_tree::ProcessTreeOwner;
+
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::{Child, Command},
@@ -76,6 +79,7 @@ pub struct SpawnedProcess {
     pub execution_id: String,
     pub pid: u32,
     pub output_limit_bytes: usize,
+    process_tree: ProcessTreeOwner,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,6 +194,7 @@ pub async fn spawn_process(
 
     let mut command = Command::new(&spec.executable);
     command.args(&spec.argv).current_dir(&spec.cwd);
+    process_tree::configure_suspended_creation(&mut command);
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     for key in &spec.scrub_inherited_environment {
         command.env_remove(key);
@@ -218,6 +223,16 @@ pub async fn spawn_process(
         }
     };
 
+    // On Windows ownership is established before any child code executes: suspended spawn -> Job Object -> resume.
+    let mut process_tree = match ProcessTreeOwner::attach_and_resume(&mut child, pid).await {
+        Ok(owner) => owner,
+        Err(err) => {
+            return Err(ExecutionError::Termination(format!(
+                "process containment setup failed for pid {pid}: {err}"
+            )));
+        }
+    };
+
     let process_record_id = format!("proc_{execution_id}_{pid}");
     if let Err(err) = storage.insert_process_record(&NewProcessRecord {
         process_record_id,
@@ -227,7 +242,7 @@ pub async fn spawn_process(
         state: "EXPECTED".to_owned(),
         observed_at: started_at.to_owned(),
     }) {
-        let termination = terminate_owned_tree(pid).await;
+        let termination = process_tree.terminate().await;
         return match termination {
             Ok(()) => Err(ExecutionError::Durability(format!(
                 "PID persistence failed after spawn; owned process tree was terminated: {err}"
@@ -269,7 +284,8 @@ pub async fn spawn_process(
 impl SpawnedProcess {
     /// Terminate the owned process tree. Callers use this when a post-spawn controller transaction fails.
     pub async fn terminate(&mut self) -> Result<(), ExecutionError> {
-        terminate_owned_tree(self.pid)
+        self.process_tree
+            .terminate()
             .await
             .map_err(ExecutionError::Termination)
     }
@@ -333,7 +349,7 @@ impl SpawnedProcess {
                 Ok(result) => result.map_err(ExecutionError::Spawn)?,
                 Err(_) => {
                     timed_out = true;
-                    if let Err(err) = terminate_owned_tree(self.pid).await {
+                    if let Err(err) = self.process_tree.terminate().await {
                         insert_unknown_observation(storage, &self.execution_id, self.pid, observed_at).ok();
                         return Err(ExecutionError::Termination(err));
                     }
@@ -399,35 +415,6 @@ async fn read_bounded<R: AsyncRead + Unpin>(
         bytes.truncate(limit);
     }
     Ok((bytes, truncated))
-}
-
-async fn terminate_owned_tree(pid: u32) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let system_root = std::env::var_os("SystemRoot")
-            .ok_or_else(|| "SystemRoot is absent; refusing an unqualified taskkill lookup".to_string())?;
-        let taskkill = std::path::PathBuf::from(system_root)
-            .join("System32")
-            .join("taskkill.exe");
-        let status = Command::new(taskkill)
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .status()
-            .await
-            .map_err(|e| format!("taskkill could not start: {e}"))?;
-        if !status.success() {
-            return Err(format!("taskkill /T returned {status} for pid {pid}"));
-        }
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        let mut child = Command::new("kill")
-            .args(["-KILL", &pid.to_string()])
-            .spawn()
-            .map_err(|e| format!("kill could not start: {e}"))?;
-        let status = child.wait().await.map_err(|e| format!("kill wait failed: {e}"))?;
-        if status.success() { Ok(()) } else { Err(format!("kill returned {status}")) }
-    }
 }
 
 fn insert_unknown_observation(

@@ -210,6 +210,7 @@ The following reliability capabilities are acceptance requirements across M3-M10
 - certification binding to exact artifact/workspace/environment/validator inputs;
 - explicit UNKNOWN state and desired-vs-observed reconciliation;
 - deterministic liveness/convergence, fairness and bounded repair/swarm budgets.
+- Windows process containment is atomic: suspended spawn → Job Object assignment → resume; termination is controller-owned and does not invoke a shell utility.
 - agent discovery/session/process identity remains durable across restart; task leasing is impossible before an agent session reaches READY.
 - lease expiry is a closed recovery loop: the lease becomes EXPIRED and the owning Task becomes LEASE_EXPIRED atomically; TaskService
   stages RECOVERY_PENDING and returns the Task to READY only after no live lease, unresolved attempt or live/cleanup/unknown process

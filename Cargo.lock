@@ -1870,6 +1870,7 @@ dependencies = [
 name = "mayasaba-execution"
 version = "0.1.0"
 dependencies = [
+ "windows-sys 0.61.2",
  "mayasaba-policy",
  "mayasaba-storage",
  "tokio",
