@@ -10,6 +10,7 @@
 //! copies it, so a decision taken afterwards would be a decision about a replay that had already happened.
 
 use mayasaba_bus::{Bus, BusError, Clock, IdSource};
+use mayasaba_storage::{RecoverableAttempt, Storage};
 use mayasaba_protocol::generated::envelope::MATERIAL_ACTION_MESSAGE_TYPES;
 use serde::Serialize;
 
@@ -337,5 +338,67 @@ mod tests {
             other => panic!("expected an unreadable refusal, got {other:?}"),
         }
         assert_eq!(message_count(bus.storage()), 0);
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeRecoveryAction {
+    VerifyProcess,
+    RebindLease,
+    InspectUnknown,
+    RecoverStaleFence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeRecoveryCandidate {
+    pub attempt_id: String,
+    pub task_id: String,
+    pub attempt_no: i64,
+    pub action: RuntimeRecoveryAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeRecoveryPlan {
+    pub expired_resource_reservations: u64,
+    pub candidates: Vec<RuntimeRecoveryCandidate>,
+}
+
+/// Deterministic post-restart reconciliation plan. It observes durable state only; the caller still owns
+/// process inspection, task transition and reassignment decisions.
+pub fn build_runtime_recovery_plan(
+    storage: &Storage,
+    project_id: &str,
+    now: &str,
+) -> mayasaba_storage::Result<RuntimeRecoveryPlan> {
+    let expired_resource_reservations = storage.expire_due_resource_reservations(now)?;
+    let attempts = storage.list_recoverable_attempts(project_id)?;
+    let mut candidates = Vec::with_capacity(attempts.len());
+
+    for attempt in attempts {
+        let action = classify_recovery_attempt(&attempt);
+        candidates.push(RuntimeRecoveryCandidate {
+            attempt_id: attempt.attempt_id,
+            task_id: attempt.task_id,
+            attempt_no: attempt.attempt_no,
+            action,
+        });
+    }
+
+    Ok(RuntimeRecoveryPlan {
+        expired_resource_reservations,
+        candidates,
+    })
+}
+
+fn classify_recovery_attempt(attempt: &RecoverableAttempt) -> RuntimeRecoveryAction {
+    match attempt.state.as_str() {
+        "UNKNOWN" => RuntimeRecoveryAction::InspectUnknown,
+        _ if attempt.current_lease_version != Some(attempt.fence_token)
+            || attempt.lease_status.as_deref() != Some("ACTIVE")
+                && attempt.lease_status.as_deref() != Some("RENEWING") =>
+            RuntimeRecoveryAction::RecoverStaleFence,
+        _ if attempt.state == "CHECKPOINTED" => RuntimeRecoveryAction::VerifyProcess,
+        _ => RuntimeRecoveryAction::VerifyProcess,
     }
 }
