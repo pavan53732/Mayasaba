@@ -20,7 +20,7 @@
       }},
       "SessionLaunch":{"type":"object","required":["project_id","session_id","workspace_id","cwd","transport"],"properties":{
         "project_id":{"type":"string","format":"uuid"},"session_id":{"type":"string","format":"uuid"},"workspace_id":{"type":"string","format":"uuid"},"cwd":{"type":"string"},
-        "transport":{"enum":["ARGV","STDIN_TEXT","STDIN_JSONL","ACP_STDIO"]},"prompt_ref":{"type":["string","null"]}
+        "transport":{"enum":["HERMES_STREAM_JSON","KILO_JSON","OPEN_CODE_JSON","ACP_STDIO","UNSUPPORTED"]},"prompt_ref":{"type":["string","null"]}
       }},
       "AgentSessionHandle":{"type":"object","required":["process_id"],"properties":{"process_id":{"type":"integer","minimum":1},"native_session_id":{"type":["string","null"]}}},
       "SendReceipt":{"type":"object","required":["message_id","accepted","received_at"],"properties":{"message_id":{"type":"string","format":"uuid"},"accepted":{"type":"boolean"},"received_at":{"type":"string","format":"date-time"}}},
