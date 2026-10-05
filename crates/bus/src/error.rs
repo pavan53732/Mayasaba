@@ -102,7 +102,9 @@ pub(crate) fn classify(e: StorageError) -> BusError {
         StorageError::Schema(_)
         | StorageError::Db(_)
         | StorageError::UnscopedEvent
-        | StorageError::Canonical(_) => BusError::Storage(e),
+        | StorageError::Canonical(_)
+        | StorageError::StaleFence { .. }
+        | StorageError::InvalidAttemptTransition { .. } => BusError::Storage(e),
         // A named row that does not exist is not a storage failure: nothing went wrong with the database, and
         // reporting it as one would send a caller looking for a broken disk. It is the request naming something
         // the durable record does not hold, which is the schema-invalid condition - the same family as a column
