@@ -2141,6 +2141,13 @@ impl Storage {
         // while appearing to enforce them.
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(StorageError::Schema)?;
+
+        // A second connection that finds the database locked would otherwise fail at once: SQLite's default busy
+        // timeout is zero, so a concurrent writer gets SQLITE_BUSY rather than waiting. Five seconds is long
+        // enough for a competing write to commit and short enough that a genuine deadlock still surfaces as a
+        // failure rather than a hang. Set per connection, which is why it belongs here and not in schema.sql.
+        conn.execute_batch("PRAGMA busy_timeout = 5000;")
+            .map_err(StorageError::Schema)?;
         conn.execute_batch(SCHEMA_SQL)
             .map_err(StorageError::Schema)?;
 

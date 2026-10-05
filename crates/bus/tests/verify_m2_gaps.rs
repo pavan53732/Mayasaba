@@ -235,10 +235,10 @@ fn replaying_a_dead_letter_message_creates_a_new_queued_message() {
 
 /// Enqueue, retrying while the other writer holds the database.
 ///
-/// **Bounded on purpose.** `Storage::open` configures no `busy_timeout` — the only pragma it sets is
-/// `foreign_keys` — so a writer that finds the database locked receives `SQLITE_BUSY` immediately rather than
-/// waiting, and retrying is the caller's responsibility. An unbounded loop here would turn any persistent write
-/// failure into a hang instead of a test failure, and a test that hangs reports nothing.
+/// **Bounded on purpose.** `Storage::open` sets `busy_timeout = 5000`, so a writer that finds the database
+/// locked waits for it rather than failing at once. This retry is the second line of defence for the case where
+/// that wait expires anyway: an unbounded loop here would turn a persistent write failure into a hang instead of
+/// a test failure, and a test that hangs reports nothing.
 ///
 /// The retry is deliberately broad: it retries any `STORAGE_FAILURE`, because `BusError` does not expose the
 /// underlying SQLite code, so a genuine disk error would be retried too. That is tolerable in a test whose
