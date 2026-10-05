@@ -1100,6 +1100,25 @@ claiming something it cannot deliver.
 | Idempotence | A second replay of one dead letter produces no second message. The replay keeps the original's `operation_id`, so the second enqueue matches the first through the bus's idempotency scope and is absorbed; the response reports `deduplicated: true` and names the message the first call produced. Idempotence is a property of the identity the replay keeps, not of the id it invents. |
 | Tests affected | Tranche 3: a material action is refused and nothing is enqueued; a non-material terminal message is replayed as a new message while the original keeps its identity and state; the response carries the original context with `context_refreshed: false`; a second replay produces no second message; a message that is not there is refused without enqueueing. |
 
+### DEC-089 — Live task ownership is unique
+Classification: ADDITIVE. A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it.
+
+### DEC-090 — Lease renewal is versioned and returns to ACTIVE
+Classification: REFINEMENT. A renewal increments lease_version before the lease becomes ACTIVE again. Release, revoke, resource release and material attempt actions require the resulting current version. RENEWING is an internal transactional phase, not a durable stranded state.
+
+### DEC-091 — Execution persistence is durable-before-side-effect
+Classification: ADDITIVE. A material command must be durably APPROVED before the kernel records STARTING and crosses the OS process boundary. PID observation and RUNNING are persisted immediately after spawn. If post-spawn durability fails, the kernel attempts owned-process termination; it never fabricates success.
+
+### DEC-092 — Process outcome is observed, not inferred
+Classification: REFINEMENT. A process record is append-only physical observation. Missing or contradictory PID/process state is UNKNOWN and enters recovery inspection. Timeout and cancellation are terminal execution intents only after the OS-side process state is reconciled.
+
+### DEC-093 — Task selection is deterministic and non-authoritative
+Classification: ADDITIVE. TaskService may select READY tasks whose dependencies are COMPLETED and which have no live lease. Selection order is priority, oldest update, oldest creation, then task ID. Selection never grants ownership; only the lease admission transaction does.
+
+### DEC-094 — Adapter process descriptions are not process authority
+Classification: REFINEMENT. Agent adapters may prepare a contract-derived ProcessSpec, including inherited-environment scrub requirements, but only ExecutionService may spawn or terminate the process. This prevents vendor-specific adapters from becoming privileged execution authorities.
+
+
 ## Change procedure
 
 Changing a HARD_LOCK requires:
