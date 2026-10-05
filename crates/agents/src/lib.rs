@@ -701,12 +701,39 @@ pub async fn discover_agent(
     let transport = definition.get("transport").and_then(Value::as_str)
         .and_then(Transport::parse).unwrap_or(Transport::Unsupported);
 
+    let help_probe = time::timeout(
+        Duration::from_millis(options.timeout_ms.max(100)),
+        Command::new(&resolved_path)
+            .arg("--help")
+            .current_dir(&options.cwd)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output(),
+    ).await;
+
+    let (help_ok, help_text) = match help_probe {
+        Ok(Ok(output)) => {
+            let text = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            (output.status.success(), text)
+        }
+        Ok(Err(_)) | Err(_) => (false, String::new()),
+    };
+
+    let launch_surface_verified = help_ok && contract_surface_present(&definition, "launch", &help_text);
+    let resume_surface_verified = help_ok && contract_surface_present(&definition, "resume", &help_text);
+
     let mut capabilities = CapabilitySet::new();
     capabilities.insert("version_probe".into(), true);
     capabilities.insert("local_process".into(), true);
     capabilities.insert("working_directory".into(), true);
     capabilities.insert("structured_transport".into(), transport != Transport::Unsupported);
     capabilities.insert("resume_vector".into(), definition.get("resume").is_some());
+    capabilities.insert("launch_surface_verified".into(), launch_surface_verified);
+    capabilities.insert("resume_surface_verified".into(), resume_surface_verified);
 
     let probe = ProbeResult {
         schema_version: "1.0.0".into(),
@@ -738,6 +765,9 @@ pub async fn discover_agent(
         warnings: vec![
             "Credential-bearing or interactive auth commands are not invoked by discovery.".into(),
             "Capability claims are provisional until contract-specific runtime capability probes complete.".into(),
+            format!(
+                "launch_surface_verified={launch_surface_verified}; resume_surface_verified={resume_surface_verified}"
+            ),
         ],
     };
 
@@ -774,6 +804,33 @@ pub async fn discover_all_agents(options: &ProbeOptions) -> Vec<DiscoveryReport>
         }
     }
     reports
+}
+
+fn contract_surface_present(
+    definition: &Value,
+    key: &str,
+    help_text: &str,
+) -> bool {
+    let Some(values) = definition.get(key).and_then(Value::as_array) else {
+        return false;
+    };
+    let lower = help_text.to_ascii_lowercase();
+    let mut checked = false;
+    for value in values {
+        let Some(token) = value.as_str() else {
+            continue;
+        };
+        if token.starts_with('<') {
+            continue;
+        }
+        if token.starts_with('-') || token == "chat" || token == "run" || token == "acp" {
+            checked = true;
+            if !lower.contains(&token.to_ascii_lowercase()) {
+                return false;
+            }
+        }
+    }
+    checked
 }
 
 fn parse_version_from_probe(text: &str) -> Option<AgentVersion> {
