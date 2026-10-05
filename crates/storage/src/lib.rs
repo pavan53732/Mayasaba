@@ -4658,7 +4658,7 @@ impl Storage {
     ///
     /// An admission is a decision record, not a mutable lifecycle. A later evaluation must supersede the prior
     /// row, so the historical refusal or approval remains auditable.
-    pub fn insert_admission(&self, new: &NewAdmission) -> Result<AdmissionRecord> {
+    pub fn insert_admission(&mut self, new: &NewAdmission) -> Result<AdmissionRecord> {
         require_vocabulary("admissions.kind", &new.kind, ADMISSION_KINDS)?;
         require_vocabulary("admissions.verdict", &new.verdict, ADMISSION_VERDICTS)?;
         if new.epoch < 0 || new.created_at.trim().is_empty() {
@@ -4696,7 +4696,7 @@ impl Storage {
             });
         }
 
-        let allowed_check_ids = [
+        const CHECK_IDS: &[&str] = &[
             "REPOSITORY_IDENTITY","BASELINE_CLEAN","WORKTREE_ASSIGNED","PROTECTED_PATHS_DETERMINED",
             "LEASE_BOUND","LEASE_OWNERSHIP","CONTEXT_FRESH","WORKSPACE_OWNERSHIP","BASE_CHECKPOINT_VALID",
             "TESTS_EVIDENCE_PRESENT","PROTECTED_PATH_CLEAN","DEPENDENCY_CONFLICT_CLEAR",
@@ -4712,7 +4712,7 @@ impl Storage {
                     detail: "every check requires check_id".to_string(),
                 }
             })?;
-            if !allowed_check_ids.contains(&id) {
+            if !CHECK_IDS.contains(&id) {
                 return Err(StorageError::Malformed {
                     column: "admissions.checks_json".to_string(),
                     detail: format!("unknown check_id {id}"),
@@ -4751,10 +4751,16 @@ impl Storage {
                 column: "admissions.refusal_reasons_json".to_string(),
                 detail: format!("must be valid JSON: {e}"),
             })?;
-            if reasons_value.as_array().is_none_or(Vec::is_empty) {
+            let Some(reasons) = reasons_value.as_array() else {
                 return Err(StorageError::Malformed {
                     column: "admissions.refusal_reasons_json".to_string(),
-                    detail: "REFUSED admission requires a non-empty JSON array".to_string(),
+                    detail: "REFUSED admission requires a JSON array".to_string(),
+                });
+            };
+            if reasons.is_empty() {
+                return Err(StorageError::Malformed {
+                    column: "admissions.refusal_reasons_json".to_string(),
+                    detail: "REFUSED admission requires at least one refusal reason".to_string(),
                 });
             }
         }
@@ -4812,7 +4818,8 @@ impl Storage {
             }
         }
 
-        self.conn.execute(
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        tx.execute(
             "INSERT INTO admissions (
                 admission_id,project_id,task_id,workspace_id,lease_id,agent_id,session_id,kind,epoch,
                 context_digest,base_checkpoint_ref,changed_paths_json,checks_json,verdict,refusal_reasons_json,
@@ -4824,26 +4831,29 @@ impl Storage {
                 new.verdict,new.refusal_reasons_json,new.supersedes_admission_id,new.created_at
             ],
         ).map_err(StorageError::Db)?;
-        self.append_event(&NewEvent {
-            event_id: format!("evt_{}_ADMISSION_RECORDED", new.admission_id),
-            project_id: Some(new.project_id.clone()),
-            session_id: new.session_id.clone(),
-            event_type: "ADMISSION_RECORDED".to_string(),
-            correlation_id: Some(new.task_id.clone()),
-            causation_id: new.supersedes_admission_id.clone(),
-            epoch: Some(new.epoch),
-            payload_json: serde_json::json!({
+        append_event_in(&tx, &transition_event(
+            &tx,
+            &format!("admission_{}", new.admission_id),
+            "ADMISSION_RECORDED",
+            &new.project_id,
+            new.session_id.as_deref().unwrap_or("workspace"),
+            &new.task_id,
+            new.supersedes_admission_id.as_deref(),
+            serde_json::json!({
                 "admission_id":new.admission_id,
                 "task_id":new.task_id,
                 "workspace_id":new.workspace_id,
                 "kind":new.kind,
                 "verdict":new.verdict
             }).to_string(),
-            created_at:new.created_at.clone(),
-        })?;
+            &new.created_at,
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+
         self.get_latest_admission(&new.project_id,&new.task_id,&new.kind)?
             .ok_or_else(|| StorageError::NotFound(format!("admission {}",new.admission_id)))
     }
+
 
     pub fn get_latest_admission(
         &self,
