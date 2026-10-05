@@ -127,3 +127,26 @@ Shell, process, package, install, compiler and administrative operations are not
 An adapter must enforce or prove this separation. If the installed CLI cannot provide the required mediation, the session is not admitted for tasks that require privileged execution.
 
 Agent-native capabilities do not authorize external side-effect actions or general control of unrelated applications. Email/messages, online posting, public/external form submission, purchases and account changes are outside product scope; permitted public-web access is limited to user-requested read-only research.
+
+
+## Execution reliability refinements
+
+### TaskAttempt
+`Task` is the acceptance-bearing unit; `TaskAttempt` records one concrete attempt to satisfy it. Retries never rewrite the original task identity. `attempt_no` is unique per task and `attempt_id` is globally unique.
+
+An attempt binds task, lease, agent/session, workspace, project epoch and context snapshot. The attempt's `fence_token` equals the lease's `lease_version`. A worker whose token is no longer current may observe state but cannot perform a material write.
+
+### Safe points
+Long-running execution should persist a safe point before pause, risky mutation, migration or worker drain. The safe point is an existing `WorkspaceCheckpoint` of kind `SAFE_POINT`, accompanied by the attempt's latest evidence/state digest. Safe-point creation is not a claim that the task is complete.
+
+### Plan and context freshness
+An attempt may start only from a currently admitted plan/context tuple. A material change to requirements, decisions, contracts or architecture invalidates affected plans and context snapshots. Returning work from an older epoch produces `STALE_RESULT` and requires recomputation or explicit repair.
+
+### Mutation scope
+Task admission must carry allowed paths and capabilities. Optional deny-lists for forbidden paths/tools/commands may further narrow the scope. Scope violations are policy failures and never become implicit expanded authority.
+
+### Resource admission
+Before a lease is activated, scheduler-controlled reservations are acquired for required local resources. A resource is not considered available merely because a previous owner has not yet reported release; observed process/port state must agree with the durable reservation.
+
+### Dependency cancellation
+A failed dependency blocks downstream tasks rather than manufacturing downstream failures. Repair of the dependency reopens only the affected dependents whose preconditions become true again.
