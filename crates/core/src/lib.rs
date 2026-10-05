@@ -1,3 +1,4 @@
+pub mod agent_gateway;
 pub mod context_service;
 //! Mayasaba core/controller: cross-subsystem application services.
 //!
