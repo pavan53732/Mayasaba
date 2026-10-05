@@ -149,3 +149,14 @@ The internal application architecture is defined in docs/INTERNAL-APPLICATION-AR
 ## 13. Source-of-truth rule
 
 This document integrates the product contract. Detailed definitions remain in their canonical subsystem documents and machine-readable schemas. Those documents are referenced rather than redefined.
+
+
+## Long-running reliability baseline
+
+Mayasaba is designed as a durable local control loop rather than an ephemeral agent workflow. `Project` is the lifecycle root. `Task` is the acceptance-bearing unit; `TaskAttempt` separates retry/recovery identity from task identity; `TaskLease.lease_version` is the fencing token; `ResourceReservation` controls scarce local resources; `WorkspaceRevision` and `EnvironmentSnapshot` capture observed execution reality; and `CertificationBinding` pins certification to exact validated inputs.
+
+Integration is not represented as a single cross-system ACID transaction. SQLite transactions protect controller state/events/outbox writes, while Git/filesystem/build/test operations are external effects handled with checkpoints, observation, validation and compensating rollback/recovery.
+
+Long-running execution uses desired-versus-observed reconciliation. `UNKNOWN` is an explicit unresolved condition and never satisfies a positive gate. Material requirement/decision/contract changes invalidate affected plans and contexts. Repair, parallelism and swarm expansion are bounded.
+
+These refinements preserve the canonical product agent set: Hermes Agent CLI, Kilo Code CLI and OpenCode CLI (DEC-029).
