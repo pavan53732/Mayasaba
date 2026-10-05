@@ -198,9 +198,16 @@ pub async fn spawn_process(
         }
     };
 
-    let pid = child.id().ok_or_else(|| {
-        ExecutionError::Durability("spawned process did not expose a PID".to_string())
-    })?;
+    let pid = match child.id() {
+        Some(pid) => pid,
+        None => {
+            let mut child = child;
+            let _ = child.kill().await;
+            return Err(ExecutionError::Durability(
+                "spawned process did not expose a PID and was terminated before supervision".to_string(),
+            ));
+        }
+    };
 
     let process_record_id = format!("proc_{execution_id}_{pid}");
     if let Err(err) = storage.insert_process_record(&NewProcessRecord {
