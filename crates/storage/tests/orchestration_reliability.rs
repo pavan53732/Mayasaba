@@ -336,3 +336,21 @@ fn resource_release_requires_current_fence() {
     storage.conn().execute("UPDATE task_leases SET lease_version=8 WHERE lease_id='lease_1'",[]).expect("renew");
     assert!(storage.release_resource_reservation("res_release",7,"2").is_err(), "stale owners cannot release after lease rollover");
 }
+
+
+#[test]
+fn asserted_certification_requires_pass_validation() {
+    use mayasaba_storage::NewCertificationBinding;
+    let storage = project_storage();
+    storage.conn().execute(
+        "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_fail','prj_reliability','task_1','{}','{}','FAIL','1')", []
+    ).expect("validation");
+    let result = storage.insert_certification_binding(&NewCertificationBinding {
+        certification_binding_id:"cert_fail_validation".into(), project_id:"prj_reliability".into(),
+        task_id:Some("task_1".into()), validation_id:"val_fail".into(), workspace_revision_id:None,
+        environment_snapshot_id:None, artifact_hashes_json:"[]".into(), validator_version:"v1".into(),
+        test_suite_version:None, status:"ASSERTED".into(), supersedes_binding_id:None,
+        reason:None, created_at:"2".into()
+    });
+    assert!(result.is_err(), "ASSERTED certification must require PASS validation");
+}
