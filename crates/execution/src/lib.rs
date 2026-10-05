@@ -10,7 +10,7 @@ use mayasaba_storage::{
 use std::{
     collections::BTreeMap,
     fmt,
-    process::Stdio,
+    process::{Stdio, ChildStdout, ChildStderr},
     time::Duration,
 };
 
@@ -71,6 +71,8 @@ impl ProcessSpec {
 #[derive(Debug)]
 pub struct SpawnedProcess {
     child: Child,
+    stdout: Option<tokio::io::BufReader<ChildStdout>>,
+    stderr: Option<tokio::io::BufReader<ChildStderr>>,
     pub execution_id: String,
     pub pid: u32,
     pub output_limit_bytes: usize,
@@ -248,6 +250,8 @@ pub async fn spawn_process(
     }
 
     Ok(SpawnedProcess {
+        stdout: child.stdout.take().map(tokio::io::BufReader::new),
+        stderr: child.stderr.take().map(tokio::io::BufReader::new),
         child,
         execution_id: execution_id.to_owned(),
         pid,
@@ -256,6 +260,30 @@ pub async fn spawn_process(
 }
 
 impl SpawnedProcess {
+    /// Read one stdout line without waiting for the process to exit. This is the primitive used by the agent
+    /// gateway to stream structured JSONL events during long-running sessions.
+    pub async fn next_stdout_line(&mut self) -> Result<Option<String>, ExecutionError> {
+        use tokio::io::AsyncBufReadExt;
+        let Some(stdout) = self.stdout.as_mut() else {
+            return Ok(None);
+        };
+        let mut line = String::new();
+        let read = stdout.read_line(&mut line).await.map_err(ExecutionError::Spawn)?;
+        if read == 0 { Ok(None) } else { Ok(Some(line)) }
+    }
+
+    /// Read one stderr line for diagnostics/session identity. stderr is deliberately separate from structured
+    /// stdout so vendor diagnostics cannot be mistaken for canonical protocol records.
+    pub async fn next_stderr_line(&mut self) -> Result<Option<String>, ExecutionError> {
+        use tokio::io::AsyncBufReadExt;
+        let Some(stderr) = self.stderr.as_mut() else {
+            return Ok(None);
+        };
+        let mut line = String::new();
+        let read = stderr.read_line(&mut line).await.map_err(ExecutionError::Spawn)?;
+        if read == 0 { Ok(None) } else { Ok(Some(line)) }
+    }
+
     /// Wait until the process terminates. stdout/stderr are drained concurrently to avoid pipe back-pressure
     /// deadlocking a long-running coding agent. Output is bounded and truncation is explicit.
     pub async fn wait(mut self, storage: &Storage, observed_at: &str) -> Result<CompletedProcess, ExecutionError> {
@@ -279,8 +307,8 @@ impl SpawnedProcess {
         observed_at: &str,
         timeout: Option<Duration>,
     ) -> Result<CompletedProcess, ExecutionError> {
-        let stdout = self.child.stdout.take();
-        let stderr = self.child.stderr.take();
+        let stdout = self.stdout.take();
+        let stderr = self.stderr.take();
         let limit = self.output_limit_bytes;
         let stdout_task = tokio::spawn(read_bounded(stdout, limit));
         let stderr_task = tokio::spawn(read_bounded(stderr, limit));
