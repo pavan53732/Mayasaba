@@ -3749,6 +3749,24 @@ impl Storage {
     /// Persist one task attempt. Task identity is stable; attempt number is unique per task.
     pub fn insert_task_attempt(&self, new: &NewTaskAttempt) -> Result<()> {
         require_vocabulary("task_attempts.state", &new.state, TASK_ATTEMPT_STATES)?;
+        let current: Option<i64> = self.conn.query_row(
+            "SELECT lease_version FROM task_leases WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
+            [new.lease_id.as_str()],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        match current {
+            Some(version) if version == new.fence_token => {}
+            Some(version) => {
+                return Err(StorageError::Malformed {
+                    column: "task_leases.lease_version".to_string(),
+                    detail: format!(
+                        "cannot create task attempt {} with stale fence {} while current lease version is {}",
+                        new.attempt_id, new.fence_token, version
+                    ),
+                })
+            }
+            None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
+        }
         self.conn.execute(
             "INSERT INTO task_attempts (attempt_id, task_id, project_id, attempt_no, lease_id, agent_id, session_id, workspace_id, fence_token, project_epoch, context_snapshot_id, state, checkpoint_id, failure_id, started_at, heartbeat_at, ended_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             rusqlite::params![new.attempt_id,new.task_id,new.project_id,new.attempt_no,new.lease_id,new.agent_id,new.session_id,new.workspace_id,new.fence_token,new.project_epoch,new.context_snapshot_id,new.state,new.checkpoint_id,new.failure_id,new.started_at,new.heartbeat_at,new.ended_at,new.created_at],
