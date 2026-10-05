@@ -1801,6 +1801,8 @@ dependencies = [
  "mayasaba-execution",
  "mayasaba-protocol",
  "mayasaba-workspace",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1869,6 +1871,7 @@ version = "0.1.0"
 dependencies = [
  "mayasaba-policy",
  "mayasaba-storage",
+ "tokio",
 ]
 
 [[package]]
