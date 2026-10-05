@@ -437,4 +437,40 @@ fn live_lease_uniqueness_and_deadline_expiry_are_durable() {
     storage.conn().execute("UPDATE task_leases SET expires_at='19' WHERE lease_id='lease_expire'", []).expect("shorten deadline");
     assert_eq!(storage.expire_due_leases("20").expect("expire"), 1);
     assert_eq!(storage.get_task_lease("lease_expire").expect("read").unwrap().status, "EXPIRED");
+    let task_state:String = storage.conn().query_row(
+        "SELECT status FROM tasks WHERE task_id='task_1'", [], |r| r.get(0)
+    ).expect("task");
+    assert_eq!(task_state, "LEASE_EXPIRED");
+
+    storage.queue_expired_task_for_recovery("task_1","21").expect("recovery staging");
+    let task_state:String = storage.conn().query_row(
+        "SELECT status FROM tasks WHERE task_id='task_1'", [], |r| r.get(0)
+    ).expect("task");
+    assert_eq!(task_state, "RECOVERY_PENDING");
+
+    storage.recover_expired_task("task_1","22").expect("recovery");
+    let task_state:String = storage.conn().query_row(
+        "SELECT status FROM tasks WHERE task_id='task_1'", [], |r| r.get(0)
+    ).expect("task");
+    assert_eq!(task_state, "READY");
+}
+
+
+#[test]
+fn recovery_ready_transition_is_blocked_by_unresolved_attempt() {
+    use mayasaba_storage::NewTaskAttempt;
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.conn().execute(
+        "UPDATE task_leases SET expires_at='9' WHERE lease_id='lease_1'", []
+    ).expect("deadline");
+    storage.expire_due_leases("10").expect("expire");
+    storage.queue_expired_task_for_recovery("task_1","11").expect("stage");
+
+    storage.conn().execute("UPDATE task_leases SET status='EXPIRED' WHERE lease_id='lease_1'", []).expect("expired");
+    storage.conn().execute(
+        "INSERT INTO task_attempts (attempt_id,task_id,project_id,attempt_no,lease_id,agent_id,session_id,workspace_id,fence_token,project_epoch,context_snapshot_id,state,created_at)
+         VALUES ('att_unknown','task_1','prj_reliability',1,'lease_1','agent_1','sess_1','ws_1',7,0,'ctx_1','UNKNOWN','11')", []
+    ).expect("unknown attempt");
+    assert!(storage.recover_expired_task("task_1","12").is_err(), "unknown physical outcome blocks readiness");
 }
