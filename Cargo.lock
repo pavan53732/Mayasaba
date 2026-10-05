@@ -1801,6 +1801,7 @@ dependencies = [
  "mayasaba-execution",
  "mayasaba-protocol",
  "mayasaba-workspace",
+ "mayasaba-storage",
  "serde",
  "serde_json",
 ]
