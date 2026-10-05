@@ -2918,6 +2918,7 @@
         "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
         "failure_transition": null
       }
+    ],
     "council_round": [
       {
         "transition_id": "council_round.OPEN->RESPONSES_COLLECTING",
