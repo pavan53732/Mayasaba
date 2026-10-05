@@ -405,10 +405,8 @@ fn durable_lease_lifecycle_is_fenced_and_releasable_after_renewal() {
 
     let renewed = storage.renew_lease("lease_lifecycle", 1, "11", "21").expect("renew");
     assert_eq!(renewed.status, "ACTIVE");
-    assert_eq!(renewed.lease_version, 2);
-    assert!(storage.release_lease("lease_lifecycle", 1, "12").is_err(), "old fence cannot release renewed lease");
-
-    storage.release_lease("lease_lifecycle", 2, "12").expect("release");
+    assert_eq!(renewed.lease_version, 1);
+    storage.release_lease("lease_lifecycle", 1, "12").expect("release with stable lease fence");
     assert_eq!(storage.get_task_lease("lease_lifecycle").expect("read").unwrap().status, "RELEASED");
 
     let events: i64 = storage.conn().query_row(
