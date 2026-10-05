@@ -361,6 +361,31 @@ fn asserted_certification_requires_pass_validation() {
 
 
 #[test]
+fn lease_admission_rejects_stale_or_invalidated_context() {
+    use mayasaba_storage::NewTaskLease;
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.conn().execute(
+        "DELETE FROM task_leases WHERE lease_id='lease_1'",
+        [],
+    ).expect("remove fixture lease");
+    storage.conn().execute(
+        "INSERT INTO context_snapshots (context_snapshot_id, project_id, epoch, scope, state_digest, pack_json, created_at, invalidated_at)
+         VALUES ('ctx_stale','prj_reliability',1,'TASK','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','{}','2','9')",
+        [],
+    ).expect("stale context");
+    let lease = NewTaskLease {
+        lease_id:"lease_stale_context".into(), task_id:"task_1".into(), project_id:"prj_reliability".into(),
+        agent_id:"agent_1".into(), session_id:"sess_1".into(), workspace_id:"ws_1".into(),
+        project_epoch:0, context_snapshot_id:"ctx_stale".into(),
+        state_digest:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        allowed_paths_json:"[]".into(), required_capabilities_json:"[]".into(), policy_scope:"PROJECT_WRITE".into(),
+        issued_at:"10".into(), heartbeat_at:"10".into(), expires_at:"20".into(),
+    };
+    assert!(storage.lease_task(&lease).is_err(), "stale or invalidated context cannot authorize a lease");
+}
+
+#[test]
 fn durable_lease_lifecycle_is_fenced_and_releasable_after_renewal() {
     use mayasaba_storage::NewTaskLease;
     let mut storage = project_storage();
