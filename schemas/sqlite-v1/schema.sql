@@ -315,7 +315,6 @@ CREATE TABLE IF NOT EXISTS workspace_checkpoints (
   workspace_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   task_id TEXT,
-  attempt_id TEXT,
   agent_id TEXT,
   session_id TEXT,
   epoch INTEGER NOT NULL,
@@ -323,9 +322,7 @@ CREATE TABLE IF NOT EXISTS workspace_checkpoints (
   repository_head TEXT,
   diff_hash TEXT,
   created_at TEXT NOT NULL,
-  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
-  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id)
 );
 
 CREATE TABLE IF NOT EXISTS admissions (
@@ -334,7 +331,6 @@ CREATE TABLE IF NOT EXISTS admissions (
   task_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   lease_id TEXT,
-  attempt_id TEXT,
   agent_id TEXT,
   session_id TEXT,
   kind TEXT NOT NULL,
@@ -349,8 +345,7 @@ CREATE TABLE IF NOT EXISTS admissions (
   created_at TEXT NOT NULL,
   FOREIGN KEY(project_id) REFERENCES projects(project_id),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
-  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
 );
 
 CREATE TABLE IF NOT EXISTS workspace_changes (
@@ -517,7 +512,6 @@ CREATE TABLE IF NOT EXISTS command_executions (
   execution_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
   task_id TEXT,
-  attempt_id TEXT,
   workspace_id TEXT NOT NULL,
   requested_by_agent_id TEXT,
   classification TEXT NOT NULL,
@@ -529,7 +523,6 @@ CREATE TABLE IF NOT EXISTS command_executions (
   started_at TEXT,
   ended_at TEXT,
   timeout_seconds INTEGER NOT NULL,
-  environment_snapshot_id TEXT,
   stdout_artifact_id TEXT,
   stderr_artifact_id TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -776,8 +769,6 @@ CREATE INDEX IF NOT EXISTS idx_events_project_hash ON events(project_id, event_h
 CREATE INDEX IF NOT EXISTS idx_admissions_task ON admissions(project_id, task_id, kind, verdict);
 CREATE INDEX IF NOT EXISTS idx_leases_expiry ON task_leases(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_task_attempts_task ON task_attempts(project_id, task_id, attempt_no);
-CREATE INDEX IF NOT EXISTS idx_command_executions_attempt ON command_executions(project_id, attempt_id, started_at);
-CREATE INDEX IF NOT EXISTS idx_workspace_checkpoints_attempt ON workspace_checkpoints(project_id, attempt_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_task_attempts_active ON task_attempts(project_id, state, heartbeat_at);
 CREATE INDEX IF NOT EXISTS idx_resource_reservations_live ON resource_reservations(project_id, resource_type, resource_key, state, expires_at);
 -- Exclusive local resources are globally unique while held; project identity is intentionally absent because a port,
