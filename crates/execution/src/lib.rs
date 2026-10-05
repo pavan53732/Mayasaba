@@ -294,9 +294,13 @@ impl SpawnedProcess {
             None => self.child.wait().await.map_err(ExecutionError::Spawn)?,
         };
 
-        let stdout = stdout_task.await.map_err(|e| ExecutionError::OutputJoin(e.to_string()))?
+        let (stdout, stdout_truncated) = stdout_task
+            .await
+            .map_err(|e| ExecutionError::OutputJoin(e.to_string()))?
             .map_err(ExecutionError::Spawn)?;
-        let stderr = stderr_task.await.map_err(|e| ExecutionError::OutputJoin(e.to_string()))?
+        let (stderr, stderr_truncated) = stderr_task
+            .await
+            .map_err(|e| ExecutionError::OutputJoin(e.to_string()))?
             .map_err(ExecutionError::Spawn)?;
 
         let exit_code = status.code().map(i64::from);
@@ -325,8 +329,8 @@ impl SpawnedProcess {
             exit_code,
             stdout,
             stderr,
-            stdout_truncated: stdout.len() >= limit,
-            stderr_truncated: stderr.len() >= limit,
+            stdout_truncated,
+            stderr_truncated,
             timed_out,
         })
     }
@@ -335,16 +339,17 @@ impl SpawnedProcess {
 async fn read_bounded<R: AsyncRead + Unpin>(
     reader: Option<R>,
     limit: usize,
-) -> std::io::Result<Vec<u8>> {
+) -> std::io::Result<(Vec<u8>, bool)> {
     let Some(mut reader) = reader else {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     };
     let mut bytes = Vec::new();
     reader.take(limit.saturating_add(1) as u64).read_to_end(&mut bytes).await?;
-    if bytes.len() > limit {
+    let truncated = bytes.len() > limit;
+    if truncated {
         bytes.truncate(limit);
     }
-    Ok(bytes)
+    Ok((bytes, truncated))
 }
 
 async fn terminate_owned_tree(pid: u32) -> Result<(), String> {
