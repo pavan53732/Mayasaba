@@ -3759,7 +3759,7 @@ impl Storage {
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
     pub fn verify_attempt_fence(&self, attempt_id: &str, presented_lease_version: i64) -> Result<()> {
         let row: Option<(i64, i64)> = self.conn.query_row(
-            "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND tl.status = 'ACTIVE'",
+            "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND tl.status IN ('ACTIVE','RENEWING')",
             [attempt_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional().map_err(StorageError::Db)?;
@@ -3792,6 +3792,7 @@ impl Storage {
     }
 
     pub fn insert_environment_snapshot(&self, new: &NewEnvironmentSnapshot) -> Result<()> {
+        require_vocabulary("environment_snapshots.source", &new.source, &["PREFLIGHT", "EXECUTION", "VALIDATION"])?;
         self.conn.execute(
             "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
