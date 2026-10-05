@@ -4909,28 +4909,118 @@ impl Storage {
     pub fn expire_due_leases(&mut self, now: &str) -> Result<u64> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let mut stmt = tx.prepare(
-            "SELECT lease_id,task_id,project_id,session_id,lease_version,status FROM task_leases
-             WHERE status IN ('ACTIVE','RENEWING') AND expires_at <= ?1"
+            "SELECT lease_id,task_id,project_id,session_id,lease_version,status
+             FROM task_leases
+             WHERE status IN ('ACTIVE','RENEWING') AND expires_at <= ?1
+             ORDER BY lease_id ASC"
         ).map_err(StorageError::Db)?;
         let leases: Vec<(String,String,String,String,i64,String)> = stmt.query_map([now], |row|
             Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?))
-        ).map_err(StorageError::Db)?.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)?;
+        ).map_err(StorageError::Db)?
+        .collect::<std::result::Result<Vec<_>,_>>()
+        .map_err(StorageError::Db)?;
         drop(stmt);
-        for (lease_id,task_id,project_id,session_id,version,status) in leases {
-            let event_type = if status == "RENEWING" { "LEASE_EXPIRED" } else { "LEASE_EXPIRED" };
+
+        for (lease_id,task_id,project_id,session_id,version,status) in &leases {
             tx.execute(
-                "UPDATE task_leases SET status='EXPIRED' WHERE lease_id=?1 AND status=?2 AND lease_version=?3",
+                "UPDATE task_leases SET status='EXPIRED'
+                 WHERE lease_id=?1 AND status=?2 AND lease_version=?3",
                 rusqlite::params![lease_id,status,version],
             ).map_err(StorageError::Db)?;
             append_event_in(&tx, &transition_event(
-                &tx,&lease_id,event_type,&project_id,&session_id,&lease_id,None,
-                lease_event_payload(&project_id,&task_id,&lease_id,version,"EXPIRED")?,now
+                &tx,&format!("lease_{lease_id}"),"LEASE_EXPIRED",&project_id,&session_id,lease_id,None,
+                lease_event_payload(&project_id,&task_id,lease_id,*version,"EXPIRED")?,now
+            )?)?;
+
+            // Expiry is a cross-machine consequence owned by TaskService, but both durable mutations are persisted
+            // in this one transaction so a crash cannot leave a freed lease with a still-claimed live task.
+            tx.execute(
+                "UPDATE tasks
+                 SET status='LEASE_EXPIRED', updated_at=?1
+                 WHERE task_id=?2 AND status IN ('LEASED','ACCEPTED','IN_PROGRESS','REPAIR_PENDING')",
+                rusqlite::params![now,task_id],
+            ).map_err(StorageError::Db)?;
+            append_event_in(&tx, &transition_event(
+                &tx,&format!("task_{task_id}"),"LEASE_EXPIRED",&project_id,&session_id,lease_id,None,
+                task_lease_task_event_payload(&project_id,&task_id,lease_id,"LEASE_EXPIRED")?,now
             )?)?;
         }
+
         let count = leases.len() as u64;
         tx.commit().map_err(StorageError::Db)?;
         Ok(count)
     }
+
+    /// Return an expired task to READY only after all durable physical recovery signals are clear.
+    pub fn recover_expired_task(&mut self, task_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let task: Option<(String,String,String,String)> = tx.query_row(
+            "SELECT project_id,status,workspace_id,current_epoch FROM tasks WHERE task_id=?1",
+            [task_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,status,workspace_id,current_epoch) =
+            task.ok_or_else(|| StorageError::NotFound(format!("task {task_id}")))?;
+        if status != "RECOVERY_PENDING" {
+            return Err(StorageError::Malformed {
+                column: "tasks.status".to_string(),
+                detail: format!("task {task_id} must be RECOVERY_PENDING before recovery"),
+            });
+        }
+
+        let live_lease: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM task_leases WHERE task_id=?1 AND status IN ('ACTIVE','RENEWING')",
+            [task_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if live_lease != 0 {
+            return Err(StorageError::Malformed {
+                column: "task_leases".to_string(),
+                detail: format!("task {task_id} still has a live lease"),
+            });
+        }
+
+        let unresolved_attempts: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM task_attempts
+             WHERE task_id=?1 AND state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')",
+            [task_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if unresolved_attempts != 0 {
+            return Err(StorageError::Malformed {
+                column: "task_attempts".to_string(),
+                detail: format!("task {task_id} still has {unresolved_attempts} unresolved attempt(s)"),
+            });
+        }
+
+        let unresolved_executions: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM command_executions
+             WHERE task_id=?1 AND status IN ('STARTING','RUNNING','TIMEOUT','CANCELED','CRASHED','CLEANUP_REQUIRED')",
+            [task_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if unresolved_executions != 0 {
+            return Err(StorageError::Malformed {
+                column: "command_executions.status".to_string(),
+                detail: format!("task {task_id} still has {unresolved_executions} recoverable execution(s)"),
+            });
+        }
+
+        tx.execute(
+            "UPDATE tasks SET status='READY', updated_at=?1
+             WHERE task_id=?2 AND status='RECOVERY_PENDING'",
+            rusqlite::params![now,task_id],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,&format!("task_{task_id}"),"TASK_READY",&project_id,&format!("recovery:{workspace_id}"),task_id,None,
+            task_lease_task_event_payload(&project_id,task_id,"recovery", "READY")?,now
+        )?)?;
+
+        tx.commit().map_err(StorageError::Db)?;
+        let _ = current_epoch;
+        Ok(())
+    }
+
 
     fn finish_lease(&mut self, lease_id: &str, expected_version: i64, terminal: &str, event_type: &str, now: &str) -> Result<()> {
         require_vocabulary("task_leases.status", terminal, LEASE_STATES)?;
