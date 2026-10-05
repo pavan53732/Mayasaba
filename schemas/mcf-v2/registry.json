@@ -683,6 +683,12 @@
         "kind": "specific",
         "service": "CouncilService",
         "crate": "crates/council"
+      },
+      "RENEW_LEASE": {
+        "machine": "lease",
+        "kind": "specific",
+        "service": "TaskService",
+        "crate": "crates/tasks"
       }
     }
   },
