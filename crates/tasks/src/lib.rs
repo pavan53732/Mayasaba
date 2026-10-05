@@ -94,7 +94,7 @@ pub fn authorize_material_action(
     attempt_id: &str,
     lease_version: i64,
 ) -> Result<()> {
-    storage.verify_attempt_fence(attempt_id, lease_version)
+    storage.verify_attempt_authority(attempt_id, lease_version)
 }
 
 /// Reserve a scarce local resource under the current task lease.
