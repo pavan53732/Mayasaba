@@ -3729,6 +3729,23 @@ pub struct NewEnvironmentSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CertificationBindingRecord {
+    pub certification_binding_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub validation_id: String,
+    pub workspace_revision_id: Option<String>,
+    pub environment_snapshot_id: Option<String>,
+    pub artifact_hashes_json: String,
+    pub validator_version: String,
+    pub test_suite_version: Option<String>,
+    pub status: String,
+    pub supersedes_binding_id: Option<String>,
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
 pub struct NewCertificationBinding {
     pub certification_binding_id: String,
     pub project_id: String,
@@ -3909,6 +3926,23 @@ impl Storage {
 
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
+        if let Some(parent_id) = new.supersedes_binding_id.as_deref() {
+            let parent_project: Option<String> = self.conn.query_row(
+                "SELECT project_id FROM certification_bindings WHERE certification_binding_id = ?1",
+                [parent_id],
+                |r| r.get(0),
+            ).optional().map_err(StorageError::Db)?;
+            match parent_project {
+                None => return Err(StorageError::NotFound(format!("certification binding {parent_id}"))),
+                Some(project) if project != new.project_id => {
+                    return Err(StorageError::Malformed {
+                        column: "certification_bindings.supersedes_binding_id".to_string(),
+                        detail: format!("binding {parent_id} belongs to project {project}, not {}", new.project_id),
+                    })
+                }
+                Some(_) => {}
+            }
+        }
         if let Some(value) = Some(new.artifact_hashes_json.as_str()) {
             let valid: i64 = self.conn.query_row("SELECT json_valid(?1)", [value], |r| r.get(0)).map_err(StorageError::Db)?;
             if valid != 1 {
@@ -4043,6 +4077,40 @@ impl Storage {
             current_lease_version:r.get(6)?, lease_status:r.get(7)?
         })).map_err(StorageError::Db)?;
         rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+    }
+
+    /// Resolve the effective latest certification claim without mutating historical rows.
+    pub fn get_latest_certification_binding(
+        &self,
+        project_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<Option<CertificationBindingRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
+                    b.workspace_revision_id, b.environment_snapshot_id, b.artifact_hashes_json,
+                    b.validator_version, b.test_suite_version, b.status, b.supersedes_binding_id,
+                    b.reason, b.created_at
+             FROM certification_bindings b
+             WHERE b.project_id = ?1
+               AND (?2 IS NULL AND b.task_id IS NULL OR ?2 IS NOT NULL AND b.task_id = ?2)
+               AND NOT EXISTS (
+                   SELECT 1 FROM certification_bindings newer
+                   WHERE newer.supersedes_binding_id = b.certification_binding_id
+               )
+             ORDER BY b.created_at DESC, b.certification_binding_id DESC
+             LIMIT 1",
+        ).map_err(StorageError::Db)?;
+        stmt.query_row(
+            rusqlite::params![project_id, task_id],
+            |r| Ok(CertificationBindingRecord {
+                certification_binding_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
+                validation_id:r.get(3)?, workspace_revision_id:r.get(4)?,
+                environment_snapshot_id:r.get(5)?, artifact_hashes_json:r.get(6)?,
+                validator_version:r.get(7)?, test_suite_version:r.get(8)?,
+                status:r.get(9)?, supersedes_binding_id:r.get(10)?,
+                reason:r.get(11)?, created_at:r.get(12)?
+            }),
+        ).optional().map_err(StorageError::Db)
     }
 
     pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
