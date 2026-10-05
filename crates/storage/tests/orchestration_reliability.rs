@@ -290,3 +290,49 @@ fn certification_binding_supersession_is_append_only() {
     let old_status:String = storage.conn().query_row("SELECT status FROM certification_bindings WHERE certification_binding_id='cert_1'",[],|r|r.get(0)).expect("old");
     assert_eq!(old_status,"ASSERTED","historical certification must not be rewritten");
 }
+
+
+#[test]
+fn invalid_environment_json_is_rejected() {
+    use mayasaba_storage::NewEnvironmentSnapshot;
+    let storage = project_storage();
+    let result = storage.insert_environment_snapshot(&NewEnvironmentSnapshot {
+        environment_snapshot_id:"env_bad_json".into(), project_id:"prj_reliability".into(),
+        workspace_id:None, task_id:None, execution_id:None, os_identity:"Windows".into(),
+        runtime_versions_json:"[]".into(),
+        environment_policy_hash:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        source:"EXECUTION".into(), captured_at:"1".into()
+    });
+    assert!(result.is_err(), "runtime_versions_json must be an object");
+}
+
+#[test]
+fn invalid_certification_artifact_json_is_rejected() {
+    use mayasaba_storage::NewCertificationBinding;
+    let storage = project_storage();
+    storage.conn().execute(
+        "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_json','prj_reliability','task_1','{}','{}','PASS','1')", []
+    ).expect("validation");
+    let result = storage.insert_certification_binding(&NewCertificationBinding {
+        certification_binding_id:"cert_bad_json".into(), project_id:"prj_reliability".into(), task_id:Some("task_1".into()),
+        validation_id:"val_json".into(), workspace_revision_id:None, environment_snapshot_id:None,
+        artifact_hashes_json:"{}".into(), validator_version:"v1".into(), test_suite_version:None,
+        status:"ASSERTED".into(), supersedes_binding_id:None, reason:None, created_at:"2".into()
+    });
+    assert!(result.is_err(), "artifact hashes must be a JSON array");
+}
+
+#[test]
+fn resource_release_requires_current_fence() {
+    use mayasaba_storage::NewResourceReservation;
+    let storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.insert_resource_reservation(&NewResourceReservation {
+        reservation_id:"res_release".into(), project_id:"prj_reliability".into(), task_id:"task_1".into(),
+        lease_id:"lease_1".into(), lease_version:7, resource_type:"PORT".into(), resource_key:"3010".into(),
+        mode:"EXCLUSIVE".into(), quantity:1, state:"HELD".into(), issued_at:"1".into(), expires_at:"9999".into(),
+        released_at:None, created_at:"1".into()
+    }).expect("reservation");
+    storage.conn().execute("UPDATE task_leases SET lease_version=8 WHERE lease_id='lease_1'",[]).expect("renew");
+    assert!(storage.release_resource_reservation("res_release",7,"2").is_err(), "stale owners cannot release after lease rollover");
+}
