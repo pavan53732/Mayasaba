@@ -95,3 +95,73 @@ fn unknown_attempts_require_inspection() {
     let plan = build_runtime_recovery_plan(&s, "prj_recovery", "1").expect("plan");
     assert_eq!(plan.candidates[0].action, RuntimeRecoveryAction::InspectUnknown);
 }
+
+
+#[test]
+fn recovery_plan_classifies_unknown_execution_process_as_inspection() {
+    use mayasaba_storage::{NewCommandExecution, NewProcessRecord};
+    let s = storage();
+    s.insert_command_execution(&NewCommandExecution {
+        execution_id: "exec_unknown".into(),
+        project_id: "prj_recovery".into(),
+        task_id: Some("task_1".into()),
+        attempt_id: None,
+        workspace_id: "ws_1".into(),
+        requested_by_agent_id: Some("agent_1".into()),
+        environment_snapshot_id: None,
+        supersedes_binding_id: None,
+        classification: "EXECUTE".into(),
+        executable: "cmd.exe".into(),
+        arguments_json: r#"["/c","echo","ok"]"#.into(),
+        cwd: "C:\\work\\recovery".into(),
+        status: "RUNNING".into(),
+        exit_code: None,
+        started_at: Some("2".into()),
+        ended_at: None,
+        timeout_seconds: 30,
+        stdout_artifact_id: None,
+        stderr_artifact_id: None,
+    }).expect("execution");
+    s.insert_process_record(&NewProcessRecord {
+        process_record_id: "proc_unknown_exec".into(),
+        execution_id: "exec_unknown".into(),
+        pid: 4444,
+        parent_pid: Some(1111),
+        state: "UNKNOWN".into(),
+        observed_at: "3".into(),
+    }).expect("process");
+    let plan = build_runtime_recovery_plan(&s, "prj_recovery", "4").expect("plan");
+    assert_eq!(plan.execution_candidates.len(), 1);
+    assert_eq!(plan.execution_candidates[0].execution_id, "exec_unknown");
+    assert_eq!(plan.execution_candidates[0].action, RuntimeRecoveryAction::InspectUnknown);
+}
+
+#[test]
+fn recovery_plan_requires_physical_verification_for_unobserved_starting_execution() {
+    use mayasaba_storage::NewCommandExecution;
+    let s = storage();
+    s.insert_command_execution(&NewCommandExecution {
+        execution_id: "exec_no_pid".into(),
+        project_id: "prj_recovery".into(),
+        task_id: Some("task_1".into()),
+        attempt_id: None,
+        workspace_id: "ws_1".into(),
+        requested_by_agent_id: Some("agent_1".into()),
+        environment_snapshot_id: None,
+        supersedes_binding_id: None,
+        classification: "EXECUTE".into(),
+        executable: "cmd.exe".into(),
+        arguments_json: r#"["/c","echo","ok"]"#.into(),
+        cwd: "C:\\work\\recovery".into(),
+        status: "STARTING".into(),
+        exit_code: None,
+        started_at: Some("2".into()),
+        ended_at: None,
+        timeout_seconds: 30,
+        stdout_artifact_id: None,
+        stderr_artifact_id: None,
+    }).expect("execution");
+    let plan = build_runtime_recovery_plan(&s, "prj_recovery", "4").expect("plan");
+    assert_eq!(plan.execution_candidates.len(), 1);
+    assert_eq!(plan.execution_candidates[0].action, RuntimeRecoveryAction::VerifyProcess);
+}
