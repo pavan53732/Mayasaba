@@ -4138,6 +4138,28 @@ impl Storage {
                 detail: format!("illegal agent-session transition {expected_state} -> {next_state}"),
             });
         }
+        let expected_event = match next_state {
+            "HANDSHAKING" => "AGENT_HANDSHAKING",
+            "CAPABILITY_VALIDATING" => "AGENT_CAPABILITY_VALIDATING",
+            "WORKSPACE_VALIDATING" => "AGENT_WORKSPACE_VALIDATING",
+            "READY" => "AGENT_READY",
+            "ACTIVE" => "AGENT_ACTIVATED",
+            "PAUSED" => "AGENT_PAUSED",
+            "DRAINING" => "AGENT_DRAINING",
+            "STOPPED" => "AGENT_STOPPED",
+            "LOST" => "AGENT_LOST",
+            "RECONNECTING" => "AGENT_RECONNECTING",
+            "SYNCING" => "AGENT_SYNCED",
+            "FAILED" => "AGENT_FAILED",
+            "DISCOVERED" => "AGENT_DISCOVERED",
+            _ => "AGENT_SESSION_CHANGED",
+        };
+        if event_type != expected_event {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.event_type".to_string(),
+                detail: format!("event {event_type} does not enter target state {next_state}; expected {expected_event}"),
+            });
+        }
 
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let row: Option<(String,String,String,String)> = tx.query_row(
