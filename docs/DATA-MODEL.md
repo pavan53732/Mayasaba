@@ -179,3 +179,17 @@ Secrets are never stored as ordinary message, log, evidence or artifact payloads
 
 
 Relational table groups, migration rules, recovery scans and index families are defined in `SQLITE-DATA-ARCHITECTURE.md`.
+
+## Reliability extensions
+
+The response/recovery refinements are composed from existing authorities rather than introduced as competing domain objects.
+
+- `TaskAttempt` is a durable child of `Task`. A task remains the stable unit of acceptance; each retry/reassignment creates a new attempt identity. `TaskAttempt.fence_token` is exactly the active `TaskLease.lease_version` and is never an independent authority.
+- `ResourceReservation` is owned by scheduling/execution admission. It binds a task and lease to a typed local resource such as CPU, RAM, GPU, disk, port, workspace, process slot, agent slot or toolchain slot. Reservation state is durable so restart cannot double-allocate the same resource.
+- `WorkspaceRevision` is the observed revision identity of a workspace. It records repository head when applicable plus content/manifest hashes and whether the observation is expected, verified, drifted or unknown.
+- `EnvironmentSnapshot` records the execution/validation environment actually observed: OS identity, runtime/toolchain versions and the environment-policy hash. It is evidence provenance, not configuration authority.
+- `CertificationBinding` binds a validation result to the exact artifact hashes, workspace revision, environment snapshot and validator/test-suite versions that were evaluated. A change to any load-bearing binding supersedes the certification.
+
+`Mission`, `MissionJournal`, `Worker`, `ExecutionCell`, `SwarmCell` and `Supervisor` are intentionally not additional sources of truth. A project is the durable lifecycle root; events are the journal; an agent session plus process records describe a worker runtime; task/lease/workspace/context/execution rows compose an execution cell; and swarm/supervision are controller coordination views.
+
+A safe point is represented by an existing `WorkspaceCheckpoint` with kind `SAFE_POINT`; no second checkpoint entity is introduced.
