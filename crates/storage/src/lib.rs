@@ -5830,6 +5830,27 @@ impl Storage {
                 detail: format!("attempt {} does not match the authoritative lease/task/workspace/context binding", new.attempt_id),
             });
         }
+        let scope: Option<i64> = self.conn.query_row(
+            "SELECT max_attempts FROM task_scopes WHERE task_id=?1",
+            [new.task_id.as_str()],
+            |row| row.get(0),
+        ).optional().map_err(StorageError::Db)?;
+        let max_attempts = scope.ok_or_else(|| StorageError::Malformed {
+            column:"task_scopes.max_attempts".to_string(),
+            detail:format!("task {} has no durable retry budget", new.task_id),
+        })?;
+        let previous_attempt_no: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(attempt_no),0) FROM task_attempts WHERE task_id=?1",
+            [new.task_id.as_str()],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if new.attempt_no != previous_attempt_no + 1 || new.attempt_no > max_attempts {
+            return Err(StorageError::Malformed {
+                column:"task_attempts.attempt_no".to_string(),
+                detail:format!("attempt {} is outside the contiguous retry budget for task {} (next={}, max={})",
+                    new.attempt_no,new.task_id,previous_attempt_no+1,max_attempts),
+            });
+        }
         self.conn.execute(
             "INSERT INTO task_attempts (attempt_id, task_id, project_id, attempt_no, lease_id, agent_id, session_id, workspace_id, fence_token, project_epoch, context_snapshot_id, state, checkpoint_id, failure_id, started_at, heartbeat_at, ended_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             rusqlite::params![new.attempt_id,new.task_id,new.project_id,new.attempt_no,new.lease_id,new.agent_id,new.session_id,new.workspace_id,new.fence_token,new.project_epoch,new.context_snapshot_id,new.state,new.checkpoint_id,new.failure_id,new.started_at,new.heartbeat_at,new.ended_at,new.created_at],
