@@ -35,7 +35,7 @@ pub fn authorize_execution(
     attempt_id: &str,
     lease_version: i64,
 ) -> StorageResult<ExecutionAuthorization> {
-    storage.verify_attempt_fence(attempt_id, lease_version)?;
+    storage.verify_attempt_authority(attempt_id, lease_version)?;
     Ok(ExecutionAuthorization {
         attempt_id: attempt_id.to_owned(),
         lease_version,
