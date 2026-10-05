@@ -2799,8 +2799,7 @@
         "idempotency_behavior": "duplicate transition request returns the existing transition/outcome without repeating side effects",
         "transaction_boundary": "authoritative state mutation + event append + outbox record in one transaction",
         "failure_transition": null
-      }
-    ],,
+      },
       {
         "transition_id": "lease.RENEWING->ACTIVE",
         "owner": "crates/tasks",
