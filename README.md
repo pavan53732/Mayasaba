@@ -306,3 +306,10 @@ Per `docs/ROADMAP.md` the milestones are ordered M0 → M0.5 → M1 → M2 → M
 M9. M0, M0.5 and M1 are complete; **M2, the durable local communication bus, is the next unstarted
 milestone**, and `crates/bus` is still a stub. The council logic is M4.5/M6 work that has landed ahead of M2
 because it is pure logic with no runtime dependency on the bus.
+
+
+### Long-running orchestration reliability
+
+The reliability model is additive to the existing MCF-v2/control-plane architecture. The stable acceptance unit is `Task`; retries are `TaskAttempt`s fenced by the active `TaskLease.lease_version`. Local scarce resources are durably admitted, workspace and environment observations are revisioned, safe points use `WorkspaceCheckpoint(kind=SAFE_POINT)`, and certification binds exact validated inputs. Project remains the durable lifecycle root; `events` remain the journal; no duplicate Mission/Worker/Cell authority is introduced.
+
+Current repository status: M2 durable bus is implemented; M2.5 shell integration is in progress. The supported product agent set remains exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI (DEC-029).
