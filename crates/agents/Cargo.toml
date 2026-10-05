@@ -10,3 +10,4 @@ tokio.workspace = true
 mayasaba-protocol = { path = "../protocol" }
 mayasaba-execution = { path = "../execution" }
 mayasaba-workspace = { path = "../workspace" }
+mayasaba-storage = { path = "../storage" }
