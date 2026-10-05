@@ -214,3 +214,32 @@ fn resource_reservation_rejects_stale_lease_version() {
     });
     assert!(result.is_err(), "a stale lease must not reserve a local resource");
 }
+
+#[test]
+fn append_only_trace_links_cover_task_attempt_provenance() {
+    use mayasaba_storage::NewTraceLink;
+    let storage = project_storage();
+    storage.insert_trace_link(&NewTraceLink {
+        trace_link_id: "trace_1".to_string(),
+        project_id: "prj_reliability".to_string(),
+        link_type: "TASK_ATTEMPT".to_string(),
+        source_type: "Task".to_string(),
+        source_id: "task_1".to_string(),
+        target_type: "TaskAttempt".to_string(),
+        target_id: "att_live".to_string(),
+        created_at: "1".to_string(),
+    }).expect("trace");
+    let rows = storage.list_trace_links("prj_reliability").expect("links");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].link_type, "TASK_ATTEMPT");
+    assert!(storage.insert_trace_link(&NewTraceLink {
+        trace_link_id: "trace_2".to_string(),
+        project_id: "prj_reliability".to_string(),
+        link_type: "NOT_A_LINK".to_string(),
+        source_type: "Task".to_string(),
+        source_id: "task_1".to_string(),
+        target_type: "TaskAttempt".to_string(),
+        target_id: "att_live".to_string(),
+        created_at: "2".to_string(),
+    }).is_err(), "unknown provenance links must be rejected");
+}
