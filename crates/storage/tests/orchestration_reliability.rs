@@ -190,3 +190,27 @@ fn certification_and_environment_records_reject_invalid_vocabularies() {
         test_suite_version: None, status: "ACTIVE".to_string(), reason: None, created_at: "1".to_string()
     }).is_err(), "certification without a validation run must fail closed");
 }
+
+#[test]
+fn resource_reservation_rejects_stale_lease_version() {
+    use mayasaba_storage::NewResourceReservation;
+    let storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    let result = storage.insert_resource_reservation(&NewResourceReservation {
+        reservation_id: "res_stale".to_string(),
+        project_id: "prj_reliability".to_string(),
+        task_id: "task_1".to_string(),
+        lease_id: "lease_1".to_string(),
+        lease_version: 6,
+        resource_type: "PORT".to_string(),
+        resource_key: "3001".to_string(),
+        mode: "EXCLUSIVE".to_string(),
+        quantity: 1,
+        state: "HELD".to_string(),
+        issued_at: "1".to_string(),
+        expires_at: "9999".to_string(),
+        released_at: None,
+        created_at: "1".to_string(),
+    });
+    assert!(result.is_err(), "a stale lease must not reserve a local resource");
+}
