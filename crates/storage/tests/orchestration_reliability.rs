@@ -36,6 +36,10 @@ fn seed_task_lease_workspace(storage: &Storage) {
         [],
     ).expect("session");
     storage.conn().execute(
+        "INSERT INTO context_snapshots (context_snapshot_id, project_id, epoch, scope, state_digest, pack_json, created_at) VALUES ('ctx_1','prj_reliability',0,'TASK','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','1')",
+        [],
+    ).expect("context");
+    storage.conn().execute(
         "INSERT INTO task_leases (lease_id, task_id, project_id, agent_id, session_id, workspace_id, lease_version, project_epoch, context_snapshot_id, state_digest, allowed_paths_json, required_capabilities_json, policy_scope, issued_at, heartbeat_at, expires_at, status) VALUES ('lease_1','task_1','prj_reliability','agent_1','sess_1','ws_1',7,0,'ctx_1','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','[]','[]','PROJECT_WRITE','1','1','9999','ACTIVE')",
         [],
     ).expect("lease");
@@ -353,4 +357,61 @@ fn asserted_certification_requires_pass_validation() {
         reason:None, created_at:"2".into()
     });
     assert!(result.is_err(), "ASSERTED certification must require PASS validation");
+}
+
+
+#[test]
+fn durable_lease_lifecycle_is_fenced_and_releasable_after_renewal() {
+    use mayasaba_storage::NewTaskLease;
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.conn().execute("DELETE FROM task_leases WHERE lease_id='lease_1'", []).expect("remove fixture lease");
+    let lease = NewTaskLease {
+        lease_id:"lease_lifecycle".into(), task_id:"task_1".into(), project_id:"prj_reliability".into(),
+        agent_id:"agent_1".into(), session_id:"sess_1".into(), workspace_id:"ws_1".into(),
+        project_epoch:0, context_snapshot_id:"ctx_1".into(),
+        state_digest:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        allowed_paths_json:"[]".into(), required_capabilities_json:"[]".into(), policy_scope:"PROJECT_WRITE".into(),
+        issued_at:"10".into(), heartbeat_at:"10".into(), expires_at:"20".into(),
+    };
+    let active = storage.lease_task(&lease).expect("lease");
+    assert_eq!(active.status, "ACTIVE");
+    assert_eq!(active.lease_version, 1);
+
+    let renewed = storage.renew_lease("lease_lifecycle", 1, "11", "21").expect("renew");
+    assert_eq!(renewed.status, "ACTIVE");
+    assert_eq!(renewed.lease_version, 2);
+    assert!(storage.release_lease("lease_lifecycle", 1, "12").is_err(), "old fence cannot release renewed lease");
+
+    storage.release_lease("lease_lifecycle", 2, "12").expect("release");
+    assert_eq!(storage.get_task_lease("lease_lifecycle").expect("read").unwrap().status, "RELEASED");
+
+    let events: i64 = storage.conn().query_row(
+        "SELECT COUNT(*) FROM events WHERE project_id='prj_reliability' AND event_type IN ('LEASE_REQUESTED','LEASE_ACTIVE','LEASE_RENEWED','LEASE_RELEASED')",
+        [], |row| row.get(0)
+    ).expect("events");
+    assert_eq!(events, 4, "request/grant/renew/grant/release lifecycle must be observable");
+}
+
+#[test]
+fn live_lease_uniqueness_and_deadline_expiry_are_durable() {
+    use mayasaba_storage::NewTaskLease;
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&storage);
+    storage.conn().execute("DELETE FROM task_leases WHERE lease_id='lease_1'", []).expect("remove fixture lease");
+    let lease = NewTaskLease {
+        lease_id:"lease_expire".into(), task_id:"task_1".into(), project_id:"prj_reliability".into(),
+        agent_id:"agent_1".into(), session_id:"sess_1".into(), workspace_id:"ws_1".into(),
+        project_epoch:0, context_snapshot_id:"ctx_1".into(),
+        state_digest:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        allowed_paths_json:"[]".into(), required_capabilities_json:"[]".into(), policy_scope:"PROJECT_WRITE".into(),
+        issued_at:"10".into(), heartbeat_at:"10".into(), expires_at:"20".into(),
+    };
+    storage.lease_task(&lease).expect("lease");
+    let mut duplicate = lease.clone();
+    duplicate.lease_id = "lease_duplicate".into();
+    assert!(storage.lease_task(&duplicate).is_err(), "a task cannot have two live owners");
+    storage.conn().execute("UPDATE task_leases SET expires_at='19' WHERE lease_id='lease_expire'", []).expect("shorten deadline");
+    assert_eq!(storage.expire_due_leases("20").expect("expire"), 1);
+    assert_eq!(storage.get_task_lease("lease_expire").expect("read").unwrap().status, "EXPIRED");
 }
