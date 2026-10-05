@@ -3774,22 +3774,33 @@ impl Storage {
     /// Persist one task attempt. Task identity is stable; attempt number is unique per task.
     pub fn insert_task_attempt(&self, new: &NewTaskAttempt) -> Result<()> {
         require_vocabulary("task_attempts.state", &new.state, TASK_ATTEMPT_STATES)?;
-        let current: Option<i64> = self.conn.query_row(
-            "SELECT lease_version FROM task_leases WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
+        let lease: Option<(String,String,String,String,String,i64,String,i64)> = self.conn.query_row(
+            "SELECT task_id, project_id, agent_id, session_id, workspace_id, project_epoch, context_snapshot_id, lease_version
+             FROM task_leases
+             WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
             [new.lease_id.as_str()],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?)),
         ).optional().map_err(StorageError::Db)?;
-        match current {
-            Some(version) if version == new.fence_token => {}
-            Some(version) => {
-                return Err(StorageError::StaleFence {
-                    attempt_id: new.attempt_id.clone(),
-                    attempt_fence: new.fence_token,
-                    current_lease_version: version,
-                    presented: new.fence_token,
-                })
-            }
-            None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
+        let (lease_task,lease_project,lease_agent,lease_session,lease_workspace,lease_epoch,lease_context,lease_version) =
+            match lease {
+                Some(v) => v,
+                None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
+            };
+        if lease_version != new.fence_token {
+            return Err(StorageError::StaleFence {
+                attempt_id: new.attempt_id.clone(),
+                attempt_fence: new.fence_token,
+                current_lease_version: lease_version,
+                presented: new.fence_token,
+            });
+        }
+        if lease_task != new.task_id || lease_project != new.project_id || lease_agent != new.agent_id
+            || lease_session != new.session_id || lease_workspace != new.workspace_id
+            || lease_epoch != new.project_epoch || lease_context != new.context_snapshot_id {
+            return Err(StorageError::Malformed {
+                column: "task_attempts".to_string(),
+                detail: format!("attempt {} does not match the authoritative lease/task/workspace/context binding", new.attempt_id),
+            });
         }
         self.conn.execute(
             "INSERT INTO task_attempts (attempt_id, task_id, project_id, attempt_no, lease_id, agent_id, session_id, workspace_id, fence_token, project_epoch, context_snapshot_id, state, checkpoint_id, failure_id, started_at, heartbeat_at, ended_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
@@ -3866,7 +3877,7 @@ impl Storage {
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
     pub fn verify_attempt_fence(&self, attempt_id: &str, presented_lease_version: i64) -> Result<()> {
         let row: Option<(i64, i64)> = self.conn.query_row(
-            "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND tl.status IN ('ACTIVE','RENEWING')",
+            "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED') AND tl.status IN ('ACTIVE','RENEWING')",
             [attempt_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional().map_err(StorageError::Db)?;
