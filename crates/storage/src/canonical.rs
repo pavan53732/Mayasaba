@@ -56,6 +56,8 @@ pub enum JcsValue<'a> {
 pub enum CanonicalError {
     /// Two members share a name, so the object has no unique canonical form.
     DuplicateKey(String),
+    /// A non-integer JSON number is outside the normalized context digest input subset.
+    UnsupportedNumber(String),
 }
 
 impl std::fmt::Display for CanonicalError {
@@ -63,6 +65,9 @@ impl std::fmt::Display for CanonicalError {
         match self {
             CanonicalError::DuplicateKey(key) => {
                 write!(f, "canonical object repeats the member name `{key}`")
+            }
+            CanonicalError::UnsupportedNumber(value) => {
+                write!(f, "canonical JSON number `{value}` is not an integer in the normalized digest subset")
             }
         }
     }
@@ -101,6 +106,60 @@ pub fn jcs_object(members: &[(&str, JcsValue<'_>)]) -> Result<String, CanonicalE
     }
     out.push('}');
     Ok(out)
+}
+
+/// Serialize a structured JSON value with RFC 8785 object-key ordering and deterministic scalar rendering.
+///
+/// Context digest inputs are controller-normalized and deliberately avoid floating-point values. A non-integer
+/// JSON number is therefore rejected rather than hashed with a serialization rule that might diverge from JCS.
+pub fn jcs_json(value: &serde_json::Value) -> Result<String, CanonicalError> {
+    match value {
+        serde_json::Value::Null => Ok("null".to_owned()),
+        serde_json::Value::Bool(v) => Ok(if *v { "true" } else { "false" }.to_owned()),
+        serde_json::Value::Number(number) => {
+            if let Some(v) = number.as_i64() {
+                return Ok(v.to_string());
+            }
+            if let Some(v) = number.as_u64() {
+                return Ok(v.to_string());
+            }
+            Err(CanonicalError::UnsupportedNumber(number.to_string()))
+        }
+        serde_json::Value::String(value) => {
+            let mut out = String::new();
+            push_jcs_string(&mut out, value);
+            Ok(out)
+        }
+        serde_json::Value::Array(values) => {
+            let mut out = String::from("[");
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&jcs_json(value)?);
+            }
+            out.push(']');
+            Ok(out)
+        }
+        serde_json::Value::Object(object) => {
+            let mut entries: Vec<(&String, &serde_json::Value)> = object.iter().collect();
+            entries.sort_by(|(a, _), (b, _)| utf16_order(a, b));
+            let mut out = String::from("{");
+            for (index, (key, value)) in entries.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                if index > 0 && entries[index - 1].0 == *key {
+                    return Err(CanonicalError::DuplicateKey((*key).clone()));
+                }
+                push_jcs_string(&mut out, key);
+                out.push(':');
+                out.push_str(&jcs_json(value)?);
+            }
+            out.push('}');
+            Ok(out)
+        }
+    }
 }
 
 /// The SHA-256 of `canonical_json`'s UTF-8 bytes, as 64 lowercase hex characters.
@@ -168,6 +227,18 @@ mod tests {
             forward, reversed,
             "argument order must not change the bytes"
         );
+    }
+
+    #[test]
+    fn structured_jcs_sorts_object_keys_and_preserves_array_order() {
+        let value = serde_json::json!({"b":2,"a":[3,1],"null":null,"flag":true});
+        assert_eq!(jcs_json(&value).expect("jcs"), r#"{"a":[3,1],"b":2,"flag":true,"null":null}"#);
+    }
+
+    #[test]
+    fn structured_jcs_rejects_non_integer_numbers() {
+        let value = serde_json::json!({"fraction":1.5});
+        assert!(matches!(jcs_json(&value), Err(CanonicalError::UnsupportedNumber(_))));
     }
 
     #[test]
