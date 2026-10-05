@@ -255,8 +255,7 @@ CREATE TABLE IF NOT EXISTS task_leases (
   heartbeat_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   status TEXT NOT NULL,
-  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
-  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
 );
 
 -- Reliability persistence (orchestration refinement).
@@ -324,7 +323,9 @@ CREATE TABLE IF NOT EXISTS workspace_checkpoints (
   repository_head TEXT,
   diff_hash TEXT,
   created_at TEXT NOT NULL,
-  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id)
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
 );
 
 CREATE TABLE IF NOT EXISTS admissions (
@@ -347,7 +348,8 @@ CREATE TABLE IF NOT EXISTS admissions (
   created_at TEXT NOT NULL,
   FOREIGN KEY(project_id) REFERENCES projects(project_id),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
-  FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id)
 );
 
 CREATE TABLE IF NOT EXISTS workspace_changes (
@@ -528,7 +530,12 @@ CREATE TABLE IF NOT EXISTS command_executions (
   timeout_seconds INTEGER NOT NULL,
   environment_snapshot_id TEXT,
   stdout_artifact_id TEXT,
-  stderr_artifact_id TEXT
+  stderr_artifact_id TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+  FOREIGN KEY(attempt_id) REFERENCES task_attempts(attempt_id),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(workspace_id),
+  FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id)
 );
 
 CREATE TABLE IF NOT EXISTS process_records (
