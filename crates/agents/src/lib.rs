@@ -769,6 +769,7 @@ pub struct LiveAgentSession<A: AgentAdapter> {
 impl<A: AgentAdapter> LiveAgentSession<A> {
     pub async fn next_event(
         &mut self,
+        storage: &mayasaba_storage::Storage,
         received_at: &str,
     ) -> Result<Option<NativeEvent>, AgentRuntimeError> {
         loop {
@@ -781,7 +782,16 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
                 self.process.execution_id, self.event_sequence
             );
             match self.adapter.normalize_event(&line, received_at, &raw_ref) {
-                Ok(event) => return Ok(Some(event)),
+                Ok(event) => {
+                    if let Some(native_session_id) = event.native_session_id.as_deref() {
+                        storage.bind_agent_process(
+                            &self.session_id,
+                            i64::from(self.process.pid),
+                            Some(native_session_id),
+                        )?;
+                    }
+                    return Ok(Some(event));
+                },
                 Err(error) => {
                     // Unknown/malformed vendor data must never become a canonical success signal. Preserve the
                     // failure through the adapter error path and require the controller to decide whether recovery
@@ -801,7 +811,11 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
         storage: &mayasaba_storage::Storage,
         observed_at: &str,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
-        Ok(self.process.wait(storage, observed_at).await?)
+        let result = self.process.wait(storage, observed_at).await;
+        if result.is_ok() {
+            storage.set_agent_health(&self.session_id, "DEGRADED")?;
+        }
+        result.map_err(Into::into)
     }
 
     pub async fn wait_timeout(
@@ -810,7 +824,11 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
         observed_at: &str,
         timeout: Duration,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
-        Ok(self.process.wait_timeout(storage, observed_at, timeout).await?)
+        let result = self.process.wait_timeout(storage, observed_at, timeout).await;
+        if result.is_ok() {
+            storage.set_agent_health(&self.session_id, "DEGRADED")?;
+        }
+        result.map_err(Into::into)
     }
 }
 
