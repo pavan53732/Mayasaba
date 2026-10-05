@@ -4951,6 +4951,46 @@ impl Storage {
         Ok(count)
     }
 
+    /// Move an expired Task into recovery pending once no live lease remains.
+    pub fn queue_expired_task_for_recovery(&mut self, task_id: &str, now: &str) -> Result<()> {
+        let tx = self.conn.transaction().map_err(StorageError::Db)?;
+        let task: Option<(String,String,String)> = tx.query_row(
+            "SELECT project_id,status FROM tasks WHERE task_id=?1",
+            [task_id],
+            |row| Ok((row.get(0)?,row.get(1)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (project_id,status) =
+            task.ok_or_else(|| StorageError::NotFound(format!("task {task_id}")))?;
+        if status != "LEASE_EXPIRED" {
+            return Err(StorageError::Malformed {
+                column: "tasks.status".to_string(),
+                detail: format!("task {task_id} must be LEASE_EXPIRED before entering recovery"),
+            });
+        }
+        let live_lease: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM task_leases WHERE task_id=?1 AND status IN ('ACTIVE','RENEWING')",
+            [task_id],
+            |row| row.get(0),
+        ).map_err(StorageError::Db)?;
+        if live_lease != 0 {
+            return Err(StorageError::Malformed {
+                column: "task_leases".to_string(),
+                detail: format!("task {task_id} still has a live lease"),
+            });
+        }
+        tx.execute(
+            "UPDATE tasks SET status='RECOVERY_PENDING', updated_at=?1
+             WHERE task_id=?2 AND status='LEASE_EXPIRED'",
+            rusqlite::params![now,task_id],
+        ).map_err(StorageError::Db)?;
+        append_event_in(&tx, &transition_event(
+            &tx,&format!("task_{task_id}"),"LEASE_EXPIRED",&project_id,"recovery",task_id,None,
+            task_lease_task_event_payload(&project_id,task_id,"recovery","RECOVERY_PENDING")?,now
+        )?)?;
+        tx.commit().map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     /// Return an expired task to READY only after all durable physical recovery signals are clear.
     pub fn recover_expired_task(&mut self, task_id: &str, now: &str) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
