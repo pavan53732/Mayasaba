@@ -78,9 +78,10 @@ and any schema or table change.
 ## M3 — Agent gateway
 
 **Status: in progress.** The contract-driven adapter kernel, closed three-agent identity set, launch-proof boundary,
-native-event normalization and process-spec bridge are implemented. Durable task/lease fencing, execution/process
-persistence and restart reconciliation foundations are also landed. Live executable discovery/probing, session
-handshake, capability negotiation, health checks and native transport dispatch remain the next M3 integration tranche.
+Windows executable discovery, version probing, persisted installation/capability facts, agent-session CAS lifecycle,
+live supervised process launch and incremental native-event normalization are implemented. Remaining M3 work is
+contract-specific capability verification, native handshake/session-id reconciliation, health monitoring and durable
+MCF transport delivery.
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
 - OpenCode CLI adapter
@@ -209,3 +210,4 @@ The following reliability capabilities are acceptance requirements across M3-M10
 - certification binding to exact artifact/workspace/environment/validator inputs;
 - explicit UNKNOWN state and desired-vs-observed reconciliation;
 - deterministic liveness/convergence, fairness and bounded repair/swarm budgets.
+- agent discovery/session/process identity remains durable across restart; task leasing is impossible before an agent session reaches READY.
