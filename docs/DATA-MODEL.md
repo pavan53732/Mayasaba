@@ -198,3 +198,8 @@ The response/recovery refinements are composed from existing authorities rather 
 `Mission`, `MissionJournal`, `Worker`, `ExecutionCell`, `SwarmCell` and `Supervisor` are intentionally not additional sources of truth. A project is the durable lifecycle root; events are the journal; an agent session plus process records describe a worker runtime; task/lease/workspace/context/execution rows compose an execution cell; and swarm/supervision are controller coordination views.
 
 A safe point is represented by an existing `WorkspaceCheckpoint` with kind `SAFE_POINT`; no second checkpoint entity is introduced.
+
+
+`Mission`, `MissionJournal`, `Worker`, `ExecutionCell`, `SwarmCell` and `Supervisor` are intentionally not additional sources of truth. A project is the durable lifecycle root; events are the journal; an agent session plus process records describe a worker runtime; task/lease/workspace/context/execution rows compose an execution cell; and swarm/supervision are controller coordination views.
+
+Task-attempt relationships to existing execution/checkpoint/admission records use the existing generic `trace_links` authority rather than adding non-migratable columns to existing tables.
