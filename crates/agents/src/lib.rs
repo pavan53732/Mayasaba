@@ -418,6 +418,159 @@ impl AgentAdapter for AnyAgentAdapter {
 
 /// Discover and minimally probe one installed agent. This performs only local executable discovery and --version.
 /// Interactive credential/auth surfaces and network-capable commands are deliberately not invoked here.
+
+/// Service boundary for agent discovery, session bootstrap and supervised launch.
+/// It owns agent-session state; process creation remains in ExecutionService.
+pub struct AgentService {
+    storage: mayasaba_storage::Storage,
+}
+
+impl AgentService {
+    pub fn new(storage: mayasaba_storage::Storage) -> Self {
+        Self { storage }
+    }
+
+    pub fn storage(&self) -> &mayasaba_storage::Storage {
+        &self.storage
+    }
+
+    pub fn storage_mut(&mut self) -> &mut mayasaba_storage::Storage {
+        &mut self.storage
+    }
+
+    pub async fn discover_all(
+        &self,
+        options: &ProbeOptions,
+    ) -> Vec<DiscoveryReport> {
+        discover_all_agents(options).await
+    }
+
+    /// Persist installation and capability facts for one discovered agent.
+    /// The report itself is observational and never grants a lease or execution authority.
+    pub fn persist_discovery(
+        &mut self,
+        agent_id: &str,
+        report: &DiscoveryReport,
+        observed_at: &str,
+    ) -> Result<(), mayasaba_storage::StorageError> {
+        let installation = report.installation.as_ref().ok_or_else(|| {
+            mayasaba_storage::StorageError::Malformed {
+                column: "agents".to_string(),
+                detail: "cannot persist an absent installation as a discovered agent".to_string(),
+            }
+        })?;
+
+        self.storage.upsert_agent_installation(
+            agent_id,
+            installation.agent_type.as_str(),
+            &installation.executable,
+            Some(&installation.resolved_path),
+            Some(&installation.version.raw),
+            observed_at,
+        )?;
+
+        if let Some(probe) = &report.probe {
+            let capabilities_json = serde_json::to_string(&probe.capabilities).map_err(|e| {
+                mayasaba_storage::StorageError::Malformed {
+                    column: "agent_capabilities.capabilities_json".to_string(),
+                    detail: format!("capability serialization failed: {e}"),
+                }
+            })?;
+            self.storage.insert_agent_capability_snapshot(
+                &mayasaba_storage::NewAgentCapabilitySnapshot {
+                    capability_snapshot_id: format!("{agent_id}_{}", sanitize_id(&probe.version.raw)),
+                    agent_id: agent_id.to_owned(),
+                    session_id: None,
+                    capabilities_json,
+                    detected_at: probe.probe_time.clone(),
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Create a session and move it through discovery, handshake and capability validation.
+    /// Workspace validation remains an external gate owned by WorkspaceService.
+    pub fn begin_session(
+        &mut self,
+        session_id: &str,
+        project_id: &str,
+        agent_id: &str,
+        workspace_id: Option<&str>,
+        current_epoch: i64,
+        now: &str,
+    ) -> Result<mayasaba_storage::AgentSessionRecord, mayasaba_storage::StorageError> {
+        let session = self.storage.create_agent_session(&mayasaba_storage::NewAgentSession {
+            session_id: session_id.to_owned(),
+            project_id: project_id.to_owned(),
+            agent_id: agent_id.to_owned(),
+            workspace_id: workspace_id.map(ToOwned::to_owned),
+            current_epoch,
+            started_at: now.to_owned(),
+        })?;
+        self.storage.transition_agent_session(
+            session_id,"DISCOVERED","HANDSHAKING","AGENT_HANDSHAKING",now
+        )?;
+        self.storage.transition_agent_session(
+            session_id,"HANDSHAKING","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING",now
+        )?;
+        self.storage.get_agent_session(session_id)?.ok_or_else(|| {
+            mayasaba_storage::StorageError::NotFound(format!("agent session {session_id}"))
+        })
+    }
+
+    /// Complete capability validation by binding the snapshot to the session and entering workspace validation.
+    pub fn complete_capability_validation(
+        &mut self,
+        session_id: &str,
+        capability_snapshot_id: &str,
+        capabilities_json: &str,
+        detected_at: &str,
+    ) -> Result<(), mayasaba_storage::StorageError> {
+        let session = self.storage.get_agent_session(session_id)?.ok_or_else(|| {
+            mayasaba_storage::StorageError::NotFound(format!("agent session {session_id}"))
+        })?;
+        self.storage.insert_agent_capability_snapshot(
+            &mayasaba_storage::NewAgentCapabilitySnapshot {
+                capability_snapshot_id: capability_snapshot_id.to_owned(),
+                agent_id: session.agent_id.clone(),
+                session_id: Some(session_id.to_owned()),
+                capabilities_json: capabilities_json.to_owned(),
+                detected_at: detected_at.to_owned(),
+            },
+        )?;
+        self.storage.transition_agent_session(
+            session_id,
+            "CAPABILITY_VALIDATING",
+            "WORKSPACE_VALIDATING",
+            "AGENT_WORKSPACE_VALIDATING",
+            detected_at,
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_workspace_ready(
+        &mut self,
+        session_id: &str,
+        now: &str,
+    ) -> Result<(), mayasaba_storage::StorageError> {
+        self.storage.transition_agent_session(
+            session_id,
+            "WORKSPACE_VALIDATING",
+            "READY",
+            "AGENT_READY",
+            now,
+        )
+    }
+}
+
+fn sanitize_id(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
 pub async fn discover_agent(
     agent_type: AgentType,
     options: &ProbeOptions,
