@@ -1119,6 +1119,12 @@ Classification: ADDITIVE. TaskService may select READY tasks whose dependencies 
 Classification: REFINEMENT. Agent adapters may prepare a contract-derived ProcessSpec, including inherited-environment scrub requirements, but only ExecutionService may spawn or terminate the process. This prevents vendor-specific adapters from becoming privileged execution authorities.
 
 
+### DEC-095 — Recovery owns desired-vs-observed execution reconciliation
+Classification: ADDITIVE. `RecoveryService` reports recoverable TaskAttempts and CommandExecutions from durable state plus latest process observations. It may classify the next reconciliation action, but it does not invent process outcomes, grant leases, retry tasks, or certify artifacts. Those mutations remain owned by TaskService, ExecutionService and ValidationService respectively.
+
+### DEC-096 — Lease admission is atomic across Task and TaskLease lifecycle
+Classification: REFINEMENT. The lease transaction records TASK `READY -> LEASE_REQUESTED`, lease `REQUESTED -> ACTIVE`, and task `LEASE_REQUESTED -> LEASED` in one SQLite transaction. A task cannot become schedulable again while a live lease exists, and the partial unique index is the final concurrent ownership guard.
+
 ## Change procedure
 
 Changing a HARD_LOCK requires:
