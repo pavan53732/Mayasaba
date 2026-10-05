@@ -217,3 +217,23 @@ Each record's `command` is registered in `registry.json:transition_commands` wit
 `ResourceReservation`, `WorkspaceRevision` and `EnvironmentSnapshot` are durable records with closed vocabularies, but they do not introduce controller lifecycle machines. Their status describes persisted facts used by the owning scheduler/workspace/execution/validation authority.
 
 `UNKNOWN` is an admissible unresolved execution/attempt fact, never a success state. Positive gates must reject unknown, stale or contradictory physical state.
+
+
+## TaskAttempt sub-lifecycle
+
+`TaskAttempt` is subordinate to the canonical `Task` lifecycle. Its state exists to describe one concrete execution attempt and is not an alternate Task status.
+
+Allowed transitions:
+
+```text
+CREATED -> STARTED
+STARTED -> RUNNING | FAILED | CANCELLED | UNKNOWN
+RUNNING -> CHECKPOINTED | COMPLETED | FAILED | TIMED_OUT | LOST | CANCELLED | UNKNOWN
+CHECKPOINTED -> RUNNING | COMPLETED | FAILED | LOST | CANCELLED | UNKNOWN
+```
+
+Terminal attempt states are `COMPLETED`, `FAILED`, `TIMED_OUT`, `LOST`, `CANCELLED` and `UNKNOWN`. Recovery never reactivates a terminal attempt; it creates a new attempt for the same Task when policy permits retry/reassignment.
+
+Every state transition is compare-and-swap against the expected persisted state. A stale controller/worker action therefore becomes a failed transition rather than an overwrite. `UNKNOWN` is an unresolved physical outcome and never satisfies a success gate.
+
+`TaskAttempt.fence_token` must equal the lease version captured when the attempt was created. Material execution and heartbeats require that the fence still matches the live lease.
