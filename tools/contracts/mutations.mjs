@@ -586,7 +586,7 @@ const MUTATIONS = [
   // --- The traceability check. It enforces four properties, and a check that enforces four things while being
   // proven against one of them is proven against one of them, so each is mutated separately. docs/TRACEABILITY.md
   // had never been read by anything before this check, which is why its rows could claim VALIDATED with no test
-  // behind them and cite a decision - DEC-059 - that the register does not define.
+  // behind them and cite evidence paths that nothing resolved.
   {
     id: "trace-a",
     what: "TRACEABILITY.md: a state word outside the vocabulary the document declares",
@@ -642,16 +642,16 @@ const MUTATIONS = [
   },
   {
     id: "trace-e",
-    what: "DECISION-REGISTER.md: restoring a lost decision must retire the gate's recorded exception",
+    what: "DECISION-REGISTER.md: two index rows joined by a lost newline, so the table is no longer a table",
     check: GATE,
     edits: [
       {
         file: DECISION_REGISTER,
-        find: "# Mayasaba Decision Register",
-        replace: "# Mayasaba Decision Register\n\n### DEC-059 — restored record\n",
+        find: "| ADDITIVE |\n| DEC-075 | Wiring replay",
+        replace: "| ADDITIVE || DEC-075 | Wiring replay",
       },
     ],
-    expect: ["now defines DEC-059, so remove it from the gate's lost-citation list"],
+    expect: ["index-table rows concatenated onto single lines"],
   },
   {
     id: "control-trace-prose",

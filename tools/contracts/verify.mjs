@@ -1001,17 +1001,27 @@ const traceExtensions=/\.(rs|ts|tsx|js|mjs|json|sql|md|toml|css|html)$/;
 
 // A decision is defined either by a heading or by a row of the register's index table. Both forms are real:
 // DEC-070 to DEC-075 appear as index rows, and the later entries use h4 headings with no em dash.
+//
+// The index-row pattern is deliberately NOT anchored to the start of a line. An earlier version of this check
+// was, and eleven index rows in the register had lost their newlines and been concatenated onto one 6663
+// character line, so DEC-059 was defined and the anchored pattern could not see it. The check then reported a
+// false positive - a decision record it claimed was lost - which is the one failure mode a gate must not have,
+// because a gate that fails on a correct file gets switched off rather than fixed. The structure is now
+// enforced as well, so the register cannot silently become unparseable again.
 const registerText=readText("docs/DECISION-REGISTER.md");
 const definedDecisions=new Set();
 for(const m of registerText.matchAll(/^#{2,6}\s*(DEC-\d+)/gm)) definedDecisions.add(m[1]);
-for(const m of registerText.matchAll(/^\|\s*(DEC-\d+)\s*\|/gm)) definedDecisions.add(m[1]);
+for(const m of registerText.matchAll(/\|\s*(DEC-\d+)\s*\|/g)) definedDecisions.add(m[1]);
 
-// Cited but absent from the register, each with the evidence that it is a lost record rather than a phantom
-// reference. This is a ratchet, not an exemption: an id that is neither defined nor listed here fails, and an id
-// listed here that later gains an entry also fails, so the list cannot outlive its reason.
-const lostDecisionCitations=new Map([
-  ["DEC-059","the durable inbox, the receipt and the processing spine. Cited as settled by crates/storage/src/lib.rs:1308, by DEC-061, DEC-062, DEC-063 and DEC-075, and by the M2 table in this document. DEC-058 owns the outbound side only, so it does not subsume this. Restoring the record is a decision-register change and has not been made"],
-]);
+// A Markdown table row is a line. A line carrying more than one index-row start is a table whose rows were
+// joined by a lost newline, which makes the register's own index of which decisions exist unreadable - and, for
+// any line-anchored reader, wrong. This asserts nothing about what the decisions say; it is structure only.
+const concatenatedIndexRows=[];
+registerText.split(/\r?\n/).forEach((line,index)=>{
+  const count=[...line.matchAll(/\|\s*DEC-\d+\s*\|/g)].length;
+  if(count>1) concatenatedIndexRows.push(`line ${index+1} carries ${count} index-table rows: ${line.slice(0,72)}...`);
+});
+if(concatenatedIndexRows.length) fail(`docs/DECISION-REGISTER.md has index-table rows concatenated onto single lines, so the table is not a table and its index of which decisions exist cannot be read:\n  - ${concatenatedIndexRows.join("\n  - ")}\nSplit each row onto its own line.`);
 
 const repoNames=new Set();
 const repoPaths=new Set();
@@ -1027,7 +1037,6 @@ collectRepoPaths(walkFiles("crates").concat(walkFiles("apps/desktop/src"),walkFi
 for(const extra of ["workspace.manifest.json","package.json","AGENTS.md"]){ repoNames.add(extra); repoPaths.add(extra); }
 
 const traceProblems=[];
-const lostCitationsSeen=new Set();
 let traceRows=0, traceStateRows=0;
 let stateColumn=null;
 for(const line of traceText.split(/\r?\n/)){
@@ -1051,9 +1060,7 @@ for(const line of traceText.split(/\r?\n/)){
   for(const cell of cells){
     for(const m of cell.matchAll(/DEC-\d+/g)){
       const id=m[0];
-      if(definedDecisions.has(id)) continue;
-      if(!lostDecisionCitations.has(id)) traceProblems.push(`${requirement}: cites ${id}, which has no entry in docs/DECISION-REGISTER.md`);
-      else lostCitationsSeen.add(id);
+      if(!definedDecisions.has(id)) traceProblems.push(`${requirement}: cites ${id}, which has no entry in docs/DECISION-REGISTER.md`);
     }
     for(const m of cell.matchAll(/`([^`]+)`/g)){
       const token=m[1];
@@ -1063,8 +1070,6 @@ for(const line of traceText.split(/\r?\n/)){
     }
   }
 }
-// An entry that has been restored must leave the list, or the list becomes a permanent hole in the check.
-for(const id of lostDecisionCitations.keys()) if(definedDecisions.has(id)) traceProblems.push(`docs/DECISION-REGISTER.md now defines ${id}, so remove it from the gate's lost-citation list: ${lostDecisionCitations.get(id)}`);
 if(traceProblems.length) fail(`${traceProblems.length} traceability problem(s) in docs/TRACEABILITY.md:\n  - ${traceProblems.join("\n  - ")}\nA row that cannot be checked is a row that can claim anything. Fix the row, or the register, or the path it cites.`);
 
 // --- Registry conformance against its own schema. payloads.json required `errors` on every operation while
@@ -1929,7 +1934,7 @@ console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: 
 // Traceability coverage, stated every run for the same reason as the bridge and registry figures: a table whose
 // checked proportion lives only in the document drifts away from the thing it describes. The second half names
 // the rows the gate cannot check a state for, so "every row is enforced" is never assumed from the first half.
-console.log(`Traceability: ${traceStateRows} of ${traceRows} table row(s) carry an enforced state word; ${lostCitationsSeen.size} cited decision(s) have no register entry (recorded in the gate, not blocking); ${traceRows-traceStateRows} row(s) are in a table with no State column, so only their decision and path citations are checked`);
+console.log(`Traceability: ${traceStateRows} of ${traceRows} table row(s) carry an enforced state word, and every cited decision and path resolves; ${traceRows-traceStateRows} row(s) are in a table with no State column, so only their decision and path citations are checked`);
 // The error vocabulary's own figures, stated every run for the same reason as the bridge figures: a count that
 // lives only in a document drifts away from the thing it counts.
 console.log(`Error registry: ${errorRegistryReport.registered} codes registered; ${errorRegistryReport.emitted} produced by the implementation; ${errorRegistryReport.tauriCodesEmitted} of ${errorRegistryReport.registered} tauri_code values emitted anywhere (the wire carries the canonical registry key; reported, not blocking)`);
