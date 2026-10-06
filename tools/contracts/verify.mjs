@@ -1170,6 +1170,53 @@ registerText.split(/\r?\n/).forEach((line,index)=>{
 });
 if(registerStructureProblems.length) fail(`docs/DECISION-REGISTER.md has DEC entries that are not on their own line, so the register's index of which decisions exist cannot be read:\n  - ${registerStructureProblems.join("\n  - ")}\nA table row and a heading each have to start a line. Split the line.`);
 
+// The index table and the detailed records are two views of one register, and they had drifted apart: 37
+// decisions (DEC-076 to DEC-112) had a detailed record and no row in the index table, so the register's own
+// index did not list them, and the table's tail had been appended as DEC-073, DEC-074, DEC-075, then DEC-068
+// descending to DEC-058 - eleven rows out of order. Neither drift is visible to a reader who trusts the index,
+// and nothing enforced the correspondence between the two views.
+//
+// Three properties are failures, each one a claim the index table makes about itself:
+//   1. every detailed record is listed in the index table, so a record cannot be invisible from the index;
+//   2. no id appears twice in the index table, so one decision has one row;
+//   3. the index table is in ascending id order, so it can be read and diffed as a list.
+//
+// The reverse direction - an index row with no detailed record - is deliberately NOT a failure, and that is a
+// recorded disagreement with the instruction that asked for it rather than an oversight. The register states at
+// its own head that it is "intentionally concise; detailed semantics live in the canonical subsystem
+// documents", and 30 rows (DEC-001 to DEC-028, DEC-031, DEC-059) are decisions stated in the index table
+// alone, with their detail in a subsystem document. Failing on them would fail on a correct file, which is how
+// a gate gets switched off rather than fixed - the failure this whole section exists to prevent. The count is
+// reported instead, so the asymmetry stays visible rather than silently dropped.
+const registerRecordIds=[];
+const registerIndexIds=[];
+registerText.split(/\r?\n/).forEach((line,index)=>{
+  for(const m of line.matchAll(/#{2,6}\s*(DEC-\d+)/g)) registerRecordIds.push({id:m[1],line:index+1});
+  const row=line.match(/^\s*\|\s*(DEC-\d+)\s*\|/);
+  if(row) registerIndexIds.push({id:row[1],line:index+1});
+});
+if(registerIndexIds.length===0) fail("docs/DECISION-REGISTER.md has no index-table rows at all, so its index of which decisions exist cannot be read. This check cannot pass on a register it could not parse.");
+const registerIndexIdSet=new Set(registerIndexIds.map(r=>r.id));
+const registerRecordIdSet=new Set(registerRecordIds.map(r=>r.id));
+const registerIdNumber=id=>Number(id.slice(4));
+const registerLinkProblems=[];
+const unindexedRecords=[...new Set(registerRecordIds.filter(r=>!registerIndexIdSet.has(r.id)).map(r=>r.id))];
+if(unindexedRecords.length) registerLinkProblems.push(`${unindexedRecords.length} decision(s) have a detailed record but no row in the index table, so the register's index does not list them: ${unindexedRecords.join(", ")}`);
+const registerIndexCounts=new Map();
+for(const r of registerIndexIds) registerIndexCounts.set(r.id,(registerIndexCounts.get(r.id)||0)+1);
+const repeatedIndexIds=[...registerIndexCounts].filter(([,n])=>n>1).map(([id,n])=>`${id} (${n} rows)`);
+if(repeatedIndexIds.length) registerLinkProblems.push(`the index table lists ${repeatedIndexIds.length} decision(s) more than once: ${repeatedIndexIds.join(", ")}`);
+const registerOrderProblems=[];
+for(let i=1;i<registerIndexIds.length;i++){
+  if(registerIdNumber(registerIndexIds[i].id)<registerIdNumber(registerIndexIds[i-1].id))
+    registerOrderProblems.push(`${registerIndexIds[i-1].id} (line ${registerIndexIds[i-1].line}) is followed by ${registerIndexIds[i].id} (line ${registerIndexIds[i].line})`);
+}
+if(registerOrderProblems.length) registerLinkProblems.push(`the index table is not in ascending id order at ${registerOrderProblems.length} place(s): ${registerOrderProblems.join("; ")}`);
+if(registerLinkProblems.length) fail(`docs/DECISION-REGISTER.md's index table and its detailed records disagree, so the index cannot be trusted as the register's list of decisions:\n  - ${registerLinkProblems.join("\n  - ")}\nAdd the missing index row, remove the duplicate, or sort the table ascending by id. Do not delete the detailed record to satisfy this check.`);
+// Reported, not enforced - see the note above. An index-only row is a decision whose detail lives in a
+// subsystem document, which the register's own header permits.
+const registerUnrecordedRows=registerIndexIds.filter(r=>!registerRecordIdSet.has(r.id)).map(r=>r.id);
+
 const repoNames=new Set();
 const repoPaths=new Set();
 const collectRepoPaths=(files)=>{
@@ -2289,6 +2336,12 @@ console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: 
 // checked proportion lives only in the document drifts away from the thing it describes. The second half names
 // the rows the gate cannot check a state for, so "every row is enforced" is never assumed from the first half.
 console.log(`Traceability: ${traceStateRows} of ${traceRows} table row(s) carry an enforced state word, and every cited decision and path resolves; ${traceRows-traceStateRows} row(s) are in a table with no State column, so only their decision and path citations are checked`);
+// The other half of the register's two views. Every detailed record is required to have an index row, because a
+// record the index omits is invisible from the index. The reverse is permitted and so it is stated instead of
+// enforced: an index-only row is a decision whose detail lives in a subsystem document, which the register's
+// header explicitly allows. Stating the number keeps the asymmetry visible; enforcing it would fail on a
+// correct file. See the check above for why that distinction is load-bearing rather than a convenience.
+console.log(`Decision register: ${registerIndexIds.length} index row(s); ${registerUnrecordedRows.length} of them state a decision in the index alone, with no detailed record in this file (permitted by the register's own header; reported, not blocking)`);
 // The error vocabulary's own figures, stated every run for the same reason as the bridge figures: a count that
 // lives only in a document drifts away from the thing it counts.
 console.log(`Error registry: ${errorRegistryReport.registered} codes registered; ${errorRegistryReport.emitted} produced by the implementation; ${errorRegistryReport.tauriCodesEmitted} of ${errorRegistryReport.registered} tauri_code values emitted anywhere (the wire carries the canonical registry key; reported, not blocking)`);

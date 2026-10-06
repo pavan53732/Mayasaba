@@ -678,8 +678,13 @@ const MUTATIONS = [
     edits: [
       {
         file: DECISION_REGISTER,
-        find: "| ADDITIVE |\n| DEC-075 | Wiring replay",
-        replace: "| ADDITIVE || DEC-075 | Wiring replay",
+        // Anchored on two rows that are adjacent in the index table's ascending order. It previously used
+        // `| ADDITIVE |\n| DEC-075 |`, which stopped being adjacent once the table was sorted: DEC-069's row no
+        // longer sits immediately before DEC-075's. The mutation's subject is "two rows on one line", so any
+        // adjacent pair proves it, and the pair is named here rather than left to whichever rows happen to be
+        // next to each other.
+        find: "| ADDITIVE |\n| DEC-090 | Renewal extends",
+        replace: "| ADDITIVE || DEC-090 | Renewal extends",
       },
     ],
     expect: ["carries 2 index-table rows"],
@@ -696,6 +701,76 @@ const MUTATIONS = [
       },
     ],
     expect: ["carries a DEC heading after other text"],
+  },
+  // --- The register's index table against its detailed records. The two views had drifted: 37 decisions had a
+  // detailed record and no index row, and the table's tail had been appended in descending order. A reader who
+  // trusts the index therefore could not see those decisions at all, and nothing enforced the correspondence.
+  // These four prove the correspondence is now enforced and that it is enforced on structure rather than prose.
+  {
+    id: "reg-a",
+    what: "DECISION-REGISTER.md: a decision's index row is renumbered away, so its detailed record is no longer listed in the index",
+    check: GATE,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        // DEC-112 is the last row, so renumbering it keeps the table ascending and leaves no second cause: the
+        // mutation isolates "a detailed record with no index row" rather than also tripping the order rule.
+        find: "| DEC-112 | Agent performance is reported as a derived",
+        replace: "| DEC-113 | Agent performance is reported as a derived",
+      },
+    ],
+    expect: [
+      "1 decision(s) have a detailed record but no row in the index table, so the register's index does not list them: DEC-112",
+    ],
+  },
+  {
+    id: "reg-b",
+    what: "DECISION-REGISTER.md: two adjacent index rows are swapped, so the table is no longer in ascending order",
+    check: GATE,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        find:
+          "| DEC-089 | A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it. | ADDITIVE |\n" +
+          "| DEC-090 | Renewal extends the current lease and returns it to ACTIVE without changing its fencing token. The lease_version identifies this lease ownership lifetime; a new lease_id starts a new ownership lifetime and therefore cannot inherit the prior lease authority. RENEWING is an internal transactional phase, not a durable stranded state. | REFINEMENT |",
+        replace:
+          "| DEC-090 | Renewal extends the current lease and returns it to ACTIVE without changing its fencing token. The lease_version identifies this lease ownership lifetime; a new lease_id starts a new ownership lifetime and therefore cannot inherit the prior lease authority. RENEWING is an internal transactional phase, not a durable stranded state. | REFINEMENT |\n" +
+          "| DEC-089 | A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it. | ADDITIVE |",
+      },
+    ],
+    expect: ["is not in ascending id order at 1 place(s)", "is followed by DEC-089"],
+  },
+  {
+    id: "reg-c",
+    what: "DECISION-REGISTER.md: one decision's index row is duplicated, so the index lists it twice",
+    check: GATE,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        find: "| DEC-089 | A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it. | ADDITIVE |",
+        replace:
+          "| DEC-089 | A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it. | ADDITIVE |\n" +
+          "| DEC-089 | A task may have at most one live TaskLease (ACTIVE or RENEWING). Historical leases remain immutable audit records. The database partial unique index is the final concurrency guard; scheduler prechecks are advisory and cannot replace it. | ADDITIVE |",
+      },
+    ],
+    expect: ["the index table lists 1 decision(s) more than once: DEC-089 (2 rows)"],
+  },
+  {
+    id: "control-reg-whitespace",
+    what: "DECISION-REGISTER.md: an index row's id is padded with extra spaces, a whitespace-only edit that changes no decision",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        // A control for the shape of the check rather than for its subject: the correspondence is between ids,
+        // so padding around an id must not be read as a different id. A check that fired here would be
+        // enforcing formatting, and formatting is not a decision.
+        find: "| DEC-089 | A task may have at most one live",
+        replace: "|  DEC-089  | A task may have at most one live",
+      },
+    ],
+    expect: [],
   },
   // --- The comment scanner. Every frontend and Rust scan in the gate reads code with comments removed, so a
   // scanner that loses track of where the code is makes all of those scans wrong while still returning a
