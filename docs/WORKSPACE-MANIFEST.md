@@ -96,7 +96,7 @@ The complete service → crate mapping is authoritative in `workspace.manifest.j
 
 Key mappings:
 
-- ProjectService, LifecycleService, RequirementService, DecisionService, ArchitectureService, ContextService, RepairService, RecoveryService, ConfigurationService, SimulationService, DiagnosticsService → `crates/core`
+- ProjectService, LifecycleService, RequirementService, DecisionService, ArchitectureService, AttachmentService, ContextService, RepairService, RecoveryService, ConfigurationService, SimulationService, DiagnosticsService → `crates/core`
 - AgentService → `crates/agents`
 - CouncilService → `crates/council`
 - TaskService → `crates/tasks`

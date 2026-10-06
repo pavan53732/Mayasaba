@@ -207,6 +207,7 @@
     "RequirementService": "core",
     "DecisionService": "core",
     "ArchitectureService": "core",
+    "AttachmentService": "core",
     "ContextService": "core",
     "TaskService": "tasks",
     "WorkspaceService": "workspace",
