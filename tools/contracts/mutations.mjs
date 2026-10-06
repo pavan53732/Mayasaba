@@ -865,8 +865,22 @@ process.on("uncaughtException", (error) => {
 
 const applyEdits = (mutation) => {
   const pending = new Map();
+  // A mutation's `find` and `replace` are written with LF, because that is the convention of the files
+  // themselves. On disk a file may be CRLF: `core.autocrlf=true` smudges everything git checks out that
+  // .gitattributes does not pin to LF, and this harness restores a mutated file with `git checkout -- <file>`.
+  // So the first multi-line anchor aimed at an unpinned file converted its own target, and every later anchor
+  // in that file stopped matching - a harness error that reports the mutation as broken rather than the check.
+  // No multi-line anchor had ever been aimed outside a .rs file, which .gitattributes does pin, so this was
+  // latent. Content is normalized to LF for matching and written back in the convention it arrived in, so an
+  // anchor matches on either checkout and the harness leaves no spurious diff behind.
+  const crlf = new Map();
   const read = (file) => {
-    if (!pending.has(file)) pending.set(file, fs.readFileSync(path.join(root, file), "utf8"));
+    if (!pending.has(file)) {
+      const raw = fs.readFileSync(path.join(root, file), "utf8");
+      const usesCrlf = raw.includes("\r\n");
+      crlf.set(file, usesCrlf);
+      pending.set(file, usesCrlf ? raw.replace(/\r\n/g, "\n") : raw);
+    }
     return pending.get(file);
   };
   for (const edit of mutation.edits) {
@@ -908,7 +922,7 @@ const applyEdits = (mutation) => {
     );
   }
   for (const [file, content] of pending) {
-    fs.writeFileSync(path.join(root, file), content);
+    fs.writeFileSync(path.join(root, file), crlf.get(file) ? content.replace(/\n/g, "\r\n") : content);
     touched.add(file);
   }
 };
