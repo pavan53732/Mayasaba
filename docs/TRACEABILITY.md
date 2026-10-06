@@ -139,6 +139,11 @@ the rows at the end are what does not exist, recorded rather than implied.
 | The `classification`, `classification_source` and `result_type` vocabularies are closed | DEC-030 | `schemas/sqlite-v1/schema.sql` CHECK constraints; `crates/core/src/project_service.rs` refuses an undeclared label before anything is written | VALIDATED |
 | A refusal writes no row, and the stored body is the trimmed text that was validated | DEC-030 | `crates/core/tests/user_contribution.rs`; the unknown-project, undeclared-classification and whitespace-only cases each assert the project holds no contribution | VALIDATED |
 | Routing a contribution to the owning service that would decide materiality | DEC-030 | — | NOT_ADDRESSED |
+| Selection orders by effective priority, so a task inherits the urgency of the work it unblocks | DEC-108 | `crates/tasks/tests/selection.rs` promotes a low-priority prerequisite above unrelated middling work; `crates/storage/src/lib.rs` computes the value and orders by it | VALIDATED |
+| A dependent counts as waiting unless it is `COMPLETED` or `INVALIDATED` | DEC-108 | `crates/tasks/tests/selection.rs` asserts a `COMPLETED` and an `INVALIDATED` dependent raise nothing while a `BLOCKED` one still does | VALIDATED |
+| Effective priority is derived at selection time and is never stored | DEC-108 | `schemas/sqlite-v1/schema.sql` declares no column for it; `crates/storage/src/lib.rs` derives it from `tasks` and `task_dependencies` | VALIDATED |
+| Selection terminates on a cyclic dependency graph and answers identically on every run | DEC-108 | `crates/tasks/tests/selection.rs` cycle and self-dependency cases | VALIDATED |
+| A production caller of `select_schedulable_tasks` | DEC-108 | - | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
@@ -152,6 +157,13 @@ through `apps/desktop/src/App.tsx` the same way the tray is, which is why that s
 stores `result_type = PENDING` with an unchanged epoch pair, because no operation carries the text to the owning
 service that would decide materiality. The record therefore claims no epoch effect, which is why recording a
 `MATERIAL` label is asserted to leave `current_epoch` alone.
+
+The effective-priority rows are `VALIDATED` against the Rust selector rather than against a running scheduler,
+because nothing calls `select_schedulable_tasks` in production yet. That is why the row claiming a production
+caller is `NOT_ADDRESSED`: the rule is implemented and tested, and the wiring that would exercise it does not
+exist. The "never stored" row is `VALIDATED` by the absence of a column rather than by a test, since a schema
+cannot be asked to prove a negative; what the tests do assert is the positive half, that `effective_priority`
+equals `priority` when nothing is waiting on a task.
 
 ## Persistence implementation
 

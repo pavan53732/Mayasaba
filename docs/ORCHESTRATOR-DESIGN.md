@@ -94,6 +94,10 @@ A task/action is eligible only when:
 ## Deterministic selection
 Selection is deterministic for equal inputs. Inputs include priority, dependency readiness, risk, deadline/lease pressure, required capability, workspace conflicts, retry budget and configured fairness rules.
 
+The priority that selection orders by is the task's own declared priority raised to the highest priority among the live tasks that are transitively waiting on it. A task is the only thing that can release the work blocked behind it, so it inherits the urgency of what it unblocks; without that inheritance a high-priority task held back by a low-priority prerequisite waits behind unrelated work of middling priority. A dependent counts as waiting while it is neither `COMPLETED` nor `INVALIDATED` — every other state, including the recovery states, is still going to run. A task with nothing waiting on it is unaffected, and the tie-break order beneath priority is unchanged, so equal-priority work is ordered exactly as it was.
+
+Effective priority is derived from the dependency graph at selection time and is never stored, because a stored copy would be a second fact that could disagree with the graph it describes. The graph is expected to be acyclic — the DAG validator rejects a cycle before it reaches storage — but selection terminates on a cyclic graph regardless and answers identically on every run.
+
 Model preference or persuasive agent text is never a scheduling authority.
 
 ## Parallelism

@@ -8,6 +8,7 @@
 //! the single canonical artifact - the same file contract verification checks and the local gate enforces -
 //! and embedding it means the shipped MSI carries no separate schema file that could drift from it.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -3913,7 +3914,12 @@ pub struct SchedulableTask {
     pub task_id: String,
     pub project_id: String,
     pub workspace_id: String,
+    /// The task's own declared priority.
     pub priority: i64,
+    /// The priority selection actually orders by: `priority` raised to the highest priority among the live
+    /// tasks transitively waiting on this one. Equal to `priority` when nothing is waiting on it. Derived at
+    /// selection time from the dependency graph and never stored, so it cannot disagree with the graph.
+    pub effective_priority: i64,
     pub risk: String,
     pub created_at: String,
     pub updated_at: String,
@@ -6296,8 +6302,20 @@ impl Storage {
 
     /// Return READY tasks whose dependencies are COMPLETED and which have no live lease.
     ///
-    /// Ordering is deterministic: higher explicit priority first, then oldest update, then oldest creation and
-    /// finally task_id. The selector does not mutate state; TaskService remains the owner of lease admission.
+    /// Ordering is deterministic: highest *effective* priority first, then oldest update, then oldest creation
+    /// and finally task_id. The selector does not mutate state; TaskService remains the owner of lease
+    /// admission.
+    ///
+    /// Effective priority is a task's own priority raised to the highest priority among the live tasks that are
+    /// transitively waiting on it. Without that, a high-priority task held back by a low-priority prerequisite
+    /// starves behind unrelated work of middling priority: the prerequisite is the only thing that can release
+    /// the high-priority work, so it inherits the urgency of what it unblocks. A task with nothing waiting on it
+    /// is unaffected, and the tie-break chain beneath priority is unchanged, so equal-priority work is ordered
+    /// exactly as it was.
+    ///
+    /// The candidate query deliberately has no `LIMIT`: promotion can lift a task that a `LIMIT`ed scan had
+    /// already cut off, so the ordering has to be decided over the whole candidate set and the limit applied
+    /// afterwards.
     pub fn list_schedulable_tasks(
         &self,
         project_id: &str,
@@ -6322,25 +6340,128 @@ impl Storage {
                    SELECT 1 FROM task_leases l
                    WHERE l.task_id = t.task_id
                      AND l.status IN ('ACTIVE','RENEWING')
-               )
-             ORDER BY t.priority DESC, t.updated_at ASC, t.created_at ASC, t.task_id ASC
-             LIMIT ?2"
+               )"
         ).map_err(StorageError::Db)?;
-        let rows = stmt
-            .query_map(rusqlite::params![project_id, limit], |row| {
+        let mut candidates = stmt
+            .query_map([project_id], |row| {
+                let priority: i64 = row.get(3)?;
                 Ok(SchedulableTask {
                     task_id: row.get(0)?,
                     project_id: row.get(1)?,
                     workspace_id: row.get(2)?,
-                    priority: row.get(3)?,
+                    priority,
+                    // Provisional: replaced below by the effective value for tasks that inherit anything.
+                    effective_priority: priority,
                     risk: row.get(4)?,
                     created_at: row.get(5)?,
                     updated_at: row.get(6)?,
                 })
             })
+            .map_err(StorageError::Db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(StorageError::Db)
+
+        let effective = self.effective_task_priorities(project_id)?;
+        for task in &mut candidates {
+            if let Some(inherited) = effective.get(&task.task_id) {
+                task.effective_priority = *inherited;
+            }
+        }
+
+        candidates.sort_by(|a, b| {
+            b.effective_priority
+                .cmp(&a.effective_priority)
+                .then_with(|| a.updated_at.cmp(&b.updated_at))
+                .then_with(|| a.created_at.cmp(&b.created_at))
+                .then_with(|| a.task_id.cmp(&b.task_id))
+        });
+        candidates.truncate(limit as usize);
+        Ok(candidates)
+    }
+
+    /// Effective priority per task in one project: its own priority, raised to the highest priority among the
+    /// live tasks that transitively depend on it.
+    ///
+    /// Computed as a fixpoint over the dependency edges, so the result does not depend on iteration order and is
+    /// therefore deterministic. It terminates on a cyclic graph as well as an acyclic one: each pass either
+    /// raises some value or stops, no value can exceed the highest own-priority in the project, and the number
+    /// of passes is bounded by the number of tasks because a value only travels along a path and a path that
+    /// revisits a task can carry nothing it has not already carried. The DAG validator already rejects cycles;
+    /// this does not depend on that.
+    fn effective_task_priorities(&self, project_id: &str) -> Result<HashMap<String, i64>> {
+        let mut own: HashMap<String, i64> = HashMap::new();
+        let mut live: HashSet<String> = HashSet::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT task_id, priority, status FROM tasks WHERE project_id = ?1")
+                .map_err(StorageError::Db)?;
+            let rows = stmt
+                .query_map([project_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(StorageError::Db)?;
+            for row in rows {
+                let (task_id, priority, status) = row.map_err(StorageError::Db)?;
+                own.insert(task_id.clone(), priority);
+                // A COMPLETED task no longer needs its prerequisites and an INVALIDATED task will never run, so
+                // neither is waiting on anything and neither raises what it depends on. Every other state is
+                // still going to run, including the recovery states, so it counts as waiting.
+                if status != "COMPLETED" && status != "INVALIDATED" {
+                    live.insert(task_id);
+                }
+            }
+        }
+
+        // `(dependent, prerequisite)`: the dependent is waiting on the prerequisite.
+        let mut edges: Vec<(String, String)> = Vec::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare(
+                    "SELECT d.task_id, d.depends_on_task_id
+                     FROM task_dependencies d
+                     JOIN tasks t ON t.task_id = d.task_id
+                     WHERE t.project_id = ?1",
+                )
+                .map_err(StorageError::Db)?;
+            let rows = stmt
+                .query_map([project_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(StorageError::Db)?;
+            for row in rows {
+                edges.push(row.map_err(StorageError::Db)?);
+            }
+        }
+        // Sorted so that even a graph the DAG validator would reject yields the same answer on every run.
+        edges.sort();
+
+        let mut effective = own.clone();
+        for _ in 0..own.len() {
+            let mut changed = false;
+            for (dependent, prerequisite) in &edges {
+                if !live.contains(dependent) {
+                    continue;
+                }
+                let Some(inherited) = effective.get(dependent).copied() else {
+                    continue;
+                };
+                let current = effective.entry(prerequisite.clone()).or_insert(inherited);
+                if inherited > *current {
+                    *current = inherited;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        Ok(effective)
     }
 
     /// Persist a command execution after admission. Material attempts are re-fenced against the current lease.

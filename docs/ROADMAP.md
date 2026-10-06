@@ -267,6 +267,29 @@ trace links. No traceability service exists; `RequirementService` is the manifes
 was `payloads.json`'s. Until a decision names the owner, the agreed value is a consequence of the manifest being
 authoritative rather than of a decision, and the generated UI owner map is only as right as that value.
 
+## Cross-cutting — Task selection priority (DEC-108)
+
+Recorded here rather than under a milestone, for the same reason as the blocks above: `ORCHESTRATOR-DESIGN.md:95`
+listed priority as a selection input but never said whose, and no milestone owned the selector. `tasks.priority`
+was read as the task's own, which leaves a priority inversion rather than a tie-break — a priority-100 task held
+back by a priority-1 prerequisite waits behind unrelated priority-50 work, even though that prerequisite is the
+only thing that can release the priority-100 work.
+
+- selection orders by **effective priority**: a task's own priority raised to the highest priority among the live
+  tasks transitively waiting on it, with the existing tie-break chain unchanged beneath it
+- a dependent counts as waiting while it is neither `COMPLETED` nor `INVALIDATED`; the recovery states still
+  count, because those tasks are still going to run
+- the value is derived at selection time from `tasks` and `task_dependencies` and is never stored, so no table,
+  column, index, command, message, event or transition is added
+- the computation is a fixpoint over the edges, so it is order-independent, and it terminates on a cyclic graph
+  as well as an acyclic one
+- **wiring a production caller** — nothing dispatches from `select_schedulable_tasks` yet, so the rule is
+  exercised only by tests — is the remaining work
+
+**Status: the rule is implemented and tested; nothing calls it.** 13 tests cover promotion, transitivity over a
+31-edge chain, the waiting rule, tie-break preservation, determinism, the limit interaction, cycles and project
+scoping, and the 22 characterization tests that pin the previous ordering still pass unchanged.
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

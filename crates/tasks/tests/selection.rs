@@ -801,3 +801,306 @@ fn child_slots_are_bounded_by_the_durable_task_scope() {
         "a third slot exceeds the declared max_parallel_children of 2"
     );
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Effective priority: a task inherits the urgency of what it unblocks
+// ---------------------------------------------------------------------------------------------------
+
+/// The selected tasks as `(task_id, own priority, effective priority)`, so a test can state both the order and
+/// the derivation behind it.
+fn effective(storage: &Storage, limit: usize) -> Vec<(String, i64, i64)> {
+    select_schedulable_tasks(storage, PROJECT, limit)
+        .expect("select")
+        .into_iter()
+        .map(|task| (task.task_id, task.priority, task.effective_priority))
+        .collect()
+}
+
+#[test]
+fn a_prerequisite_inherits_the_priority_of_the_task_waiting_on_it() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    add_ready(&storage, "task_urgent", 100, "1");
+    add_ready(&storage, "task_middling", 50, "1");
+    depend(&storage, "task_urgent", "task_prereq");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![
+            ("task_prereq".to_string(), 1, 100),
+            ("task_middling".to_string(), 50, 50),
+        ],
+        "the prerequisite keeps its own priority of 1 and is ordered by an effective 100"
+    );
+    assert_eq!(
+        selected(&storage, 10),
+        vec!["task_prereq", "task_middling"],
+        "the low-priority prerequisite now outranks unrelated middling work, which it did not before"
+    );
+}
+
+#[test]
+fn inheritance_is_transitive_along_a_chain() {
+    let storage = project_storage();
+    add_ready(&storage, "task_chain_head", 100, "1");
+    add_ready(&storage, "task_chain_mid", 1, "1");
+    add_ready(&storage, "task_chain_tail", 1, "1");
+    add_ready(&storage, "task_unrelated", 60, "1");
+    // head waits on mid, mid waits on tail, so tail is what everything is ultimately blocked behind.
+    depend(&storage, "task_chain_mid", "task_chain_tail");
+    depend(&storage, "task_chain_head", "task_chain_mid");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![
+            ("task_chain_tail".to_string(), 1, 100),
+            ("task_unrelated".to_string(), 60, 60),
+        ],
+        "the head's priority reaches the tail through the middle link"
+    );
+}
+
+#[test]
+fn a_long_chain_propagates_the_head_priority_to_the_far_end() {
+    let storage = project_storage();
+    add_ready(&storage, "task_top", 500, "1");
+    for index in 0..30 {
+        add_ready(&storage, &format!("task_link_{index:02}"), 1, "1");
+    }
+    add_ready(&storage, "task_head", 1, "1");
+
+    depend(&storage, "task_top", "task_link_00");
+    for index in 0..29 {
+        depend(
+            &storage,
+            &format!("task_link_{index:02}"),
+            &format!("task_link_{:02}", index + 1),
+        );
+    }
+    depend(&storage, "task_link_29", "task_head");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![("task_head".to_string(), 1, 500)],
+        "a priority 31 edges away still reaches the only selectable task in the chain"
+    );
+}
+
+#[test]
+fn a_task_with_nothing_waiting_on_it_is_unaffected() {
+    let storage = project_storage();
+    add_ready(&storage, "task_a", 5, "1");
+    add_ready(&storage, "task_b", 3, "1");
+    add_ready(&storage, "task_c", 1, "1");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![
+            ("task_a".to_string(), 5, 5),
+            ("task_b".to_string(), 3, 3),
+            ("task_c".to_string(), 1, 1),
+        ],
+        "with no dependency edges at all, effective priority is exactly own priority"
+    );
+}
+
+#[test]
+fn a_completed_dependent_does_not_raise_its_prerequisite() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    // Synthetic but deliberate: a task cannot normally complete while its prerequisite is still READY. It
+    // isolates the rule being tested - a COMPLETED task is no longer waiting on anything - from every other
+    // path through the selector.
+    add_task(
+        &storage,
+        "task_finished",
+        100,
+        "COMPLETED",
+        0,
+        Some(WORKSPACE),
+        "1",
+        "1",
+    );
+    add_ready(&storage, "task_other", 50, "1");
+    depend(&storage, "task_finished", "task_prereq");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![
+            ("task_other".to_string(), 50, 50),
+            ("task_prereq".to_string(), 1, 1),
+        ],
+        "a completed task no longer needs its prerequisite, so it must not raise it"
+    );
+}
+
+#[test]
+fn an_invalidated_dependent_does_not_raise_its_prerequisite() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    add_task(
+        &storage,
+        "task_abandoned",
+        100,
+        "INVALIDATED",
+        0,
+        Some(WORKSPACE),
+        "1",
+        "1",
+    );
+    add_ready(&storage, "task_other", 50, "1");
+    depend(&storage, "task_abandoned", "task_prereq");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![
+            ("task_other".to_string(), 50, 50),
+            ("task_prereq".to_string(), 1, 1),
+        ],
+        "an invalidated task will never run, so it is not waiting and promotes nothing"
+    );
+}
+
+#[test]
+fn a_blocked_dependent_still_raises_its_prerequisite() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    add_task(
+        &storage,
+        "task_blocked",
+        100,
+        "BLOCKED",
+        0,
+        Some(WORKSPACE),
+        "1",
+        "1",
+    );
+    add_ready(&storage, "task_other", 50, "1");
+    depend(&storage, "task_blocked", "task_prereq");
+
+    assert_eq!(
+        selected(&storage, 10),
+        vec!["task_prereq", "task_other"],
+        "a blocked task is still going to run, so the work it waits on keeps its urgency"
+    );
+}
+
+#[test]
+fn inheritance_does_not_disturb_the_tie_break_chain() {
+    let storage = project_storage();
+    // Both prerequisites inherit 10, so they tie on effective priority and must fall back to the existing
+    // updated_at / created_at / task_id ordering rather than to the order they were discovered in.
+    add_task(
+        &storage,
+        "task_prereq_late",
+        1,
+        "READY",
+        0,
+        Some(WORKSPACE),
+        "1",
+        "9",
+    );
+    add_task(
+        &storage,
+        "task_prereq_early",
+        1,
+        "READY",
+        0,
+        Some(WORKSPACE),
+        "1",
+        "2",
+    );
+    add_ready(&storage, "task_waiting_a", 10, "1");
+    add_ready(&storage, "task_waiting_b", 10, "1");
+    depend(&storage, "task_waiting_a", "task_prereq_late");
+    depend(&storage, "task_waiting_b", "task_prereq_early");
+
+    assert_eq!(
+        selected(&storage, 10),
+        vec!["task_prereq_early", "task_prereq_late"],
+        "equal effective priority still resolves by the original tie-break order"
+    );
+}
+
+#[test]
+fn inheritance_is_deterministic_across_databases_and_repeated_calls() {
+    let build = || {
+        let storage = project_storage();
+        add_ready(&storage, "task_prereq", 1, "1");
+        add_ready(&storage, "task_urgent", 100, "1");
+        add_ready(&storage, "task_middling", 50, "1");
+        add_ready(&storage, "task_low", 2, "1");
+        depend(&storage, "task_urgent", "task_prereq");
+        depend(&storage, "task_middling", "task_low");
+        storage
+    };
+    let first = build();
+    let second = build();
+
+    assert_eq!(effective(&first, 10), effective(&second, 10));
+    assert_eq!(effective(&first, 10), effective(&first, 10));
+}
+
+#[test]
+fn promotion_can_lift_a_task_past_the_requested_limit() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    add_ready(&storage, "task_urgent", 100, "1");
+    add_ready(&storage, "task_middling_a", 50, "1");
+    add_ready(&storage, "task_middling_b", 49, "1");
+    depend(&storage, "task_urgent", "task_prereq");
+
+    // A limit of one must return the promoted prerequisite, not the highest own-priority candidate. Applying
+    // the limit before promotion would return task_middling_a.
+    assert_eq!(selected(&storage, 1), vec!["task_prereq"]);
+}
+
+#[test]
+fn a_dependency_cycle_terminates_and_still_propagates() {
+    let storage = project_storage();
+    // The DAG validator rejects cycles before they reach storage. This asserts that selection neither hangs nor
+    // panics if one is present anyway, and that the fixpoint still produces an answer.
+    add_ready(&storage, "task_cycle_a", 1, "1");
+    add_ready(&storage, "task_cycle_b", 2, "1");
+    add_ready(&storage, "task_outside", 1, "1");
+    depend(&storage, "task_cycle_a", "task_cycle_b");
+    depend(&storage, "task_cycle_b", "task_cycle_a");
+    // `task_outside` is the only task with no incomplete dependency, so it is the only candidate, and it is a
+    // prerequisite of the cycle. Observing it proves the fixpoint ran over the cycle and finished.
+    depend(&storage, "task_cycle_b", "task_outside");
+
+    assert_eq!(
+        effective(&storage, 10),
+        vec![("task_outside".to_string(), 1, 2)],
+        "the higher priority inside the cycle reaches the task outside it"
+    );
+    assert_eq!(effective(&storage, 10), effective(&storage, 10));
+}
+
+#[test]
+fn a_self_dependency_terminates() {
+    let storage = project_storage();
+    add_ready(&storage, "task_self", 7, "1");
+    depend(&storage, "task_self", "task_self");
+
+    // A task that depends on itself can never satisfy its own dependency, so it is never selectable, and the
+    // fixpoint over its edge must still terminate.
+    assert!(selected(&storage, 10).is_empty());
+}
+
+#[test]
+fn inheritance_does_not_leak_between_projects() {
+    let storage = project_storage();
+    add_ready(&storage, "task_prereq", 1, "1");
+    add_ready(&storage, "task_urgent", 100, "1");
+    depend(&storage, "task_urgent", "task_prereq");
+
+    // A second project's task with the same shape must not be consulted. `prj_other` has no rows at all, so
+    // this asserts the read is project-scoped rather than that it returns a particular value.
+    let other = select_schedulable_tasks(&storage, "prj_other", 10).expect("select other");
+    assert!(other.is_empty());
+    assert_eq!(
+        effective(&storage, 10),
+        vec![("task_prereq".to_string(), 1, 100)]
+    );
+}
