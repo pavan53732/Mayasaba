@@ -69,6 +69,8 @@ const BUS_POLICY_RS = "crates/bus/src/policy.rs";
 const GENERATED_RS = "apps/desktop/src-tauri/src/generated/bridge.rs";
 const GENERATED_TS = "apps/desktop/src/generated/bridge.ts";
 const PAYLOAD_TYPES = "schemas/tauri-bridge-v1/payload-types.json";
+const TRACEABILITY = "docs/TRACEABILITY.md";
+const DECISION_REGISTER = "docs/DECISION-REGISTER.md";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -577,6 +579,91 @@ const MUTATIONS = [
         create: true,
         file: ".github/ISSUE_TEMPLATE/bug.md",
         content: "---\nname: Bug report\nabout: Something is wrong\n---\n\nDescribe it.\n",
+      },
+    ],
+    expect: [],
+  },
+  // --- The traceability check. It enforces four properties, and a check that enforces four things while being
+  // proven against one of them is proven against one of them, so each is mutated separately. docs/TRACEABILITY.md
+  // had never been read by anything before this check, which is why its rows could claim VALIDATED with no test
+  // behind them and cite a decision - DEC-059 - that the register does not define.
+  {
+    id: "trace-a",
+    what: "TRACEABILITY.md: a state word outside the vocabulary the document declares",
+    check: GATE,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "the code is never mapped to a non-backoff registry code | DECIDED |",
+        replace: "the code is never mapped to a non-backoff registry code | SORT_OF |",
+      },
+    ],
+    expect: ['state "SORT_OF" is not in the vocabulary this document declares'],
+  },
+  {
+    id: "trace-b",
+    what: "TRACEABILITY.md: an evidence path that does not exist",
+    check: GATE,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "crates/core/src/attachment_service.rs",
+        replace: "crates/core/src/attachment_services.rs",
+      },
+    ],
+    expect: ["does not exist in the repository"],
+  },
+  {
+    id: "trace-c",
+    what: "TRACEABILITY.md: a cited decision that has no register entry",
+    check: GATE,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "capture to `EvidenceService` | DEC-107 |",
+        replace: "capture to `EvidenceService` | DEC-999 |",
+      },
+    ],
+    expect: ["cites DEC-999, which has no entry in docs/DECISION-REGISTER.md"],
+  },
+  {
+    id: "trace-d",
+    what: "TRACEABILITY.md: a VALIDATED row whose evidence cell asserts rather than cites",
+    check: GATE,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "| A selected file or folder becomes a durable reference carrying its provenance, and nothing else | DEC-106 | `attach_records_a_reference_with_provenance_and_no_content_identity` in `crates/core/tests/attachment_slice.rs` | VALIDATED |",
+        replace:
+          "| A selected file or folder becomes a durable reference carrying its provenance, and nothing else | DEC-106 | the behaviour is implemented and obviously correct | VALIDATED |",
+      },
+    ],
+    expect: ["claims VALIDATED and cites no evidence"],
+  },
+  {
+    id: "trace-e",
+    what: "DECISION-REGISTER.md: restoring a lost decision must retire the gate's recorded exception",
+    check: GATE,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        find: "# Mayasaba Decision Register",
+        replace: "# Mayasaba Decision Register\n\n### DEC-059 — restored record\n",
+      },
+    ],
+    expect: ["now defines DEC-059, so remove it from the gate's lost-citation list"],
+  },
+  {
+    id: "control-trace-prose",
+    what: "TRACEABILITY.md: prose is not scanned, so a decision or a path named outside a table is ignored",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "An attachment is context and evidence, never project truth (DEC-049).",
+        replace:
+          "An attachment is context and evidence, never project truth (DEC-049). DEC-999 and `docs/NOT-A-REAL-FILE.md` are named in prose here, and prose is not a table.",
       },
     ],
     expect: [],

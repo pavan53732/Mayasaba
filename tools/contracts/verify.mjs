@@ -980,6 +980,93 @@ const sqliteDoc=readText("docs/SQLITE-DATA-ARCHITECTURE.md");
 const undocumented=[...sqlTables].filter(t=>!new RegExp(`\\b${t}\\b`).test(sqliteDoc));
 if(undocumented.length) fail(`Table(s) in schema.sql are absent from docs/SQLITE-DATA-ARCHITECTURE.md, so the documented table grouping is stale:\n  - ${undocumented.join("\n  - ")}\nAdd each to its concern group in that document.`);
 
+// --- docs/TRACEABILITY.md is the only document that records what is implemented, what is validated and what
+// proves it. Nothing read it, so every row was prose: a state word could claim VALIDATED with no test behind
+// it, an evidence path could be renamed out from under it, and a cited decision could have no register entry.
+// The last of those had already happened before this check existed - DEC-059 is cited by this document, by four
+// later decisions and by crates/storage/src/lib.rs:1308, and the register has no entry for it at all.
+//
+// Four properties are enforced, each one a claim the document could otherwise make falsely:
+//   1. every state word is a member of the closed vocabulary the document declares;
+//   2. every cited path resolves, so evidence cannot point at something moved or deleted;
+//   3. every cited DEC id has a register entry, so a requirement cannot name a decision that does not exist;
+//   4. a VALIDATED row cites evidence, so "validated" is never a bare assertion.
+//
+// A backticked token is read as a path when it contains "/" or ends in a source extension. A bare identifier in
+// backticks is not a path and is not checked: prose cannot distinguish `canonical.rs` from `open_sequence_gaps`
+// by anything but shape, and guessing would report identifiers as missing files.
+const traceText=readText("docs/TRACEABILITY.md");
+const traceStates=new Set(["NOT_ADDRESSED","ADDRESSED","IMPLEMENTED","VALIDATED","CERTIFIED","DECIDED","OBSERVED"]);
+const traceExtensions=/\.(rs|ts|tsx|js|mjs|json|sql|md|toml|css|html)$/;
+
+// A decision is defined either by a heading or by a row of the register's index table. Both forms are real:
+// DEC-070 to DEC-075 appear as index rows, and the later entries use h4 headings with no em dash.
+const registerText=readText("docs/DECISION-REGISTER.md");
+const definedDecisions=new Set();
+for(const m of registerText.matchAll(/^#{2,6}\s*(DEC-\d+)/gm)) definedDecisions.add(m[1]);
+for(const m of registerText.matchAll(/^\|\s*(DEC-\d+)\s*\|/gm)) definedDecisions.add(m[1]);
+
+// Cited but absent from the register, each with the evidence that it is a lost record rather than a phantom
+// reference. This is a ratchet, not an exemption: an id that is neither defined nor listed here fails, and an id
+// listed here that later gains an entry also fails, so the list cannot outlive its reason.
+const lostDecisionCitations=new Map([
+  ["DEC-059","the durable inbox, the receipt and the processing spine. Cited as settled by crates/storage/src/lib.rs:1308, by DEC-061, DEC-062, DEC-063 and DEC-075, and by the M2 table in this document. DEC-058 owns the outbound side only, so it does not subsume this. Restoring the record is a decision-register change and has not been made"],
+]);
+
+const repoNames=new Set();
+const repoPaths=new Set();
+const collectRepoPaths=(files)=>{
+  for(const f of files){
+    repoNames.add(f.split("/").pop());
+    repoPaths.add(f);
+    const parts=f.split("/");
+    for(let i=1;i<parts.length;i++) repoPaths.add(parts.slice(0,i).join("/"));
+  }
+};
+collectRepoPaths(walkFiles("crates").concat(walkFiles("apps/desktop/src"),walkFiles("apps/desktop/src-tauri/src"),walkFiles("schemas"),walkFiles("tools"),walkFiles("docs")));
+for(const extra of ["workspace.manifest.json","package.json","AGENTS.md"]){ repoNames.add(extra); repoPaths.add(extra); }
+
+const traceProblems=[];
+const lostCitationsSeen=new Set();
+let traceRows=0, traceStateRows=0;
+let stateColumn=null;
+for(const line of traceText.split(/\r?\n/)){
+  const trimmed=line.trim();
+  if(!trimmed.startsWith("|")){ stateColumn=null; continue; }
+  const cells=trimmed.replace(/^\|/,"").replace(/\|$/,"").split("|").map(c=>c.trim());
+  if(cells.every(c=>/^-{3,}$/.test(c))) continue;
+  if(cells.includes("Requirement")&&cells.includes("Decision")){ stateColumn=cells.indexOf("State"); continue; }
+  if(cells.length<3) continue;
+  traceRows++;
+  const requirement=cells[0];
+  const evidence=cells[2];
+  const stateCell=stateColumn>=0?cells[stateColumn]:null;
+  if(stateCell!==null){
+    traceStateRows++;
+    const word=(stateCell.match(/^[A-Z_]+/)||[])[0];
+    if(!word) traceProblems.push(`${requirement}: state cell ${JSON.stringify(stateCell)} carries no state word`);
+    else if(!traceStates.has(word)) traceProblems.push(`${requirement}: state "${word}" is not in the vocabulary this document declares`);
+    else if((word==="VALIDATED"||word==="CERTIFIED")&&!/`/.test(evidence)) traceProblems.push(`${requirement}: claims ${word} and cites no evidence`);
+  }
+  for(const cell of cells){
+    for(const m of cell.matchAll(/DEC-\d+/g)){
+      const id=m[0];
+      if(definedDecisions.has(id)) continue;
+      if(!lostDecisionCitations.has(id)) traceProblems.push(`${requirement}: cites ${id}, which has no entry in docs/DECISION-REGISTER.md`);
+      else lostCitationsSeen.add(id);
+    }
+    for(const m of cell.matchAll(/`([^`]+)`/g)){
+      const token=m[1];
+      if(!token.includes("/")&&!traceExtensions.test(token)) continue;
+      const resolved=token.includes("/")?repoPaths.has(token):repoNames.has(token);
+      if(!resolved) traceProblems.push(`${requirement}: cites \`${token}\`, which does not exist in the repository`);
+    }
+  }
+}
+// An entry that has been restored must leave the list, or the list becomes a permanent hole in the check.
+for(const id of lostDecisionCitations.keys()) if(definedDecisions.has(id)) traceProblems.push(`docs/DECISION-REGISTER.md now defines ${id}, so remove it from the gate's lost-citation list: ${lostDecisionCitations.get(id)}`);
+if(traceProblems.length) fail(`${traceProblems.length} traceability problem(s) in docs/TRACEABILITY.md:\n  - ${traceProblems.join("\n  - ")}\nA row that cannot be checked is a row that can claim anything. Fix the row, or the register, or the path it cites.`);
+
 // --- Registry conformance against its own schema. payloads.json required `errors` on every operation while
 // every operation carried an undeclared `owner`, so the file did not satisfy payloads.schema.json on any of
 // its 58 operations and nothing detected it. The gate validated that the file existed, never its contents.
@@ -1778,6 +1865,7 @@ const coverageVerified=new Set([
   "schemas/sqlite-v1/schema.sql",
   "workspace.manifest.json",
   "docs/DATA-MODEL.md",
+  "docs/TRACEABILITY.md",
 ]);
 const drift=[...coverageVerified].filter(f=>!contentRead.has(f));
 if(drift.length) fail(`Gate coverage map claims these artifacts are verified, but this run did not read their contents:\n  - ${drift.join("\n  - ")}\nEither restore the check that reads them or remove them from the coverage map. A coverage claim that nothing enforces is the defect this block exists to prevent.`);
@@ -1838,6 +1926,10 @@ if(hostedCiProblems.length) fail(
 console.log("Mayasaba contract verification passed.");
 console.log(`MCF messages: ${messages.length}; events: ${events.length}; transition machines: ${Object.keys(transition.machines).length}`);
 console.log(`Tauri commands: ${bridge.properties.command.enum.length}; queries: ${bridge.properties.query.enum.length}; UI events: ${bridge.properties.event_type.enum.length}`);
+// Traceability coverage, stated every run for the same reason as the bridge and registry figures: a table whose
+// checked proportion lives only in the document drifts away from the thing it describes. The second half names
+// the rows the gate cannot check a state for, so "every row is enforced" is never assumed from the first half.
+console.log(`Traceability: ${traceStateRows} of ${traceRows} table row(s) carry an enforced state word; ${lostCitationsSeen.size} cited decision(s) have no register entry (recorded in the gate, not blocking); ${traceRows-traceStateRows} row(s) are in a table with no State column, so only their decision and path citations are checked`);
 // The error vocabulary's own figures, stated every run for the same reason as the bridge figures: a count that
 // lives only in a document drifts away from the thing it counts.
 console.log(`Error registry: ${errorRegistryReport.registered} codes registered; ${errorRegistryReport.emitted} produced by the implementation; ${errorRegistryReport.tauriCodesEmitted} of ${errorRegistryReport.registered} tauri_code values emitted anywhere (the wire carries the canonical registry key; reported, not blocking)`);
