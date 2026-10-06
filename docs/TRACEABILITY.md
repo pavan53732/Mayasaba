@@ -126,8 +126,8 @@ the rows at the end are what does not exist, recorded rather than implied.
 | Both composers share one attachment presentation state | DEC-106 | `apps/desktop/src/attachments/state.ts` and `apps/desktop/src/chat/state.ts`; `apps/desktop/src/chat/state.test.ts` asserts the chat surface delegates tray actions rather than re-implementing them | VALIDATED |
 | No attachment is presented as uploaded, indexed, analysed or accepted before the controller returned that state | DEC-106 | `apps/desktop/src/attachments/state.test.ts`; an entry is durable only when a resolution came back from Rust, and the projection carries the lifecycle that answer reported | VALIDATED |
 | An attachment is never a prerequisite for submitting a normal message | DEC-106 | `apps/desktop/src/chat/state.test.ts`; `canSendMessage` takes the message text and no tray, so no attachment can change the answer | VALIDATED |
-| Both surfaces render the tray, pick through the bridge and attach once a project exists | DEC-106 | `apps/desktop/src/App.tsx` | IMPLEMENTED |
-| Attaching is optional at intake and never gates project creation | DEC-106 | `apps/desktop/src/App.tsx`; `canSubmit` reads the brief and the workspace and not the tray | IMPLEMENTED |
+| Both surfaces render the tray, pick through the bridge and attach once a project exists | DEC-106 | `apps/desktop/src/components/shell/AttachmentTray.tsx`; `apps/desktop/src/components/sections/ChatSection.tsx` and `apps/desktop/src/components/sections/FilesSection.tsx` render it, and `apps/desktop/src/components/shell/Composers.tsx` renders it at intake | IMPLEMENTED |
+| Attaching is optional at intake and never gates project creation | DEC-106 | `apps/desktop/src/components/control-room/ControlRoom.tsx`; `canSubmit` reads the brief and the workspace and not the tray | IMPLEMENTED |
 | Capture: hash the contents and produce an artifact and evidence record | DEC-102 | — | NOT_ADDRESSED |
 | Consume: an owning service accepts a material change caused by the contents | DEC-106 | — | NOT_ADDRESSED |
 | An attachment cannot be cited as evidence before it is captured | DEC-102 | — | NOT_ADDRESSED |
@@ -171,18 +171,18 @@ the rows at the end are what does not exist, recorded rather than implied.
 | A per-task-kind performance breakdown | DEC-112 | - | NOT_ADDRESSED |
 | A production caller that records agent attempts | DEC-112 | - | NOT_ADDRESSED |
 
-The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
-has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
-`content_hash` and `context_evidence_id` are nullable and empty in every stored row. The `source_path` row is
-open by decision rather than by omission: DEC-106 leaves the question unanswered, and nothing in the schema
-enforces an answer in either direction.
+The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: the Control Room shell
+in `apps/desktop/src/components/` has no test, because the desktop suite runs without a DOM. The two
+`NOT_ADDRESSED` capture rows are the reason `content_hash` and `context_evidence_id` are nullable and empty in
+every stored row. The `source_path` row is open by decision rather than by omission: DEC-106 leaves the question
+unanswered, and nothing in the schema enforces an answer in either direction.
 
 The `UserContribution` rows are `VALIDATED` for the Rust path and for the composer's reducer. Recording is wired
-through `apps/desktop/src/App.tsx` the same way the tray is, which is why that surface is `IMPLEMENTED` and not
-`VALIDATED` for the same reason as the rows above. What is **not** addressed is routing: `record_user_contribution`
-stores `result_type = PENDING` with an unchanged epoch pair, because no operation carries the text to the owning
-service that would decide materiality. The record therefore claims no epoch effect, which is why recording a
-`MATERIAL` label is asserted to leave `current_epoch` alone.
+through `apps/desktop/src/components/sections/ChatSection.tsx` the same way the tray is, which is why that surface
+is `IMPLEMENTED` and not `VALIDATED` for the same reason as the rows above. What is **not** addressed is routing:
+`record_user_contribution` stores `result_type = PENDING` with an unchanged epoch pair, because no operation
+carries the text to the owning service that would decide materiality. The record therefore claims no epoch
+effect, which is why recording a `MATERIAL` label is asserted to leave `current_epoch` alone.
 
 The effective-priority rows are `VALIDATED` against the Rust selector rather than against a running scheduler,
 because nothing calls `select_schedulable_tasks` in production yet. That is why the row claiming a production

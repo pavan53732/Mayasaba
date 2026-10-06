@@ -169,17 +169,22 @@ runtime build/test/evidence orchestration and end-to-end project execution remai
 
 ## M9 — Control Room
 
-**Status: not started, and the frontend is behind DEC-014.** No Control Room surface exists.
-`apps/desktop/src/App.tsx` is the first vertical slice through the UI boundary and renders three surfaces — the
-initial intake composer, the ongoing chat composer, and the stored-project list with its recovery banner — while
-`docs/CONTROL-ROOM-DESIGN.md` specifies a persistent shell, 15 primary-navigation sections and a right context
-rail, none of which is built. The DEC-014 HARD_LOCK names Tailwind/shadcn and neither is present:
-`apps/desktop/package.json` declares no `tailwindcss`, `postcss`, `autoprefixer`, `shadcn` or `@radix-ui/*`, there
-is no config file and no stylesheet under `apps/desktop/src`, and `apps/desktop/index.html` links none, so every
-style in `App.tsx` is an inline `React.CSSProperties` object. This is recorded as a pending migration rather than
-drift: nothing in the repository records a decision to defer the locked stack, and DEC-032's bento-grid
-composition is not implementable without it. DEC-014 stands until it is replaced through the decision process —
-this entry records the gap, it does not authorise it.
+**Status: in progress. The DEC-014 stack is built; most sections are not wired.** The persistent shell now
+exists: `apps/desktop/src/components/control-room/ControlRoom.tsx` composes a header, the 15 primary-navigation
+sections `docs/CONTROL-ROOM-DESIGN.md` lists, a center content area and a right context rail, as the bento-grid
+composition DEC-032 requires. The DEC-014 HARD_LOCK is satisfied — `apps/desktop/package.json` declares
+`tailwindcss`, `@tailwindcss/vite`, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react` and six
+`@radix-ui/*` primitives; `apps/desktop/src/styles.css` carries the `@theme` design tokens; `apps/desktop/vite.config.ts`
+registers the Tailwind plugin; and `apps/desktop/index.html` and `apps/desktop/src/main.tsx` load the stylesheet.
+The shadcn primitives live in `apps/desktop/src/components/ui/`, and no component uses an inline
+`React.CSSProperties` object any more.
+
+What is **not** done is the wiring. The bridge contract declares 63 operations and the Tauri shell registers 12
+handlers, so 51 declared operations have no handler. Four sections have a live surface — Chat, Files, Logs and
+Agents — and the other eleven render their declared-but-unimplemented operations rather than placeholder data.
+`apps/desktop/src/lib/operations.ts` holds the partition and `apps/desktop/src/lib/operations.test.ts` asserts it
+is total and that its handler list equals the shell's `generate_handler![...]` list, so a section cannot claim a
+handler the shell does not register. The remaining work is the 51 handlers, not the shell.
 
 - project management
 - chat/timeline

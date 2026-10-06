@@ -200,13 +200,57 @@ export interface ReplayOutcome {
   deduplicated: boolean;
 }
 
+/** One agent's attempt count in one state. */
+export interface AgentStateCount {
+  state: string;
+  count: number;
+}
+
+/**
+ * Mirrors AgentPerformanceReport.
+ *
+ * `failure_rate` is absent rather than zero when the sample is below the reporting policy's minimum, and
+ * `failure_rate_suppressed_reason` says why. The UI renders the absence and the reason; it never substitutes
+ * zero, because zero is a measurement and this is the absence of one.
+ */
+export interface AgentPerformanceReport {
+  agent_id: string;
+  sample_size: number;
+  by_state: AgentStateCount[];
+  attempts_with_recorded_failure: number;
+  failure_rate: number | null;
+  failure_rate_suppressed_reason: string | null;
+  /** Always `UNAVAILABLE` today: no attempt can be attributed a validation result. Reported, not estimated. */
+  validation_survival: string;
+  validation_survival_reason: string;
+  /** Stated on every report: this data is descriptive and must not affect routing or authority. */
+  informational_only: boolean;
+}
+
+/**
+ * Read every agent's attempt history in a project. Read-only.
+ *
+ * The report is descriptive by contract (`informational_only`), so the Control Room renders it as an
+ * observation and never as a routing input or a health verdict.
+ */
+export async function getAgentStatus(
+  projectId: string,
+): Promise<AgentPerformanceReport[] | CommandError> {
+  try {
+    return (await transport("get_agent_status", {
+      project_id: projectId,
+    })) as AgentPerformanceReport[];
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
 /**
  * Read a project's communication health. Read-only.
  *
  * A query, not state: the UI renders what Rust answers and keeps no second copy, because a second copy of a
  * queue's depth is a second number that can disagree with the queue.
- */
-export async function getCommunicationHealth(
+ */export async function getCommunicationHealth(
   projectId: string,
 ): Promise<CommunicationHealth | CommandError> {
   try {

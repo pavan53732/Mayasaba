@@ -1,4 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+
+import ControlRoom from "./components/control-room/ControlRoom";
+import "./styles.css";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ControlRoom />
+  </StrictMode>,
+);
+

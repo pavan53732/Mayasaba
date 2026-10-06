@@ -65,7 +65,11 @@ const INTEGRITY = "integrity";
 
 const MAIN = "apps/desktop/src-tauri/src/main.rs";
 const BRIDGE_TS = "apps/desktop/src/intake/bridge.ts";
-const APP_TSX = "apps/desktop/src/App.tsx";
+// The Control Room shell. It is the mutation target for the frontend checks because it is the file that
+// composes the whole UI boundary: it calls the typed wrappers, and it is where a raw `invoke(...)` or an
+// unterminated string would appear if one were introduced. It replaced `apps/desktop/src/App.tsx`, which the
+// Control Room shell superseded when the DEC-014 stack landed.
+const SHELL_TSX = "apps/desktop/src/components/control-room/ControlRoom.tsx";
 const REGISTRY = "schemas/error-v1/registry.json";
 const VALIDATION_RS = "crates/workspace/src/validation.rs";
 const BUS_ERROR_RS = "crates/bus/src/error.rs";
@@ -174,7 +178,7 @@ const MUTATIONS = [
     what: "frontend: a raw invoke(...) outside the boundary file, and a transport name that is not a literal",
     check: GATE,
     edits: [
-      { file: APP_TSX, append: '\ninvoke("list_projects", {});\n' },
+      { file: SHELL_TSX, append: '\ninvoke("list_projects", {});\n' },
       { file: BRIDGE_TS, append: "\ntransport(dynamicName, {});\n" },
     ],
     expect: [
@@ -543,7 +547,7 @@ const MUTATIONS = [
     control: true,
     edits: [
       { file: BRIDGE_TS, append: '\n// transport("ghost_in_a_comment", {});\n' },
-      { file: APP_TSX, append: '\n// invoke("ghost_in_a_comment", {});\n' },
+      { file: SHELL_TSX, append: '\n// invoke("ghost_in_a_comment", {});\n' },
     ],
     expect: [],
   },
@@ -783,7 +787,7 @@ const MUTATIONS = [
     id: "scanner-a",
     what: "a frontend file with an unterminated string, so the comment scanner cannot tell code from text",
     check: GATE,
-    edits: [{ file: APP_TSX, append: '\nconst probe = "unterminated\n' }],
+    edits: [{ file: SHELL_TSX, append: '\nconst probe = "unterminated\n' }],
     expect: ["the comment scanner lost track of the code"],
   },
   {
@@ -793,7 +797,7 @@ const MUTATIONS = [
     control: true,
     edits: [
       {
-        file: APP_TSX,
+        file: SHELL_TSX,
         append: "\nconst probe = <p>the project's recorded references</p>;\n// invoke(\"ghost_in_a_comment\", {});\n",
       },
     ],

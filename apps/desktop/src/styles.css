@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/*
+ * Mayasaba Control Room design tokens.
+ *
+ * DEC-032 locks the visual language: a minimal/functional base, a neutral palette, generous whitespace,
+ * typographic hierarchy and a system font stack. Decorative surfaces are not used, and frosted-glass/blur
+ * accents are permitted only on the header bar and status chips. Spatial/3D, claymorphism, neomorphism,
+ * skeuomorphism, glassmorphism and maximalism are prohibited as design languages.
+ *
+ * The palette is deliberately neutral and low-chroma. Colour is reserved for state, because DEC-032 also
+ * requires that visual language never encodes authority, state or permission on its own - every state colour
+ * below is paired with a text label in the component that uses it, so colour is redundant rather than load
+ * bearing.
+ */
+
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Neutral surface ramp. */
+  --color-surface: oklch(1 0 0);
+  --color-surface-sunken: oklch(0.985 0.002 250);
+  --color-surface-raised: oklch(0.995 0.001 250);
+  --color-border: oklch(0.922 0.004 250);
+  --color-border-strong: oklch(0.86 0.006 250);
+
+  /* Text ramp. */
+  --color-ink: oklch(0.21 0.012 250);
+  --color-ink-muted: oklch(0.52 0.012 250);
+  --color-ink-subtle: oklch(0.64 0.01 250);
+
+  /* State colours. Each is used with a label, never alone. */
+  --color-state-ok: oklch(0.52 0.11 155);
+  --color-state-ok-surface: oklch(0.97 0.02 155);
+  --color-state-warn: oklch(0.55 0.12 70);
+  --color-state-warn-surface: oklch(0.97 0.03 80);
+  --color-state-danger: oklch(0.53 0.17 25);
+  --color-state-danger-surface: oklch(0.97 0.02 25);
+  --color-state-info: oklch(0.52 0.1 250);
+  --color-state-info-surface: oklch(0.97 0.02 250);
+
+  /* The bento grid's base unit. DEC-032 requires a bento-grid composition for the persistent shell. */
+  --spacing-bento: 0.75rem;
+  --radius-bento: 0.75rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface-sunken);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* DEC-032 requires WCAG 2.1 AA contrast. A visible focus ring is part of that, and it must not be removed
+     by a component that styles its own outline. */
+  :focus-visible {
+    outline: 2px solid var(--color-state-info);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Frosted-glass is permitted only on the header bar and status chips (DEC-032). This utility exists so the
+     permission is expressed once and cannot be applied elsewhere by accident. */
+  .frosted {
+    background-color: color-mix(in oklab, var(--color-surface) 82%, transparent);
+    backdrop-filter: blur(12px) saturate(140%);
+  }
+}
