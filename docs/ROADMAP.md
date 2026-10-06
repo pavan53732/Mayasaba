@@ -168,6 +168,19 @@ runtime build/test/evidence orchestration and end-to-end project execution remai
 - high-severity issue gates
 
 ## M9 — Control Room
+
+**Status: not started, and the frontend is behind DEC-014.** No Control Room surface exists.
+`apps/desktop/src/App.tsx` is the first vertical slice through the UI boundary and renders three surfaces — the
+initial intake composer, the ongoing chat composer, and the stored-project list with its recovery banner — while
+`docs/CONTROL-ROOM-DESIGN.md` specifies a persistent shell, 15 primary-navigation sections and a right context
+rail, none of which is built. The DEC-014 HARD_LOCK names Tailwind/shadcn and neither is present:
+`apps/desktop/package.json` declares no `tailwindcss`, `postcss`, `autoprefixer`, `shadcn` or `@radix-ui/*`, there
+is no config file and no stylesheet under `apps/desktop/src`, and `apps/desktop/index.html` links none, so every
+style in `App.tsx` is an inline `React.CSSProperties` object. This is recorded as a pending migration rather than
+drift: nothing in the repository records a decision to defer the locked stack, and DEC-032's bento-grid
+composition is not implementable without it. DEC-014 stands until it is replaced through the decision process —
+this entry records the gap, it does not authorise it.
+
 - project management
 - chat/timeline
 - council view

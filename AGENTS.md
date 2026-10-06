@@ -41,7 +41,7 @@ AI agents working in this repository MUST preserve:
 - Workspace/task-path scope is authoritative; no whole-PC scan by default and no writes outside the authorized scope without approval.
 - Public web retrieval is allowed only as read-only access for user-requested research; external side effects and general control of unrelated applications are out of scope.
 - MSI-only user-facing distribution.
-- Tauri 2 + React 19 + TypeScript + Vite frontend baseline.
+- Tauri 2 + React 19 + TypeScript + Vite + Tailwind/shadcn frontend baseline (DEC-014).
 - Control Room visual language: minimal/functional base with bento-grid layout (DEC-032).
 - Rust + Tokio controller/core baseline.
 - SQLite as durable local source of truth.
