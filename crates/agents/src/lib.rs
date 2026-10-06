@@ -1135,52 +1135,54 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
         storage: &mayasaba_storage::Storage,
         received_at: &str,
     ) -> Result<Option<NativeEvent>, AgentRuntimeError> {
-        loop {
-            let Some(line) = self.process.next_stdout_line().await? else {
-                return Ok(None);
-            };
-            self.event_sequence = self.event_sequence.saturating_add(1);
-            let raw_ref = format!(
-                "execution://{}/stdout/{}",
-                self.process.execution_id, self.event_sequence
-            );
-            match self.adapter.normalize_event(&line, received_at, &raw_ref) {
-                Ok(event) => {
-                    if let Some(native_session_id) = event.native_session_id.as_deref() {
-                        if native_session_id.trim().is_empty() {
+        // One line yields exactly one event or one error: every arm below returns, so this is a straight-line
+        // read rather than a loop. It was previously wrapped in `loop { .. }` whose body never iterated, which
+        // `clippy::never_loop` rejects as a correctness defect. The wrapper is removed rather than restructured,
+        // because no arm ever wanted to continue.
+        let Some(line) = self.process.next_stdout_line().await? else {
+            return Ok(None);
+        };
+        self.event_sequence = self.event_sequence.saturating_add(1);
+        let raw_ref = format!(
+            "execution://{}/stdout/{}",
+            self.process.execution_id, self.event_sequence
+        );
+        match self.adapter.normalize_event(&line, received_at, &raw_ref) {
+            Ok(event) => {
+                if let Some(native_session_id) = event.native_session_id.as_deref() {
+                    if native_session_id.trim().is_empty() {
+                        return Err(AgentRuntimeError::Adapter(adapter_error(
+                            AdapterErrorCategory::PROTOCOL,
+                            "ADAPTER_PROTOCOL_ERROR",
+                            Retryability::NEVER,
+                            "native event carried an empty native session id",
+                        )));
+                    }
+                    if let Some(expected) = self.native_session_id.as_deref() {
+                        if expected != native_session_id {
                             return Err(AgentRuntimeError::Adapter(adapter_error(
                                 AdapterErrorCategory::PROTOCOL,
                                 "ADAPTER_PROTOCOL_ERROR",
                                 Retryability::NEVER,
-                                "native event carried an empty native session id",
+                                format!("native session id changed mid-session: expected {expected}, observed {native_session_id}"),
                             )));
                         }
-                        if let Some(expected) = self.native_session_id.as_deref() {
-                            if expected != native_session_id {
-                                return Err(AgentRuntimeError::Adapter(adapter_error(
-                                    AdapterErrorCategory::PROTOCOL,
-                                    "ADAPTER_PROTOCOL_ERROR",
-                                    Retryability::NEVER,
-                                    format!("native session id changed mid-session: expected {expected}, observed {native_session_id}"),
-                                )));
-                            }
-                        } else {
-                            self.native_session_id = Some(native_session_id.to_owned());
-                        }
-                        storage.bind_agent_process(
-                            &self.session_id,
-                            i64::from(self.process.pid),
-                            self.native_session_id.as_deref(),
-                        )?;
+                    } else {
+                        self.native_session_id = Some(native_session_id.to_owned());
                     }
-                    return Ok(Some(event));
+                    storage.bind_agent_process(
+                        &self.session_id,
+                        i64::from(self.process.pid),
+                        self.native_session_id.as_deref(),
+                    )?;
                 }
-                Err(error) => {
-                    // Unknown/malformed vendor data must never become a canonical success signal. Preserve the
-                    // failure through the adapter error path and require the controller to decide whether recovery
-                    // can continue.
-                    return Err(AgentRuntimeError::Adapter(error));
-                }
+                Ok(Some(event))
+            }
+            Err(error) => {
+                // Unknown/malformed vendor data must never become a canonical success signal. Preserve the
+                // failure through the adapter error path and require the controller to decide whether recovery
+                // can continue.
+                Err(AgentRuntimeError::Adapter(error))
             }
         }
     }
