@@ -1078,6 +1078,16 @@ const VOCAB_PAIRS = [
   ["BUDGET_KIND_VOCABULARY", ["council_budget_ledger.kind"]],
   ["BUDGET_AVAILABILITY_VOCABULARY", ["council_budget_ledger.availability"]],
   ["OUTCOME_STATUS_VOCABULARY", ["council_decision_outcomes.status"]],
+  // OUTCOME_SOURCE_VOCABULARY already existed in crates/storage and already matched its CHECK constraint; it
+  // was simply never paired, so the gate reported the constraint as having no Rust constant while the constant
+  // sat beside the one it was paired with. The remaining four were enforced by Rust but not declared as a set
+  // the gate could read: three were inlined or produced by an enum in another crate, and
+  // environment_snapshots.source was an array literal inside the single call that used it.
+  ["OUTCOME_SOURCE_VOCABULARY", ["council_decision_outcomes.source"]],
+  ["ENVIRONMENT_SNAPSHOT_SOURCES", ["environment_snapshots.source"]],
+  ["USER_CONTRIBUTION_CLASSIFICATIONS", ["user_contributions.classification"]],
+  ["USER_CONTRIBUTION_CLASSIFICATION_SOURCES", ["user_contributions.classification_source"]],
+  ["USER_CONTRIBUTION_RESULT_TYPES", ["user_contributions.result_type"]],
 ];
 const sqlCheckEnums = new Map();
 for (const m of sqlCode.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g)) {
@@ -1087,9 +1097,15 @@ for (const m of sqlCode.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]
 }
 // Read as text rather than through `read`, which parses JSON, and under a name of its own: the integration
 // conflict section further down reads the same file for a different purpose.
+//
+// Whitespace around `=` is optional because rustfmt decides where to break a long declaration, not the author.
+// The pattern previously required `&[&str] = &[` to be adjacent, so a constant rustfmt wrapped onto a second
+// line was reported as "declares no const ... for the gate to read" - a gate failing on a correct file, which
+// is the failure this whole file is written to avoid. `OUTCOME_SOURCE_VOCABULARY` is already wrapped that way,
+// so the brittleness was live: pairing it was what exposed it.
 const storageVocabSource = fs.readFileSync(path.join(root, "crates/storage/src/lib.rs"), "utf8");
 const rustVocabulary = (name) => {
-  const m = new RegExp(`const ${name}: &\\[&str\\] = &\\[([\\s\\S]*?)\\];`).exec(storageVocabSource);
+  const m = new RegExp(`const ${name}: &\\[&str\\]\\s*=\\s*&\\[([\\s\\S]*?)\\];`).exec(storageVocabSource);
   return m ? [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]) : null;
 };
 const vocabProblems = [];
@@ -1114,7 +1130,49 @@ for (const [constant, columns] of VOCAB_PAIRS) {
 if (vocabProblems.length) fail(vocabProblems.length+" Rust/SQLite vocabulary divergence(s):\n  - "+vocabProblems.join("\n  - ")+"\nA vocabulary declared twice must be declared identically, or one of the two is a promise the other breaks. Fix whichever drifted; do not remove the pair, because removing it is what let the divergence go unnoticed.");
 const pairedCheckColumns = new Set(VOCAB_PAIRS.flatMap(([,columns]) => columns));
 const unpairedCheckEnums = [...sqlCheckEnums.keys()].filter((c) => !pairedCheckColumns.has(c));
-console.log(`Vocabulary constants: ${VOCAB_PAIRS.length} Rust constant(s) compared with the SQL CHECK that enforces the same vocabulary; ${unpairedCheckEnums.length} CHECK constraint(s) have no Rust constant (reported, not blocking): ${unpairedCheckEnums.join(", ")||"none"}`);
+
+// What is left over is justified rather than ignored, and it is justified in a file this check reads rather
+// than in this comment, because a justification buried in the gate cannot be reviewed as a decision and cannot
+// be checked for staleness. `project_context_attachments.lifecycle_state` is the one remainder: its CHECK
+// allows four values while the only code path that writes it can produce one, because the capture and consume
+// operations that would move an attachment out of SELECTED do not exist yet (DEC-106 keeps them separate from
+// attaching, and DEC-107 gives the entity to `crates/core::AttachmentService`). A Rust constant listing all
+// four would declare values this crate is not willing to send.
+//
+// The file is checked in BOTH directions, and that is the point of it. An entry that no longer describes a
+// real unpaired constraint is a failure, because a justification that outlives its gap is how a check stops
+// meaning anything; and a real unpaired constraint that is absent from the file is a failure too, because that
+// is the state this exists to end. Reading fails closed: an unreadable or malformed file fails naming the file
+// rather than reporting that nothing is unjustified, since "I could not tell" and "there is nothing to tell"
+// must never produce the same output.
+const unpairedAllowListPath="tools/contracts/unpaired-check-vocabularies.json";
+let unpairedAllowList=null;
+try {
+  unpairedAllowList=JSON.parse(fs.readFileSync(path.join(root,unpairedAllowListPath),"utf8"));
+} catch(error){
+  fail(`${unpairedAllowListPath} could not be read or parsed (${error.message}), so the justified remainder of the ${unpairedCheckEnums.length} CHECK constraint(s) with no Rust constant cannot be established. This check fails closed rather than reporting that nothing is unjustified.`);
+}
+if(!Array.isArray(unpairedAllowList.unpaired)){
+  fail(`${unpairedAllowListPath} has no \`unpaired\` array, so it justifies nothing and this check cannot tell a justified gap from an unjustified one.`);
+}
+const allowedUnpaired=new Map();
+for(const entry of unpairedAllowList.unpaired){
+  if(typeof entry?.table!=="string"||typeof entry?.column!=="string"||typeof entry?.reason!=="string"||entry.reason.trim()===""||typeof entry?.future_owner!=="string"||entry.future_owner.trim()===""){
+    fail(`${unpairedAllowListPath} has an entry that is not {table, column, reason, future_owner} with a non-empty reason and future_owner: ${JSON.stringify(entry)}. An entry with no reason is an exemption, and this file does not grant exemptions.`);
+  }
+  const key=`${entry.table}.${entry.column}`;
+  if(allowedUnpaired.has(key)) fail(`${unpairedAllowListPath} lists ${key} more than once, so which justification applies is ambiguous.`);
+  allowedUnpaired.set(key,entry);
+}
+const unpairedProblems=[];
+for(const [key,entry] of allowedUnpaired){
+  if(!unpairedCheckEnums.includes(key)) unpairedProblems.push(`${unpairedAllowListPath} justifies ${key}, but no CHECK constraint on that column is unpaired any more, so the justification has outlived its gap: "${entry.reason.slice(0,96)}${entry.reason.length>96?"...":""}"`);
+}
+for(const column of unpairedCheckEnums){
+  if(!allowedUnpaired.has(column)) unpairedProblems.push(`${column} has a CHECK constraint and no Rust constant, and ${unpairedAllowListPath} does not justify it. Pair it with a Rust constant, or add it to that file with a reason and the crate that will own it.`);
+}
+if(unpairedProblems.length) fail(`${unpairedProblems.length} unjustified unpaired CHECK vocabulary problem(s):\n  - ${unpairedProblems.join("\n  - ")}\nEvery closed vocabulary Rust enforces is either paired with its CHECK constraint or justified in ${unpairedAllowListPath}. There is no third state.`);
+console.log(`Vocabulary constants: ${VOCAB_PAIRS.length} Rust constant(s) compared with the SQL CHECK that enforces the same vocabulary; ${unpairedCheckEnums.length} CHECK constraint(s) have no Rust constant, and ${unpairedCheckEnums.length===0?"there are none to justify":`every one is justified in ${unpairedAllowListPath} (${unpairedCheckEnums.map((c)=>`${c} -> ${allowedUnpaired.get(c).future_owner}`).join("; ")})`}`);
 
 // SQLITE-DATA-ARCHITECTURE.md groups the tables by concern, and that grouping drifted the moment
 // project_briefs and user_contributions were added: the tables existed in schema.sql and in DATA-MODEL.md

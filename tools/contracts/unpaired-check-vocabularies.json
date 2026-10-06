@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "authority": "tools/contracts/unpaired-check-vocabularies.json",
+  "rule": "Every SQL CHECK vocabulary in schemas/sqlite-v1/schema.sql that has no Rust constant must be listed in `unpaired` with a reason and the crate that will own it. The contract gate fails when a real unpaired constraint is absent from this list, and fails when a listed entry no longer matches a real unpaired constraint. An entry is a justification, not an exemption: it records why Rust cannot mirror the vocabulary yet, and it is removed as soon as Rust can. This file is gate configuration, not a contract surface, which is why it lives under tools/ rather than schemas/.",
+  "unpaired": [
+    {
+      "table": "project_context_attachments",
+      "column": "lifecycle_state",
+      "reason": "Rust writes and reads this column, but the only value it can produce is the initial state SELECTED: insert_project_context_attachment lets the column take the schema's own DEFAULT, and no code path anywhere writes PENDING, ACCEPTED or REJECTED. Those three values belong to the explicit capture and consume operations that DEC-106 deliberately keeps separate from attaching and that do not exist yet, so a Rust constant listing all four would declare values this crate is not willing to send - which is the opposite of what a vocabulary constant is for. The gate compares a constant with its CHECK constraint for equality, so a one-value constant could not be paired with a four-value constraint in any case.",
+      "future_owner": "crates/core::AttachmentService"
+    }
+  ]
+}

@@ -90,6 +90,7 @@ const SQL_SCHEMA = "schemas/sqlite-v1/schema.sql";
 const AGENTS_LIB = "crates/agents/src/lib.rs";
 const TASKS_LIB = "crates/tasks/src/lib.rs";
 const COUNCIL_POLICIES = "schemas/council-v1/council-policies.json";
+const UNPAIRED_ALLOW_LIST = "tools/contracts/unpaired-check-vocabularies.json";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -1396,6 +1397,137 @@ const MUTATIONS = [
         // reason, and this is what separates the two.
         file: "tools/contracts/mutations.mjs",
         append: "\n// Appended by a mutation control. Comments are not syntax.\n",
+      },
+    ],
+    expect: [],
+  },
+  // --- Unpaired CHECK vocabularies, and the file that justifies the remainder. Six CHECK constraints had no
+  // Rust constant. The gate listed all six on every run and never failed: the count was visible, the reasons
+  // were not, and nothing distinguished "no Rust code touches this column" from "Rust writes it and nobody
+  // paired it". Five are now paired - OUTCOME_SOURCE_VOCABULARY already existed and had simply never been
+  // declared - and the sixth is justified in a file the gate reads and checks in both directions.
+  {
+    id: "vocab-a",
+    what: "schema.sql: environment_snapshots.source drops a value its Rust constant still allows",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "source TEXT NOT NULL CHECK(source IN ('PREFLIGHT','EXECUTION','VALIDATION')),",
+        replace: "source TEXT NOT NULL CHECK(source IN ('PREFLIGHT','EXECUTION')),",
+      },
+    ],
+    expect: [
+      "ENVIRONMENT_SNAPSHOT_SOURCES is [PREFLIGHT, EXECUTION, VALIDATION] but schema.sql environment_snapshots.source allows [PREFLIGHT, EXECUTION]",
+    ],
+  },
+  {
+    id: "vocab-b",
+    what: "crates/storage: ENVIRONMENT_SNAPSHOT_SOURCES renames a value the CHECK constraint still allows",
+    check: GATE,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: 'const ENVIRONMENT_SNAPSHOT_SOURCES: &[&str] = &["PREFLIGHT", "EXECUTION", "VALIDATION"];',
+        replace:
+          'const ENVIRONMENT_SNAPSHOT_SOURCES: &[&str] = &["PREFLIGHT", "EXECUTION", "POSTFLIGHT"];',
+      },
+    ],
+    expect: [
+      "ENVIRONMENT_SNAPSHOT_SOURCES is [PREFLIGHT, EXECUTION, POSTFLIGHT] but schema.sql environment_snapshots.source allows [PREFLIGHT, EXECUTION, VALIDATION]",
+    ],
+  },
+  {
+    id: "vocab-c",
+    what: "schema.sql: council_decision_outcomes.source drifts from the constant that existed all along but had never been paired",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "source TEXT NOT NULL CHECK(source IN ('VALIDATION_RESULT','REOPEN_DECISION','USER_SUPERSESSION')),",
+        replace: "source TEXT NOT NULL CHECK(source IN ('VALIDATION_RESULT','REOPEN_DECISION')),",
+      },
+    ],
+    expect: [
+      "OUTCOME_SOURCE_VOCABULARY is [VALIDATION_RESULT, REOPEN_DECISION, USER_SUPERSESSION] but schema.sql council_decision_outcomes.source allows [VALIDATION_RESULT, REOPEN_DECISION]",
+    ],
+  },
+  {
+    id: "vocab-d",
+    what: "schema.sql: user_contributions.result_type drops the PENDING outcome its constant allows",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "result_type TEXT NOT NULL CHECK(result_type IN ('EPOCH_ADVANCED','CONTEXT_SNAPSHOT','NO_CHANGE','PENDING')),",
+        replace:
+          "result_type TEXT NOT NULL CHECK(result_type IN ('EPOCH_ADVANCED','CONTEXT_SNAPSHOT','NO_CHANGE')),",
+      },
+    ],
+    expect: [
+      "USER_CONTRIBUTION_RESULT_TYPES is [EPOCH_ADVANCED, CONTEXT_SNAPSHOT, NO_CHANGE, PENDING] but schema.sql user_contributions.result_type allows [EPOCH_ADVANCED, CONTEXT_SNAPSHOT, NO_CHANGE]",
+    ],
+  },
+  {
+    id: "vocab-e",
+    what: "unpaired-check-vocabularies.json: a justification is pointed at a column that is not a real gap",
+    check: GATE,
+    edits: [
+      {
+        file: UNPAIRED_ALLOW_LIST,
+        find: '"table": "project_context_attachments",',
+        replace: '"table": "bogus_table",',
+      },
+    ],
+    // Both directions of the file are proved by one edit: the justification no longer matches a real unpaired
+    // constraint, and the constraint it used to cover is now unjustified.
+    expect: [
+      "justifies bogus_table.lifecycle_state, but no CHECK constraint on that column is unpaired any more",
+      "project_context_attachments.lifecycle_state has a CHECK constraint and no Rust constant",
+    ],
+  },
+  {
+    id: "vocab-f",
+    what: "unpaired-check-vocabularies.json: the file cannot be parsed, so the justified remainder cannot be established",
+    check: GATE,
+    edits: [
+      {
+        file: UNPAIRED_ALLOW_LIST,
+        find: '"schema_version": 1,',
+        replace: '"schema_version": 1,,',
+      },
+    ],
+    expect: ["could not be read or parsed", "This check fails closed"],
+  },
+  {
+    id: "control-vocab-wrapped-constant",
+    what: "crates/storage: a vocabulary constant is joined onto one line, a formatting change that alters no vocabulary",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        // rustfmt breaks this declaration across two lines, and the gate's pattern has to read it either way.
+        // Without this control, joining the line would look like a fix for a failure the pattern caused, and the
+        // pattern would stay brittle.
+        file: STORAGE_LIB,
+        find:
+          'const OUTCOME_SOURCE_VOCABULARY: &[&str] =\n    &["VALIDATION_RESULT", "REOPEN_DECISION", "USER_SUPERSESSION"];',
+        replace:
+          'const OUTCOME_SOURCE_VOCABULARY: &[&str] = &["VALIDATION_RESULT", "REOPEN_DECISION", "USER_SUPERSESSION"];',
+      },
+    ],
+    expect: [],
+  },
+  {
+    id: "control-vocab-allowlist-whitespace",
+    what: "unpaired-check-vocabularies.json: the rule string is re-indented, a whitespace change that justifies exactly the same gap",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: UNPAIRED_ALLOW_LIST,
+        find: '"rule": "Every SQL CHECK',
+        replace: '"rule":  "Every SQL CHECK',
       },
     ],
     expect: [],

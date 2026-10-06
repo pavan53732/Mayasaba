@@ -259,6 +259,19 @@ pub struct NewUserContribution {
     pub created_at: String,
 }
 
+/// The closed vocabularies `user_contributions` enforces, as the values this crate is willing to write.
+///
+/// They are the second line rather than the first. `ProjectService::record_contribution` parses the
+/// classification in its own terms and refuses an undeclared one before calling here, and the schema's `CHECK`
+/// constraints in `schemas/sqlite-v1/schema.sql` are the third. Naming the sets here means a caller that
+/// bypasses the service gets a refusal naming the column and the value, instead of the opaque `CHECK`
+/// violation SQLite would otherwise raise - the same reason the council vocabularies are declared rather than
+/// inlined. The contract gate compares each of these with its own `CHECK` constraint, so the two cannot drift.
+const USER_CONTRIBUTION_CLASSIFICATIONS: &[&str] = &["MATERIAL", "CONTEXT", "COMMENTARY"];
+const USER_CONTRIBUTION_CLASSIFICATION_SOURCES: &[&str] = &["INTAKE_ROUTER"];
+const USER_CONTRIBUTION_RESULT_TYPES: &[&str] =
+    &["EPOCH_ADVANCED", "CONTEXT_SNAPSHOT", "NO_CHANGE", "PENDING"];
+
 /// Authoritative readback of one recorded contribution.
 ///
 /// This is what the Control Room displays, and it deliberately carries the service's `result_type` beside the
@@ -2451,11 +2464,27 @@ impl Storage {
     /// the owning service did about it at that moment, and a later ruling is a later row rather than a rewrite
     /// of this one.
     ///
-    /// The three vocabularies are closed by CHECK constraints in `schemas/sqlite-v1/schema.sql`, so an
-    /// unregistered classification or result cannot reach the table even from a caller that bypasses the
-    /// service. The message a violation produces is a database error rather than a domain rejection, which is
-    /// why the service validates first and this is the second line rather than the first.
+    /// The three vocabularies are closed twice: here, against the constants above, and again by `CHECK`
+    /// constraints in `schemas/sqlite-v1/schema.sql`. A caller that bypasses the service therefore gets a
+    /// refusal that names the column and the value rather than an opaque database error, while the schema stays
+    /// the final enforcement. The service still validates first and in its own terms, so on the ordinary path an
+    /// unregistered classification is a domain rejection rather than either of these.
     pub fn insert_user_contribution(&mut self, new: &NewUserContribution) -> Result<()> {
+        require_vocabulary(
+            "user_contributions.classification",
+            &new.classification,
+            USER_CONTRIBUTION_CLASSIFICATIONS,
+        )?;
+        require_vocabulary(
+            "user_contributions.classification_source",
+            &new.classification_source,
+            USER_CONTRIBUTION_CLASSIFICATION_SOURCES,
+        )?;
+        require_vocabulary(
+            "user_contributions.result_type",
+            &new.result_type,
+            USER_CONTRIBUTION_RESULT_TYPES,
+        )?;
         self.conn
             .execute(
                 "INSERT INTO user_contributions (
@@ -3905,6 +3934,19 @@ mod tests {
             OUTCOME_SOURCE_VOCABULARY,
             &["VALIDATION_RESULT", "REOPEN_DECISION", "USER_SUPERSESSION"]
         );
+        assert_eq!(
+            ENVIRONMENT_SNAPSHOT_SOURCES,
+            &["PREFLIGHT", "EXECUTION", "VALIDATION"]
+        );
+        assert_eq!(
+            USER_CONTRIBUTION_CLASSIFICATIONS,
+            &["MATERIAL", "CONTEXT", "COMMENTARY"]
+        );
+        assert_eq!(USER_CONTRIBUTION_CLASSIFICATION_SOURCES, &["INTAKE_ROUTER"]);
+        assert_eq!(
+            USER_CONTRIBUTION_RESULT_TYPES,
+            &["EPOCH_ADVANCED", "CONTEXT_SNAPSHOT", "NO_CHANGE", "PENDING"]
+        );
     }
 }
 
@@ -4222,6 +4264,13 @@ pub struct NewEnvironmentSnapshot {
     pub source: String,
     pub captured_at: String,
 }
+
+/// The closed `environment_snapshots.source` vocabulary, as the values this crate is willing to write.
+///
+/// It was an array literal inside the one call that used it, which meant the vocabulary the code enforced and
+/// the `CHECK` constraint the schema enforced were two independent lists that nothing compared. The contract
+/// gate now compares this constant with that constraint, so the two cannot drift.
+const ENVIRONMENT_SNAPSHOT_SOURCES: &[&str] = &["PREFLIGHT", "EXECUTION", "VALIDATION"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertificationBindingRecord {
@@ -7353,7 +7402,7 @@ impl Storage {
         require_vocabulary(
             "environment_snapshots.source",
             &new.source,
-            &["PREFLIGHT", "EXECUTION", "VALIDATION"],
+            ENVIRONMENT_SNAPSHOT_SOURCES,
         )?;
         let json_ok: i64 = self.conn.query_row(
             "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '$') = 'object' THEN 1 ELSE 0 END",
