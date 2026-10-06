@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::process::Stdio;
-use tokio::{process::Command, time::{self, Duration}};
+use tokio::{
+    process::Command,
+    time::{self, Duration},
+};
 
 const NATIVE_TRANSPORT_CONTRACT: &str =
     include_str!("../../../schemas/agent-adapter-v1/native-transport-contract.json");
@@ -116,10 +119,16 @@ impl AgentVersion {
         if parts.next().is_some() {
             return None;
         }
-        Some(Self { raw, major, minor, patch, prerelease })
+        Some(Self {
+            raw,
+            major,
+            minor,
+            patch,
+            prerelease,
+        })
     }
 
-    pub const fn line(self) -> &'static str {
+    pub const fn line(&self) -> &'static str {
         match self.major {
             0 => "0.x",
             1 => "1.x",
@@ -132,6 +141,52 @@ impl AgentVersion {
 pub type CapabilitySet = BTreeMap<String, bool>;
 pub type Environment = BTreeMap<String, String>;
 
+/// The exact invocation a probe performed, so its evidence can be re-read without re-running it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeInvocation {
+    pub argv: Vec<String>,
+    pub cwd: String,
+    pub stdin_mode: String,
+    pub stdout_mode: String,
+    pub stderr_mode: String,
+}
+
+/// How the probe process ended. A signal or timeout is not an exit code, so they are recorded separately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExitSemantics {
+    pub exit_code: Option<i32>,
+    pub terminated_by_signal: bool,
+    pub timeout: bool,
+}
+
+/// Authentication surface observed during probing.
+///
+/// Discovery never invokes credential-bearing or interactive auth commands, so `detected` stays false and
+/// `method` stays `NOT_PROBED` unless a future non-interactive probe establishes otherwise.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthenticationProbe {
+    pub detected: bool,
+    pub method: String,
+}
+
+/// Evidence captured from one local agent version probe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeResult {
+    pub schema_version: String,
+    pub agent_type: AgentType,
+    pub probe_time: String,
+    pub executable: String,
+    pub resolved_path: Option<String>,
+    pub version: AgentVersion,
+    pub platform: String,
+    pub transport: Transport,
+    pub invocation: ProbeInvocation,
+    pub capabilities: CapabilitySet,
+    pub exit_semantics: ExitSemantics,
+    pub authentication: AuthenticationProbe,
+    pub raw_probe_evidence: Vec<String>,
+    pub warnings: Vec<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProbeOptions {
@@ -143,7 +198,8 @@ pub struct ProbeOptions {
 impl Default for ProbeOptions {
     fn default() -> Self {
         Self {
-            cwd: std::env::current_dir().ok()
+            cwd: std::env::current_dir()
+                .ok()
                 .and_then(|p| p.to_str().map(ToOwned::to_owned))
                 .unwrap_or_else(|| r"C:\".to_owned()),
             probe_time: String::new(),
@@ -415,7 +471,6 @@ pub struct KiloAdapter;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OpenCodeAdapter;
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AnyAgentAdapter {
     #[default]
@@ -452,18 +507,28 @@ impl AgentAdapter for AnyAgentAdapter {
         proof: LaunchProof,
     ) -> Result<PreparedLaunch, AdapterError> {
         match self {
-            Self::Hermes => HermesAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
-            Self::Kilo => KiloAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
-            Self::OpenCode => OpenCodeAdapter.prepare_launch(request,version,prompt,native_session_id,proof),
+            Self::Hermes => {
+                HermesAdapter.prepare_launch(request, version, prompt, native_session_id, proof)
+            }
+            Self::Kilo => {
+                KiloAdapter.prepare_launch(request, version, prompt, native_session_id, proof)
+            }
+            Self::OpenCode => {
+                OpenCodeAdapter.prepare_launch(request, version, prompt, native_session_id, proof)
+            }
         }
     }
 
-    fn normalize_event(&self, raw: &str, received_at: &str, raw_ref: &str)
-        -> Result<NativeEvent, AdapterError> {
+    fn normalize_event(
+        &self,
+        raw: &str,
+        received_at: &str,
+        raw_ref: &str,
+    ) -> Result<NativeEvent, AdapterError> {
         match self {
-            Self::Hermes => HermesAdapter.normalize_event(raw,received_at,raw_ref),
-            Self::Kilo => KiloAdapter.normalize_event(raw,received_at,raw_ref),
-            Self::OpenCode => OpenCodeAdapter.normalize_event(raw,received_at,raw_ref),
+            Self::Hermes => HermesAdapter.normalize_event(raw, received_at, raw_ref),
+            Self::Kilo => KiloAdapter.normalize_event(raw, received_at, raw_ref),
+            Self::OpenCode => OpenCodeAdapter.normalize_event(raw, received_at, raw_ref),
         }
     }
 }
@@ -490,10 +555,7 @@ impl AgentService {
         &mut self.storage
     }
 
-    pub async fn discover_all(
-        &self,
-        options: &ProbeOptions,
-    ) -> Vec<DiscoveryReport> {
+    pub async fn discover_all(&self, options: &ProbeOptions) -> Vec<DiscoveryReport> {
         discover_all_agents(options).await
     }
 
@@ -530,7 +592,10 @@ impl AgentService {
             })?;
             self.storage.insert_agent_capability_snapshot(
                 &mayasaba_storage::NewAgentCapabilitySnapshot {
-                    capability_snapshot_id: format!("{agent_id}_{}", sanitize_id(&probe.version.raw)),
+                    capability_snapshot_id: format!(
+                        "{agent_id}_{}",
+                        sanitize_id(&probe.version.raw)
+                    ),
                     agent_id: agent_id.to_owned(),
                     session_id: None,
                     capabilities_json,
@@ -552,19 +617,29 @@ impl AgentService {
         current_epoch: i64,
         now: &str,
     ) -> Result<mayasaba_storage::AgentSessionRecord, mayasaba_storage::StorageError> {
-        let session = self.storage.create_agent_session(&mayasaba_storage::NewAgentSession {
-            session_id: session_id.to_owned(),
-            project_id: project_id.to_owned(),
-            agent_id: agent_id.to_owned(),
-            workspace_id: workspace_id.map(ToOwned::to_owned),
-            current_epoch,
-            started_at: now.to_owned(),
-        })?;
+        let session = self
+            .storage
+            .create_agent_session(&mayasaba_storage::NewAgentSession {
+                session_id: session_id.to_owned(),
+                project_id: project_id.to_owned(),
+                agent_id: agent_id.to_owned(),
+                workspace_id: workspace_id.map(ToOwned::to_owned),
+                current_epoch,
+                started_at: now.to_owned(),
+            })?;
         self.storage.transition_agent_session(
-            session_id,"DISCOVERED","HANDSHAKING","AGENT_HANDSHAKING",now
+            session_id,
+            "DISCOVERED",
+            "HANDSHAKING",
+            "AGENT_HANDSHAKING",
+            now,
         )?;
         self.storage.transition_agent_session(
-            session_id,"HANDSHAKING","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING",now
+            session_id,
+            "HANDSHAKING",
+            "CAPABILITY_VALIDATING",
+            "AGENT_CAPABILITY_VALIDATING",
+            now,
         )?;
         self.storage.get_agent_session(session_id)?.ok_or_else(|| {
             mayasaba_storage::StorageError::NotFound(format!("agent session {session_id}"))
@@ -652,23 +727,44 @@ pub async fn discover_agent(
     options: &ProbeOptions,
 ) -> Result<DiscoveryReport, AdapterError> {
     let definition = agent_contract(agent_type)?;
-    let executable = definition.get("executable").and_then(Value::as_str).ok_or_else(|| adapter_error(
-        AdapterErrorCategory::PROTOCOL,"ADAPTER_EXECUTABLE_MISSING",Retryability::NEVER,
-        format!("contract has no executable for {}",agent_type.as_str())))?;
+    let executable = definition
+        .get("executable")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "ADAPTER_EXECUTABLE_MISSING",
+                Retryability::NEVER,
+                format!("contract has no executable for {}", agent_type.as_str()),
+            )
+        })?;
 
     let where_result = Command::new("where.exe")
         .arg(executable)
-        .stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
-        .map_err(|e| adapter_error(
-            AdapterErrorCategory::DETECTION,"DISCOVERY_COMMAND_FAILED",Retryability::AFTER_USER_ACTION,
-            format!("where.exe failed: {e}")))?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| {
+            adapter_error(
+                AdapterErrorCategory::DETECTION,
+                "DISCOVERY_COMMAND_FAILED",
+                Retryability::AFTER_USER_ACTION,
+                format!("where.exe failed: {e}"),
+            )
+        })?;
 
     let resolved_path = String::from_utf8_lossy(&where_result.stdout)
-        .lines().map(str::trim).find(|v| !v.is_empty()).map(ToOwned::to_owned);
+        .lines()
+        .map(str::trim)
+        .find(|v| !v.is_empty())
+        .map(ToOwned::to_owned);
 
     let Some(resolved_path) = resolved_path else {
         return Ok(DiscoveryReport {
-            agent_type, installation: None, probe: None,
+            agent_type,
+            installation: None,
+            probe: None,
             health: HealthStatus {
                 state: HealthState::UNKNOWN,
                 checked_at: options.probe_time.clone(),
@@ -677,22 +773,42 @@ pub async fn discover_agent(
         });
     };
 
-    let version_tokens = definition.get("version").and_then(Value::as_array).ok_or_else(|| adapter_error(
-        AdapterErrorCategory::PROTOCOL,"VERSION_PROBE_MISSING",Retryability::NEVER,
-        format!("version probe missing for {}",agent_type.as_str())))?;
-    let version_args = version_tokens.iter().map(|v| v.as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| adapter_error(
-            AdapterErrorCategory::PROTOCOL,"VERSION_PROBE_INVALID",Retryability::NEVER,
-            "version probe contains a non-string token")))
-        .collect::<Result<Vec<_>,_>>()?;
+    let version_tokens = definition
+        .get("version")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "VERSION_PROBE_MISSING",
+                Retryability::NEVER,
+                format!("version probe missing for {}", agent_type.as_str()),
+            )
+        })?;
+    let version_args = version_tokens
+        .iter()
+        .map(|v| {
+            v.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                adapter_error(
+                    AdapterErrorCategory::PROTOCOL,
+                    "VERSION_PROBE_INVALID",
+                    Retryability::NEVER,
+                    "version probe contains a non-string token",
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let output = match time::timeout(
         Duration::from_millis(options.timeout_ms.max(100)),
         Command::new(&resolved_path)
-            .args(&version_args).current_dir(&options.cwd)
-            .stdout(Stdio::piped()).stderr(Stdio::piped()).output()
-    ).await {
+            .args(&version_args)
+            .current_dir(&options.cwd)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output(),
+    )
+    .await
+    {
         Ok(Ok(output)) => output,
         Ok(Err(e)) => {
             return Ok(DiscoveryReport {
@@ -722,13 +838,23 @@ pub async fn discover_agent(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let version = parse_version_from_probe(&format!("{stdout}\n{stderr}"))
-        .ok_or_else(|| adapter_error(
-            AdapterErrorCategory::DETECTION,"VERSION_PARSE_FAILED",Retryability::AFTER_USER_ACTION,
-            format!("could not parse a semantic version from {} output",agent_type.as_str())))?;
+    let version = parse_version_from_probe(&format!("{stdout}\n{stderr}")).ok_or_else(|| {
+        adapter_error(
+            AdapterErrorCategory::DETECTION,
+            "VERSION_PARSE_FAILED",
+            Retryability::AFTER_USER_ACTION,
+            format!(
+                "could not parse a semantic version from {} output",
+                agent_type.as_str()
+            ),
+        )
+    })?;
 
-    let transport = definition.get("transport").and_then(Value::as_str)
-        .and_then(Transport::parse).unwrap_or(Transport::Unsupported);
+    let transport = definition
+        .get("transport")
+        .and_then(Value::as_str)
+        .and_then(Transport::parse)
+        .unwrap_or(Transport::Unsupported);
 
     let help_probe = time::timeout(
         Duration::from_millis(options.timeout_ms.max(100)),
@@ -738,7 +864,8 @@ pub async fn discover_agent(
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output(),
-    ).await;
+    )
+    .await;
 
     let (help_ok, help_text) = match help_probe {
         Ok(Ok(output)) => {
@@ -752,8 +879,10 @@ pub async fn discover_agent(
         Ok(Err(_)) | Err(_) => (false, String::new()),
     };
 
-    let launch_surface_verified = help_ok && contract_surface_present(&definition, "launch", &help_text);
-    let resume_surface_verified = help_ok && contract_surface_present(&definition, "resume", &help_text);
+    let launch_surface_verified =
+        help_ok && contract_surface_present(&definition, "launch", &help_text);
+    let resume_surface_verified =
+        help_ok && contract_surface_present(&definition, "resume", &help_text);
 
     // Capability admission is derived from the canonical adapter contract plus the local binary's help surface.
     // The probe never executes a real task: it validates that the contract can construct an admitted launch,
@@ -781,8 +910,17 @@ pub async fn discover_agent(
         },
     );
     let contract_surface_verified = match contract_probe {
-        Ok(prepared) => prepared.argv.iter().all(|token| token != "mayasaba-capability-probe")
-            && launch_vector_has_no_forbidden_remote_surface(&definition, &prepared.argv, "mayasaba-capability-probe"),
+        Ok(prepared) => {
+            prepared
+                .argv
+                .iter()
+                .all(|token| token != "mayasaba-capability-probe")
+                && launch_vector_has_no_forbidden_remote_surface(
+                    &definition,
+                    &prepared.argv,
+                    "mayasaba-capability-probe",
+                )
+        }
         Err(_) => false,
     };
 
@@ -790,11 +928,17 @@ pub async fn discover_agent(
     capabilities.insert("version_probe".into(), true);
     capabilities.insert("local_process".into(), true);
     capabilities.insert("working_directory".into(), true);
-    capabilities.insert("structured_transport".into(), transport != Transport::Unsupported);
+    capabilities.insert(
+        "structured_transport".into(),
+        transport != Transport::Unsupported,
+    );
     capabilities.insert("resume_vector".into(), definition.get("resume").is_some());
     capabilities.insert("launch_surface_verified".into(), launch_surface_verified);
     capabilities.insert("resume_surface_verified".into(), resume_surface_verified);
-    capabilities.insert("contract_surface_verified".into(), contract_surface_verified);
+    capabilities.insert(
+        "contract_surface_verified".into(),
+        contract_surface_verified,
+    );
 
     let probe = ProbeResult {
         schema_version: "1.0.0".into(),
@@ -835,14 +979,25 @@ pub async fn discover_agent(
     Ok(DiscoveryReport {
         agent_type,
         installation: Some(AgentInstallation {
-            agent_type, executable: executable.into(), resolved_path, version,
+            agent_type,
+            executable: executable.into(),
+            resolved_path,
+            version,
             platform: "windows".into(),
         }),
         probe: Some(probe),
         health: HealthStatus {
-            state: if output.status.success() { HealthState::HEALTHY } else { HealthState::UNHEALTHY },
+            state: if output.status.success() {
+                HealthState::HEALTHY
+            } else {
+                HealthState::UNHEALTHY
+            },
             checked_at: options.probe_time.clone(),
-            detail: if output.status.success() { None } else { Some(bounded_text(&stderr,1024)) },
+            detail: if output.status.success() {
+                None
+            } else {
+                Some(bounded_text(&stderr, 1024))
+            },
         },
     })
 }
@@ -859,7 +1014,7 @@ pub async fn discover_all_agents(options: &ProbeOptions) -> Vec<DiscoveryReport>
                 health: HealthStatus {
                     state: HealthState::UNHEALTHY,
                     checked_at: options.probe_time.clone(),
-                    detail: Some(format!("{}: {}",error.code,error.message)),
+                    detail: Some(format!("{}: {}", error.code, error.message)),
                 },
             }),
         }
@@ -872,7 +1027,8 @@ fn launch_vector_has_no_forbidden_remote_surface(
     argv: &[String],
     prompt: &str,
 ) -> bool {
-    let static_tokens: Vec<&str> = argv.iter()
+    let static_tokens: Vec<&str> = argv
+        .iter()
         .map(String::as_str)
         .filter(|token| *token != prompt)
         .collect();
@@ -884,7 +1040,10 @@ fn launch_vector_has_no_forbidden_remote_surface(
         .flatten()
         .filter_map(Value::as_str);
 
-    if forbidden_flags.clone().any(|flag| static_tokens.iter().any(|token| token == &flag)) {
+    if forbidden_flags
+        .clone()
+        .any(|flag| static_tokens.iter().any(|token| token == &flag))
+    {
         return false;
     }
 
@@ -898,14 +1057,12 @@ fn launch_vector_has_no_forbidden_remote_surface(
     }
 
     let joined = static_tokens.join(" ").to_ascii_lowercase();
-    !forbidden_commands.iter().any(|command| joined.contains(command))
+    !forbidden_commands
+        .iter()
+        .any(|command| joined.contains(command))
 }
 
-fn contract_surface_present(
-    definition: &Value,
-    key: &str,
-    help_text: &str,
-) -> bool {
+fn contract_surface_present(definition: &Value, key: &str, help_text: &str) -> bool {
     let Some(values) = definition.get(key).and_then(Value::as_array) else {
         return false;
     };
@@ -930,7 +1087,8 @@ fn contract_surface_present(
 
 fn parse_version_from_probe(text: &str) -> Option<AgentVersion> {
     text.split_whitespace().find_map(|token| {
-        let token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-' && c != '+');
+        let token = token
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-' && c != '+');
         AgentVersion::parse(token)
     })
 }
@@ -938,7 +1096,6 @@ fn parse_version_from_probe(text: &str) -> Option<AgentVersion> {
 fn bounded_text(text: &str, limit: usize) -> String {
     text.chars().take(limit).collect()
 }
-
 
 #[derive(Debug)]
 pub enum AgentRuntimeError {
@@ -948,13 +1105,19 @@ pub enum AgentRuntimeError {
 }
 
 impl From<AdapterError> for AgentRuntimeError {
-    fn from(value: AdapterError) -> Self { Self::Adapter(value) }
+    fn from(value: AdapterError) -> Self {
+        Self::Adapter(value)
+    }
 }
 impl From<mayasaba_execution::ExecutionError> for AgentRuntimeError {
-    fn from(value: mayasaba_execution::ExecutionError) -> Self { Self::Execution(value) }
+    fn from(value: mayasaba_execution::ExecutionError) -> Self {
+        Self::Execution(value)
+    }
 }
 impl From<mayasaba_storage::StorageError> for AgentRuntimeError {
-    fn from(value: mayasaba_storage::StorageError) -> Self { Self::Storage(value) }
+    fn from(value: mayasaba_storage::StorageError) -> Self {
+        Self::Storage(value)
+    }
 }
 
 /// A running local agent session. The agent adapter normalizes its stdout events; ExecutionService owns the process.
@@ -1011,7 +1174,7 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
                         )?;
                     }
                     return Ok(Some(event));
-                },
+                }
                 Err(error) => {
                     // Unknown/malformed vendor data must never become a canonical success signal. Preserve the
                     // failure through the adapter error path and require the controller to decide whether recovery
@@ -1046,7 +1209,10 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
                 Ok(HealthStatus {
                     state: HealthState::UNHEALTHY,
                     checked_at: checked_at.to_owned(),
-                    detail: Some(format!("supervised process exited with {:?}", status.code())),
+                    detail: Some(format!(
+                        "supervised process exited with {:?}",
+                        status.code()
+                    )),
                 })
             }
             Err(error) => {
@@ -1099,9 +1265,16 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
         observed_at: &str,
         timeout: Duration,
     ) -> Result<mayasaba_execution::CompletedProcess, AgentRuntimeError> {
-        let result = self.process.wait_timeout(storage, observed_at, timeout).await;
+        let result = self
+            .process
+            .wait_timeout(storage, observed_at, timeout)
+            .await;
         if let Ok(completed) = &result {
-            let health = if completed.timed_out { "UNHEALTHY" } else { "DEGRADED" };
+            let health = if completed.timed_out {
+                "UNHEALTHY"
+            } else {
+                "DEGRADED"
+            };
             storage.transition_agent_session(
                 &self.session_id,
                 "ACTIVE",
@@ -1155,7 +1328,8 @@ pub async fn launch_live_session(
         &spec,
         None,
         started_at,
-    ).await?;
+    )
+    .await?;
 
     if let Err(error) = storage.set_agent_health(&request.session_id, "HEALTHY", started_at) {
         let _ = process.terminate().await;
@@ -1242,19 +1416,33 @@ pub fn build_handshake_envelope(input: &HandshakeEnvelopeInput) -> Result<String
             "contains_secret_material": false,
         }
     });
-    let text = serde_json::to_string(&envelope).map_err(|e| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "HANDSHAKE_SERIALIZE_FAILED", Retryability::NEVER,
-        format!("cannot serialize handshake envelope: {e}")))?;
-    let parsed = mayasaba_protocol::envelope::parse_envelope(&text).map_err(|e| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "HANDSHAKE_ENVELOPE_INVALID", Retryability::NEVER,
-        format!("protocol validator rejected handshake envelope: {e}")))?;
+    let text = serde_json::to_string(&envelope).map_err(|e| {
+        adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "HANDSHAKE_SERIALIZE_FAILED",
+            Retryability::NEVER,
+            format!("cannot serialize handshake envelope: {e}"),
+        )
+    })?;
+    let parsed = mayasaba_protocol::envelope::parse_envelope(&text).map_err(|e| {
+        adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "HANDSHAKE_ENVELOPE_INVALID",
+            Retryability::NEVER,
+            format!("protocol validator rejected handshake envelope: {e}"),
+        )
+    })?;
     Ok(parsed.to_json_text())
 }
 
 /// Convert a normalized native event into the canonical MCF message type using the registry.
 pub fn native_event_mcf_type(kind: NativeEventKind) -> Option<String> {
     let registry: Value = serde_json::from_str(NATIVE_TO_MCF_REGISTRY).ok()?;
-    registry.get("mappings")?.get(kind.as_str())?.as_str().map(ToOwned::to_owned)
+    registry
+        .get("mappings")?
+        .get(kind.as_str())?
+        .as_str()
+        .map(ToOwned::to_owned)
 }
 impl PreparedLaunch {
     /// Convert the adapter-owned launch description into the process-neutral execution specification.
@@ -1271,37 +1459,94 @@ impl PreparedLaunch {
 }
 
 impl AgentAdapter for HermesAdapter {
-    fn agent_type(&self) -> AgentType { AgentType::Hermes }
-    fn prepare_launch(&self, request: &SessionLaunch, version: &AgentVersion, prompt: &str,
-        native_session_id: Option<&str>, proof: LaunchProof) -> Result<PreparedLaunch, AdapterError> {
-        prepare_from_contract(AgentType::Hermes, request, version, prompt, native_session_id, proof)
+    fn agent_type(&self) -> AgentType {
+        AgentType::Hermes
     }
-    fn normalize_event(&self, raw: &str, received_at: &str, raw_ref: &str)
-        -> Result<NativeEvent, AdapterError> {
+    fn prepare_launch(
+        &self,
+        request: &SessionLaunch,
+        version: &AgentVersion,
+        prompt: &str,
+        native_session_id: Option<&str>,
+        proof: LaunchProof,
+    ) -> Result<PreparedLaunch, AdapterError> {
+        prepare_from_contract(
+            AgentType::Hermes,
+            request,
+            version,
+            prompt,
+            native_session_id,
+            proof,
+        )
+    }
+    fn normalize_event(
+        &self,
+        raw: &str,
+        received_at: &str,
+        raw_ref: &str,
+    ) -> Result<NativeEvent, AdapterError> {
         normalize_native_event(AgentType::Hermes, raw, received_at, raw_ref)
     }
 }
 
 impl AgentAdapter for KiloAdapter {
-    fn agent_type(&self) -> AgentType { AgentType::Kilo }
-    fn prepare_launch(&self, request: &SessionLaunch, version: &AgentVersion, prompt: &str,
-        native_session_id: Option<&str>, proof: LaunchProof) -> Result<PreparedLaunch, AdapterError> {
-        prepare_from_contract(AgentType::Kilo, request, version, prompt, native_session_id, proof)
+    fn agent_type(&self) -> AgentType {
+        AgentType::Kilo
     }
-    fn normalize_event(&self, raw: &str, received_at: &str, raw_ref: &str)
-        -> Result<NativeEvent, AdapterError> {
+    fn prepare_launch(
+        &self,
+        request: &SessionLaunch,
+        version: &AgentVersion,
+        prompt: &str,
+        native_session_id: Option<&str>,
+        proof: LaunchProof,
+    ) -> Result<PreparedLaunch, AdapterError> {
+        prepare_from_contract(
+            AgentType::Kilo,
+            request,
+            version,
+            prompt,
+            native_session_id,
+            proof,
+        )
+    }
+    fn normalize_event(
+        &self,
+        raw: &str,
+        received_at: &str,
+        raw_ref: &str,
+    ) -> Result<NativeEvent, AdapterError> {
         normalize_native_event(AgentType::Kilo, raw, received_at, raw_ref)
     }
 }
 
 impl AgentAdapter for OpenCodeAdapter {
-    fn agent_type(&self) -> AgentType { AgentType::OpenCode }
-    fn prepare_launch(&self, request: &SessionLaunch, version: &AgentVersion, prompt: &str,
-        native_session_id: Option<&str>, proof: LaunchProof) -> Result<PreparedLaunch, AdapterError> {
-        prepare_from_contract(AgentType::OpenCode, request, version, prompt, native_session_id, proof)
+    fn agent_type(&self) -> AgentType {
+        AgentType::OpenCode
     }
-    fn normalize_event(&self, raw: &str, received_at: &str, raw_ref: &str)
-        -> Result<NativeEvent, AdapterError> {
+    fn prepare_launch(
+        &self,
+        request: &SessionLaunch,
+        version: &AgentVersion,
+        prompt: &str,
+        native_session_id: Option<&str>,
+        proof: LaunchProof,
+    ) -> Result<PreparedLaunch, AdapterError> {
+        prepare_from_contract(
+            AgentType::OpenCode,
+            request,
+            version,
+            prompt,
+            native_session_id,
+            proof,
+        )
+    }
+    fn normalize_event(
+        &self,
+        raw: &str,
+        received_at: &str,
+        raw_ref: &str,
+    ) -> Result<NativeEvent, AdapterError> {
         normalize_native_event(AgentType::OpenCode, raw, received_at, raw_ref)
     }
 }
@@ -1312,21 +1557,39 @@ fn adapter_error(
     retryability: Retryability,
     message: impl Into<String>,
 ) -> AdapterError {
-    AdapterError { category, code: code.to_owned(), retryability, message: message.into(), causation_id: None }
+    AdapterError {
+        category,
+        code: code.to_owned(),
+        retryability,
+        message: message.into(),
+        causation_id: None,
+    }
 }
 
 fn contract() -> Result<Value, AdapterError> {
-    serde_json::from_str(NATIVE_TRANSPORT_CONTRACT).map_err(|e| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "ADAPTER_CONTRACT_INVALID", Retryability::NEVER,
-        format!("native transport contract is invalid JSON: {e}")))
+    serde_json::from_str(NATIVE_TRANSPORT_CONTRACT).map_err(|e| {
+        adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "ADAPTER_CONTRACT_INVALID",
+            Retryability::NEVER,
+            format!("native transport contract is invalid JSON: {e}"),
+        )
+    })
 }
 
 fn agent_contract(agent: AgentType) -> Result<Value, AdapterError> {
     contract()?
-        .get("agents").and_then(|v| v.get(agent.as_str())).cloned()
-        .ok_or_else(|| adapter_error(
-            AdapterErrorCategory::PROTOCOL, "ADAPTER_CONTRACT_MISSING_AGENT", Retryability::NEVER,
-            format!("native transport contract has no {}", agent.as_str())))
+        .get("agents")
+        .and_then(|v| v.get(agent.as_str()))
+        .cloned()
+        .ok_or_else(|| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "ADAPTER_CONTRACT_MISSING_AGENT",
+                Retryability::NEVER,
+                format!("native transport contract has no {}", agent.as_str()),
+            )
+        })
 }
 
 fn expand_vector(
@@ -1337,22 +1600,45 @@ fn expand_vector(
     native_session_id: Option<&str>,
 ) -> Result<Vec<String>, AdapterError> {
     let key = if resume { "resume" } else { "launch" };
-    let vector = definition.get(key).and_then(Value::as_array).ok_or_else(|| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "ADAPTER_LAUNCH_VECTOR_MISSING", Retryability::NEVER,
-        format!("native transport contract has no {key} vector")))?;
-    vector.iter().map(|token| {
-        let token = token.as_str().ok_or_else(|| adapter_error(
-            AdapterErrorCategory::PROTOCOL, "ADAPTER_LAUNCH_TOKEN_INVALID", Retryability::NEVER,
-            "launch vector contains a non-string token"))?;
-        match token {
-            "<prompt>" => Ok(prompt.to_owned()),
-            "<workspace>" => Ok(workspace.to_owned()),
-            "<native_session_id>" => native_session_id.map(ToOwned::to_owned).ok_or_else(|| adapter_error(
-                AdapterErrorCategory::LAUNCH, "NATIVE_SESSION_REQUIRED", Retryability::AFTER_SYNC,
-                "resume requested but native session identity is absent")),
-            value => Ok(value.to_owned()),
-        }
-    }).collect()
+    let vector = definition
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "ADAPTER_LAUNCH_VECTOR_MISSING",
+                Retryability::NEVER,
+                format!("native transport contract has no {key} vector"),
+            )
+        })?;
+    vector
+        .iter()
+        .map(|token| {
+            let token = token.as_str().ok_or_else(|| {
+                adapter_error(
+                    AdapterErrorCategory::PROTOCOL,
+                    "ADAPTER_LAUNCH_TOKEN_INVALID",
+                    Retryability::NEVER,
+                    "launch vector contains a non-string token",
+                )
+            })?;
+            match token {
+                "<prompt>" => Ok(prompt.to_owned()),
+                "<workspace>" => Ok(workspace.to_owned()),
+                "<native_session_id>" => {
+                    native_session_id.map(ToOwned::to_owned).ok_or_else(|| {
+                        adapter_error(
+                            AdapterErrorCategory::LAUNCH,
+                            "NATIVE_SESSION_REQUIRED",
+                            Retryability::AFTER_SYNC,
+                            "resume requested but native session identity is absent",
+                        )
+                    })
+                }
+                value => Ok(value.to_owned()),
+            }
+        })
+        .collect()
 }
 
 fn prepare_from_contract(
@@ -1370,23 +1656,38 @@ fn prepare_from_contract(
     }
     if !is_absolute_windows_path(&request.cwd) {
         return Err(adapter_error(
-            AdapterErrorCategory::WORKSPACE, "WORKSPACE_PATH_NOT_ABSOLUTE", Retryability::AFTER_USER_ACTION,
-            "agent launch cwd must be an absolute Windows path"));
+            AdapterErrorCategory::WORKSPACE,
+            "WORKSPACE_PATH_NOT_ABSOLUTE",
+            Retryability::AFTER_USER_ACTION,
+            "agent launch cwd must be an absolute Windows path",
+        ));
     }
     if request.prompt_ref.is_none() && prompt.trim().is_empty() {
         return Err(adapter_error(
-            AdapterErrorCategory::LAUNCH, "PROMPT_EMPTY", Retryability::NEVER,
-            "agent launch requires a non-empty prompt or prompt_ref"));
+            AdapterErrorCategory::LAUNCH,
+            "PROMPT_EMPTY",
+            Retryability::NEVER,
+            "agent launch requires a non-empty prompt or prompt_ref",
+        ));
     }
 
     let definition = agent_contract(agent)?;
     if let Some(lines) = definition
-        .get("version_gate").and_then(|v| v.get("admitted_lines")).and_then(Value::as_array)
+        .get("version_gate")
+        .and_then(|v| v.get("admitted_lines"))
+        .and_then(Value::as_array)
     {
         if !lines.iter().any(|v| v.as_str() == Some(version.line())) {
             return Err(adapter_error(
-                AdapterErrorCategory::CAPABILITY, "AGENT_VERSION_UNADMITTED", Retryability::AFTER_USER_ACTION,
-                format!("{} version {} is not an admitted native line", agent.as_str(), version.raw)));
+                AdapterErrorCategory::CAPABILITY,
+                "AGENT_VERSION_UNADMITTED",
+                Retryability::AFTER_USER_ACTION,
+                format!(
+                    "{} version {} is not an admitted native line",
+                    agent.as_str(),
+                    version.raw
+                ),
+            ));
         }
     }
 
@@ -1394,11 +1695,19 @@ fn prepare_from_contract(
     let mut argv = expand_vector(&definition, resume, prompt, &request.cwd, native_session_id)?;
 
     if let Some(flags) = definition.get("isolation_flags").and_then(Value::as_array) {
-        argv.extend(flags.iter().filter_map(Value::as_str).map(ToOwned::to_owned));
+        argv.extend(
+            flags
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned),
+        );
     }
 
     let mut environment = Environment::new();
-    if let Some(required) = definition.get("required_environment").and_then(Value::as_object) {
+    if let Some(required) = definition
+        .get("required_environment")
+        .and_then(Value::as_object)
+    {
         for (key, value) in required {
             if let Some(value) = value.as_str() {
                 environment.insert(key.clone(), value.to_owned());
@@ -1406,16 +1715,26 @@ fn prepare_from_contract(
         }
     }
 
-    let mut required_config = definition.get("required_config").cloned()
+    let mut required_config = definition
+        .get("required_config")
+        .cloned()
         .unwrap_or_else(|| Value::Object(Default::default()));
 
     // required_config_injection is contract metadata. Only its actual config-bearing fields belong in the
     // vendor config document: the permission map is inserted as "permission", while audit rationale and probe
     // instructions remain controller metadata and must never be handed to the CLI as unknown config keys.
     if let Some(injection) = definition.get("required_config_injection") {
-        let channel = injection.get("channel").and_then(Value::as_str).ok_or_else(|| adapter_error(
-            AdapterErrorCategory::PROTOCOL, "CONFIG_INJECTION_CHANNEL_MISSING", Retryability::NEVER,
-            "required_config_injection has no channel"))?;
+        let channel = injection
+            .get("channel")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                adapter_error(
+                    AdapterErrorCategory::PROTOCOL,
+                    "CONFIG_INJECTION_CHANNEL_MISSING",
+                    Retryability::NEVER,
+                    "required_config_injection has no channel",
+                )
+            })?;
         if let Some(object) = required_config.as_object_mut() {
             if let Some(permission) = injection.get("permission") {
                 object.insert("permission".to_owned(), permission.clone());
@@ -1426,9 +1745,14 @@ fn prepare_from_contract(
                 }
             }
         }
-        let encoded = serde_json::to_string(&required_config).map_err(|e| adapter_error(
-            AdapterErrorCategory::PROTOCOL, "CONFIG_INJECTION_SERIALIZE_FAILED", Retryability::NEVER,
-            format!("cannot serialize effective config document: {e}")))?;
+        let encoded = serde_json::to_string(&required_config).map_err(|e| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "CONFIG_INJECTION_SERIALIZE_FAILED",
+                Retryability::NEVER,
+                format!("cannot serialize effective config document: {e}"),
+            )
+        })?;
         environment.insert(channel.to_owned(), encoded);
     }
 
@@ -1447,21 +1771,44 @@ fn prepare_from_contract(
     scrub_inherited_environment.push("PWD".to_owned());
     environment.insert("PWD".to_owned(), request.cwd.clone());
 
-    let transport_text = definition.get("transport").and_then(Value::as_str).ok_or_else(|| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "ADAPTER_TRANSPORT_MISSING", Retryability::NEVER,
-        "native transport contract has no transport"))?;
-    let transport = Transport::parse(transport_text).ok_or_else(|| adapter_error(
-        AdapterErrorCategory::PROTOCOL, "ADAPTER_TRANSPORT_UNKNOWN", Retryability::NEVER,
-        format!("unknown transport {transport_text}")))?;
+    let transport_text = definition
+        .get("transport")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            adapter_error(
+                AdapterErrorCategory::PROTOCOL,
+                "ADAPTER_TRANSPORT_MISSING",
+                Retryability::NEVER,
+                "native transport contract has no transport",
+            )
+        })?;
+    let transport = Transport::parse(transport_text).ok_or_else(|| {
+        adapter_error(
+            AdapterErrorCategory::PROTOCOL,
+            "ADAPTER_TRANSPORT_UNKNOWN",
+            Retryability::NEVER,
+            format!("unknown transport {transport_text}"),
+        )
+    })?;
     if transport != request.transport {
         return Err(adapter_error(
-            AdapterErrorCategory::TRANSPORT, "TRANSPORT_MISMATCH", Retryability::AFTER_SYNC,
-            format!("request transport {:?} does not match contract transport {:?}", request.transport, transport)));
+            AdapterErrorCategory::TRANSPORT,
+            "TRANSPORT_MISMATCH",
+            Retryability::AFTER_SYNC,
+            format!(
+                "request transport {:?} does not match contract transport {:?}",
+                request.transport, transport
+            ),
+        ));
     }
 
     Ok(PreparedLaunch {
         agent_type: agent,
-        executable: definition.get("executable").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        executable: definition
+            .get("executable")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
         argv,
         cwd: request.cwd.clone(),
         environment,
@@ -1480,13 +1827,24 @@ fn normalize_native_event(
 ) -> Result<NativeEvent, AdapterError> {
     if received_at.trim().is_empty() || raw_ref.trim().is_empty() {
         return Err(adapter_error(
-            AdapterErrorCategory::PARSE, "EVENT_PROVENANCE_MISSING", Retryability::NEVER,
-            "normalized native events require received_at and raw_ref"));
+            AdapterErrorCategory::PARSE,
+            "EVENT_PROVENANCE_MISSING",
+            Retryability::NEVER,
+            "normalized native events require received_at and raw_ref",
+        ));
     }
-    let payload: Value = serde_json::from_str(raw).map_err(|e| adapter_error(
-        AdapterErrorCategory::PARSE, "NATIVE_EVENT_NOT_JSON", Retryability::NEVER,
-        format!("native event is not JSON: {e}")))?;
-    let ty = payload.get("type").and_then(Value::as_str).unwrap_or_default();
+    let payload: Value = serde_json::from_str(raw).map_err(|e| {
+        adapter_error(
+            AdapterErrorCategory::PARSE,
+            "NATIVE_EVENT_NOT_JSON",
+            Retryability::NEVER,
+            format!("native event is not JSON: {e}"),
+        )
+    })?;
+    let ty = payload
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
 
     let kind = match agent {
         AgentType::Hermes => match ty {
@@ -1511,7 +1869,9 @@ fn normalize_native_event(
         },
     };
 
-    let native_session_id = payload.get("session_id").and_then(Value::as_str)
+    let native_session_id = payload
+        .get("session_id")
+        .and_then(Value::as_str)
         .or_else(|| payload.get("sessionID").and_then(Value::as_str))
         .or_else(|| payload.get("sessionId").and_then(Value::as_str))
         .map(ToOwned::to_owned);
@@ -1534,14 +1894,12 @@ fn normalize_native_event(
 
 fn is_absolute_windows_path(path: &str) -> bool {
     let bytes = path.as_bytes();
-    (bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\\\' || bytes[2] == b'/'))
-        || path.starts_with("\\\\\\\\")
+    (bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/'))
+        || path.starts_with("\\\\")
 }
 
-
 #[cfg(test)]
-mod tests
- {
+mod tests {
     use super::*;
 
     fn proof() -> LaunchProof {
@@ -1567,8 +1925,10 @@ mod tests
 
     #[test]
     fn closed_agent_set_is_exactly_three() {
-        assert_eq!(AgentType::ALL.map(AgentType::as_str),
-            ["HERMES_AGENT", "KILO_CODE", "OPEN_CODE"]);
+        assert_eq!(
+            AgentType::ALL.map(AgentType::as_str),
+            ["HERMES_AGENT", "KILO_CODE", "OPEN_CODE"]
+        );
         assert!(AgentType::parse("CLAUDE_CODE").is_none());
         assert!(AgentType::parse("CLINE").is_none());
     }
@@ -1583,129 +1943,184 @@ mod tests
 
     #[test]
     fn open_code_2x_is_refused_by_contract() {
-        let error = OpenCodeAdapter.prepare_launch(
-            &request(Transport::OpenCodeJson),
-            &AgentVersion::parse("2.0.22").unwrap(),
-            "work",
-            None,
-            proof(),
-        ).expect_err("the current contract admits only OpenCode 1.x");
+        let error = OpenCodeAdapter
+            .prepare_launch(
+                &request(Transport::OpenCodeJson),
+                &AgentVersion::parse("2.0.22").unwrap(),
+                "work",
+                None,
+                proof(),
+            )
+            .expect_err("the current contract admits only OpenCode 1.x");
         assert_eq!(error.code, "AGENT_VERSION_UNADMITTED");
     }
 
     #[test]
     fn hermes_launch_uses_canonical_contract() {
-        let prepared = HermesAdapter.prepare_launch(
-            &request(Transport::HermesStreamJson),
-            &AgentVersion::parse("0.21.5").unwrap(),
-            "work",
-            None,
-            proof(),
-        ).expect("prepared");
+        let prepared = HermesAdapter
+            .prepare_launch(
+                &request(Transport::HermesStreamJson),
+                &AgentVersion::parse("0.21.5").unwrap(),
+                "work",
+                None,
+                proof(),
+            )
+            .expect("prepared");
         assert_eq!(prepared.executable, "hermes");
         assert!(prepared.argv.contains(&"--ignore-rules".to_owned()));
     }
 
     #[test]
     fn kilo_launch_carries_required_local_restrictions() {
-        let prepared = KiloAdapter.prepare_launch(
-            &request(Transport::KiloJson),
-            &AgentVersion::parse("7.8.1").unwrap(),
-            "work",
-            None,
-            proof(),
-        ).expect("prepared");
+        let prepared = KiloAdapter
+            .prepare_launch(
+                &request(Transport::KiloJson),
+                &AgentVersion::parse("7.8.1").unwrap(),
+                "work",
+                None,
+                proof(),
+            )
+            .expect("prepared");
         assert_eq!(prepared.executable, "kilo");
-        assert_eq!(prepared.environment.get("KILO_DISABLE_SHARE"), Some(&"1".to_owned()));
+        assert_eq!(
+            prepared.environment.get("KILO_DISABLE_SHARE"),
+            Some(&"1".to_owned())
+        );
         assert!(prepared.environment.contains_key("KILO_CONFIG_CONTENT"));
-        assert!(prepared.scrub_inherited_environment.contains(&"PWD".to_owned()));
-        assert_eq!(prepared.required_config.get("share").and_then(Value::as_str), Some("disabled"));
+        assert!(prepared
+            .scrub_inherited_environment
+            .contains(&"PWD".to_owned()));
+        assert_eq!(
+            prepared
+                .required_config
+                .get("share")
+                .and_then(Value::as_str),
+            Some("disabled")
+        );
         assert!(prepared.required_config.get("permission").is_some());
         assert!(prepared.required_config.get("rationale").is_none());
     }
 
     #[test]
     fn incomplete_proof_is_fail_closed() {
-        let bad = LaunchProof { transport_validated: false, ..proof() };
-        let error = HermesAdapter.prepare_launch(
-            &request(Transport::HermesStreamJson),
-            &AgentVersion::parse("0.21.5").unwrap(),
-            "work",
-            None,
-            bad,
-        ).expect_err("missing gate proof must refuse");
+        let bad = LaunchProof {
+            transport_validated: false,
+            ..proof()
+        };
+        let error = HermesAdapter
+            .prepare_launch(
+                &request(Transport::HermesStreamJson),
+                &AgentVersion::parse("0.21.5").unwrap(),
+                "work",
+                None,
+                bad,
+            )
+            .expect_err("missing gate proof must refuse");
         assert_eq!(error.code, "LAUNCH_GATE_INCOMPLETE");
     }
 
     #[test]
     fn handshake_builder_refuses_missing_mcf2() {
         let input = HandshakeEnvelopeInput {
-            message_id:"11111111-1111-4111-8111-111111111111".into(),
-            event_id:"22222222-2222-4222-8222-222222222222".into(),
-            correlation_id:"33333333-3333-4333-8333-333333333333".into(),
-            project_id:"44444444-4444-4444-8444-444444444444".into(),
-            session_id:"55555555-5555-4555-8555-555555555555".into(),
-            agent_id:"66666666-6666-4666-8666-666666666666".into(),
-            agent_type:AgentType::Hermes,
-            adapter_version:"1.0.0".into(),
-            protocol_versions:vec!["MCF-1".into()],
-            capabilities:vec![],
-            native_transport:Transport::HermesStreamJson,
-            workspace_id:None,
-            project_epoch:0,
-            created_at:"2026-10-05T17:00:00Z".into(),
+            message_id: "11111111-1111-4111-8111-111111111111".into(),
+            event_id: "22222222-2222-4222-8222-222222222222".into(),
+            correlation_id: "33333333-3333-4333-8333-333333333333".into(),
+            project_id: "44444444-4444-4444-8444-444444444444".into(),
+            session_id: "55555555-5555-4555-8555-555555555555".into(),
+            agent_id: "66666666-6666-4666-8666-666666666666".into(),
+            agent_type: AgentType::Hermes,
+            adapter_version: "1.0.0".into(),
+            protocol_versions: vec!["MCF-1".into()],
+            capabilities: vec![],
+            native_transport: Transport::HermesStreamJson,
+            workspace_id: None,
+            project_epoch: 0,
+            created_at: "2026-10-05T17:00:00Z".into(),
         };
         let error = build_handshake_envelope(&input).expect_err("MCF-2 is mandatory");
-        assert_eq!(error.code,"HANDSHAKE_PROTOCOL_VERSION_MISSING");
+        assert_eq!(error.code, "HANDSHAKE_PROTOCOL_VERSION_MISSING");
     }
 
     #[test]
     fn handshake_builder_produces_protocol_valid_envelope() {
         let input = HandshakeEnvelopeInput {
-            message_id:"11111111-1111-4111-8111-111111111111".into(),
-            event_id:"22222222-2222-4222-8222-222222222222".into(),
-            correlation_id:"33333333-3333-4333-8333-333333333333".into(),
-            project_id:"44444444-4444-4444-8444-444444444444".into(),
-            session_id:"55555555-5555-4555-8555-555555555555".into(),
-            agent_id:"66666666-6666-4666-8666-666666666666".into(),
-            agent_type:AgentType::Kilo,
-            adapter_version:"1.0.0".into(),
-            protocol_versions:vec!["MCF-2".into()],
-            capabilities:vec!["version_probe".into(),"structured_transport".into()],
-            native_transport:Transport::KiloJson,
-            workspace_id:Some("77777777-7777-4777-8777-777777777777".into()),
-            project_epoch:2,
-            created_at:"2026-10-05T17:00:00Z".into(),
+            message_id: "11111111-1111-4111-8111-111111111111".into(),
+            event_id: "22222222-2222-4222-8222-222222222222".into(),
+            correlation_id: "33333333-3333-4333-8333-333333333333".into(),
+            project_id: "44444444-4444-4444-8444-444444444444".into(),
+            session_id: "55555555-5555-4555-8555-555555555555".into(),
+            agent_id: "66666666-6666-4666-8666-666666666666".into(),
+            agent_type: AgentType::Kilo,
+            adapter_version: "1.0.0".into(),
+            protocol_versions: vec!["MCF-2".into()],
+            capabilities: vec!["version_probe".into(), "structured_transport".into()],
+            native_transport: Transport::KiloJson,
+            workspace_id: Some("77777777-7777-4777-8777-777777777777".into()),
+            project_epoch: 2,
+            created_at: "2026-10-05T17:00:00Z".into(),
         };
         let text = build_handshake_envelope(&input).expect("valid");
         let parsed = mayasaba_protocol::envelope::parse_envelope(&text).expect("validator");
-        assert_eq!(parsed.message_type(),"HANDSHAKE");
-        assert_eq!(parsed.project_epoch(),2);
-        assert_eq!(parsed.channel(),"agent");
+        assert_eq!(parsed.message_type(), "HANDSHAKE");
+        assert_eq!(parsed.project_epoch(), 2);
+        assert_eq!(parsed.channel(), "agent");
     }
 
     #[test]
     fn native_mapping_comes_from_registry_and_preserves_unmapped_telemetry() {
-        assert_eq!(native_event_mcf_type(NativeEventKind::SESSION_STARTED).as_deref(),Some("HANDSHAKE_ACK"));
-        assert_eq!(native_event_mcf_type(NativeEventKind::HEARTBEAT).as_deref(),Some("HEARTBEAT"));
-        assert_eq!(native_event_mcf_type(NativeEventKind::REASONING),None);
-        assert_eq!(native_event_mcf_type(NativeEventKind::UNKNOWN),None);
+        assert_eq!(
+            native_event_mcf_type(NativeEventKind::SESSION_STARTED).as_deref(),
+            Some("HANDSHAKE_ACK")
+        );
+        assert_eq!(
+            native_event_mcf_type(NativeEventKind::HEARTBEAT).as_deref(),
+            Some("HEARTBEAT")
+        );
+        assert_eq!(native_event_mcf_type(NativeEventKind::REASONING), None);
+        assert_eq!(native_event_mcf_type(NativeEventKind::UNKNOWN), None);
     }
 
     #[test]
     fn probe_version_parser_accepts_vendor_prefixes() {
-        assert_eq!((super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().major,
-                    super::parse_version_from_probe("Hermes Agent 0.21.5").unwrap().minor), (0,21));
-        assert_eq!(super::parse_version_from_probe("v1.18.34").unwrap().line(), "1.x");
-        assert_eq!(super::parse_version_from_probe("release 2.0.22-beta").unwrap().prerelease.as_deref(), Some("beta"));
+        assert_eq!(
+            (
+                super::parse_version_from_probe("Hermes Agent 0.21.5")
+                    .unwrap()
+                    .major,
+                super::parse_version_from_probe("Hermes Agent 0.21.5")
+                    .unwrap()
+                    .minor
+            ),
+            (0, 21)
+        );
+        assert_eq!(
+            super::parse_version_from_probe("v1.18.34").unwrap().line(),
+            "1.x"
+        );
+        assert_eq!(
+            super::parse_version_from_probe("release 2.0.22-beta")
+                .unwrap()
+                .prerelease
+                .as_deref(),
+            Some("beta")
+        );
         assert!(super::parse_version_from_probe("no version here").is_none());
     }
 
     #[test]
     fn any_adapter_routes_to_the_closed_agent_set() {
-        assert_eq!(AnyAgentAdapter::for_agent(AgentType::Hermes).agent_type(), AgentType::Hermes);
-        assert_eq!(AnyAgentAdapter::for_agent(AgentType::Kilo).agent_type(), AgentType::Kilo);
-        assert_eq!(AnyAgentAdapter::for_agent(AgentType::OpenCode).agent_type(), AgentType::OpenCode);
+        assert_eq!(
+            AnyAgentAdapter::for_agent(AgentType::Hermes).agent_type(),
+            AgentType::Hermes
+        );
+        assert_eq!(
+            AnyAgentAdapter::for_agent(AgentType::Kilo).agent_type(),
+            AgentType::Kilo
+        );
+        assert_eq!(
+            AnyAgentAdapter::for_agent(AgentType::OpenCode).agent_type(),
+            AgentType::OpenCode
+        );
     }
 
     #[test]
@@ -1716,7 +2131,12 @@ mod tests
         });
         assert!(super::launch_vector_has_no_forbidden_remote_surface(
             &definition,
-            &["run".into(), "mayasaba-capability-probe".into(), "--format".into(), "json".into()],
+            &[
+                "run".into(),
+                "mayasaba-capability-probe".into(),
+                "--format".into(),
+                "json".into()
+            ],
             "mayasaba-capability-probe"
         ));
         assert!(!super::launch_vector_has_no_forbidden_remote_surface(
@@ -1768,19 +2188,23 @@ mod tests
 
     #[test]
     fn normalization_preserves_unknown_records() {
-        let event = OpenCodeAdapter.normalize_event(
-            r#"{"type":"step_start","sessionID":"native-1","part":{}}"#,
-            "2026-10-05T15:30:00Z",
-            "artifact://raw/1",
-        ).expect("json");
+        let event = OpenCodeAdapter
+            .normalize_event(
+                r#"{"type":"step_start","sessionID":"native-1","part":{}}"#,
+                "2026-10-05T15:30:00Z",
+                "artifact://raw/1",
+            )
+            .expect("json");
         assert_eq!(event.native_kind, NativeEventKind::STEP_START);
         assert_eq!(event.native_session_id.as_deref(), Some("native-1"));
 
-        let unknown = OpenCodeAdapter.normalize_event(
-            r#"{"type":"future","sessionID":"native-1"}"#,
-            "2026-10-05T15:30:01Z",
-            "artifact://raw/2",
-        ).expect("unknown native record");
+        let unknown = OpenCodeAdapter
+            .normalize_event(
+                r#"{"type":"future","sessionID":"native-1"}"#,
+                "2026-10-05T15:30:01Z",
+                "artifact://raw/2",
+            )
+            .expect("unknown native record");
         assert_eq!(unknown.native_kind, NativeEventKind::UNKNOWN);
     }
 }

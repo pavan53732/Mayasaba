@@ -1800,10 +1800,11 @@ version = "0.1.0"
 dependencies = [
  "mayasaba-execution",
  "mayasaba-protocol",
- "mayasaba-workspace",
  "mayasaba-storage",
+ "mayasaba-workspace",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1864,16 +1865,19 @@ name = "mayasaba-evidence"
 version = "0.1.0"
 dependencies = [
  "mayasaba-storage",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
 name = "mayasaba-execution"
 version = "0.1.0"
 dependencies = [
- "windows-sys 0.61.2",
  "mayasaba-policy",
  "mayasaba-storage",
+ "serde_json",
  "tokio",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1896,6 +1900,7 @@ version = "0.1.0"
 dependencies = [
  "mayasaba-protocol",
  "rusqlite",
+ "serde_json",
  "sha2",
 ]
 

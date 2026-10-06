@@ -1,5 +1,6 @@
 use mayasaba_storage::{
-    NewCommandExecution, NewEnvironmentSnapshot, NewProcessRecord, NewTaskAttempt, Storage,
+    NewArtifact, NewCommandExecution, NewEnvironmentSnapshot, NewEvidence, NewProcessRecord,
+    NewTaskAttempt, NewValidationRun, Storage,
 };
 
 fn project_storage() -> Storage {
@@ -15,15 +16,22 @@ fn project_storage() -> Storage {
             created_at: "1".into(),
         })
         .expect("project");
-    storage.conn().execute(
-        "INSERT INTO agents (agent_id,agent_type,executable,created_at,updated_at)
-         VALUES ('agent_exec','HERMES_AGENT','hermes','1','1')", [],
-    ).expect("agent");
-    storage.conn().execute(
-        "INSERT INTO workspaces (workspace_id,project_id,kind,root_path,status,created_at)
+    storage
+        .conn()
+        .execute(
+            "INSERT INTO agents (agent_id,agent_type,executable,created_at,updated_at)
+         VALUES ('agent_exec','HERMES_AGENT','hermes','1','1')",
+            [],
+        )
+        .expect("agent");
+    storage
+        .conn()
+        .execute(
+            "INSERT INTO workspaces (workspace_id,project_id,kind,root_path,status,created_at)
          VALUES ('ws_exec','prj_exec','AGENT',?, 'ACTIVE','1')",
-        [r"C:\work\exec"],
-    ).expect("workspace");
+            [r"C:\work\exec"],
+        )
+        .expect("workspace");
     storage.conn().execute(
         "INSERT INTO tasks (task_id,project_id,objective,status,priority,risk,workspace_id,current_epoch,created_at,updated_at)
          VALUES ('task_exec','prj_exec','run','READY',1,'LOW','ws_exec',0,'1','1')",
@@ -45,13 +53,28 @@ fn project_storage() -> Storage {
                  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','[]','[]','PROJECT_WRITE','1','1','9999','ACTIVE')",
         [],
     ).expect("lease");
-    storage.insert_task_attempt(&NewTaskAttempt {
-        attempt_id:"attempt_exec".into(), task_id:"task_exec".into(), project_id:"prj_exec".into(),
-        attempt_no:1, lease_id:"lease_exec".into(), agent_id:"agent_exec".into(), session_id:"sess_exec".into(),
-        workspace_id:"ws_exec".into(), fence_token:3, project_epoch:0, context_snapshot_id:"ctx_exec".into(),
-        state:"RUNNING".into(), checkpoint_id:None, failure_id:None, started_at:Some("1".into()),
-        heartbeat_at:Some("1".into()), ended_at:None, created_at:"1".into()
-    }).expect("attempt");
+    storage
+        .insert_task_attempt(&NewTaskAttempt {
+            attempt_id: "attempt_exec".into(),
+            task_id: "task_exec".into(),
+            project_id: "prj_exec".into(),
+            attempt_no: 1,
+            lease_id: "lease_exec".into(),
+            agent_id: "agent_exec".into(),
+            session_id: "sess_exec".into(),
+            workspace_id: "ws_exec".into(),
+            fence_token: 3,
+            project_epoch: 0,
+            context_snapshot_id: "ctx_exec".into(),
+            state: "RUNNING".into(),
+            checkpoint_id: None,
+            failure_id: None,
+            started_at: Some("1".into()),
+            heartbeat_at: Some("1".into()),
+            ended_at: None,
+            created_at: "1".into(),
+        })
+        .expect("attempt");
     storage
 }
 
@@ -82,21 +105,54 @@ fn command(status: &str, attempt_id: Option<&str>, env_id: Option<&str>) -> NewC
 #[test]
 fn command_execution_is_fenced_to_the_attempt_and_environment() {
     let storage = project_storage();
-    storage.insert_environment_snapshot(&NewEnvironmentSnapshot {
-        environment_snapshot_id:"env_exec".into(), project_id:"prj_exec".into(),
-        workspace_id:Some("ws_exec".into()), task_id:Some("task_exec".into()),
-        execution_id:None, os_identity:"Windows".into(), runtime_versions_json:"{}".into(),
-        environment_policy_hash:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
-        source:"EXECUTION".into(), captured_at:"1".into()
-    }).expect("environment");
-    storage.insert_command_execution(&command("REQUESTED", Some("attempt_exec"), Some("env_exec")))
+    storage
+        .insert_environment_snapshot(&NewEnvironmentSnapshot {
+            environment_snapshot_id: "env_exec".into(),
+            project_id: "prj_exec".into(),
+            workspace_id: Some("ws_exec".into()),
+            task_id: Some("task_exec".into()),
+            execution_id: None,
+            os_identity: "Windows".into(),
+            runtime_versions_json: "{}".into(),
+            environment_policy_hash:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            source: "EXECUTION".into(),
+            captured_at: "1".into(),
+        })
+        .expect("environment");
+    storage
+        .insert_command_execution(&command(
+            "REQUESTED",
+            Some("attempt_exec"),
+            Some("env_exec"),
+        ))
         .expect("fenced execution");
-    assert_eq!(storage.get_command_execution("exec_REQUESTED").expect("read").unwrap().attempt_id.as_deref(), Some("attempt_exec"));
+    assert_eq!(
+        storage
+            .get_command_execution("exec_REQUESTED")
+            .expect("read")
+            .unwrap()
+            .attempt_id
+            .as_deref(),
+        Some("attempt_exec")
+    );
 
-    storage.conn().execute("UPDATE task_leases SET lease_version=4 WHERE lease_id='lease_exec'", []).expect("roll");
-    assert!(storage.insert_command_execution(&NewCommandExecution {
-        execution_id:"exec_stale".into(), ..command("REQUESTED", Some("attempt_exec"), Some("env_exec"))
-    }).is_err(), "a stale attempt cannot create a new material execution");
+    storage
+        .conn()
+        .execute(
+            "UPDATE task_leases SET lease_version=4 WHERE lease_id='lease_exec'",
+            [],
+        )
+        .expect("roll");
+    assert!(
+        storage
+            .insert_command_execution(&NewCommandExecution {
+                execution_id: "exec_stale".into(),
+                ..command("REQUESTED", Some("attempt_exec"), Some("env_exec"))
+            })
+            .is_err(),
+        "a stale attempt cannot create a new material execution"
+    );
 }
 
 #[test]
@@ -106,35 +162,76 @@ fn command_execution_rejects_bad_payload_and_illegal_transition() {
     bad.arguments_json = r#"{"not":"an array"}"#.into();
     assert!(storage.insert_command_execution(&bad).is_err());
 
-    storage.insert_command_execution(&command("REQUESTED", None, None)).expect("insert");
-    assert!(storage.transition_command_execution("exec_REQUESTED", "REQUESTED", "RUNNING", None, None).is_err());
-    storage.transition_command_execution("exec_REQUESTED","REQUESTED","POLICY_CHECK",None,None).expect("policy check");
-    storage.transition_command_execution("exec_REQUESTED","POLICY_CHECK","APPROVED",None,None).expect("approve");
-    assert!(storage.transition_command_execution("exec_REQUESTED","POLICY_CHECK","DENIED",None,None).is_err(), "CAS must reject the stale expected state");
+    storage
+        .insert_command_execution(&command("REQUESTED", None, None))
+        .expect("insert");
+    assert!(storage
+        .transition_command_execution("exec_REQUESTED", "REQUESTED", "RUNNING", None, None)
+        .is_err());
+    storage
+        .transition_command_execution("exec_REQUESTED", "REQUESTED", "POLICY_CHECK", None, None)
+        .expect("policy check");
+    storage
+        .transition_command_execution("exec_REQUESTED", "POLICY_CHECK", "APPROVED", None, None)
+        .expect("approve");
+    assert!(
+        storage
+            .transition_command_execution("exec_REQUESTED", "POLICY_CHECK", "DENIED", None, None)
+            .is_err(),
+        "CAS must reject the stale expected state"
+    );
 }
 
 #[test]
 fn process_observations_are_append_only_and_unknown_is_preserved() {
     let storage = project_storage();
-    storage.insert_command_execution(&command("REQUESTED", None, None)).expect("execution");
-    storage.insert_process_record(&NewProcessRecord {
-        process_record_id:"proc_expected".into(), execution_id:"exec_REQUESTED".into(), pid:1001,
-        parent_pid:Some(900), state:"EXPECTED".into(), observed_at:"2".into()
-    }).expect("expected");
-    storage.insert_process_record(&NewProcessRecord {
-        process_record_id:"proc_unknown".into(), execution_id:"exec_REQUESTED".into(), pid:1001,
-        parent_pid:Some(900), state:"UNKNOWN".into(), observed_at:"3".into()
-    }).expect("unknown");
-    let rows=storage.list_process_records("exec_REQUESTED").expect("rows");
-    assert_eq!(rows.len(),2);
-    assert_eq!(rows[0].state,"UNKNOWN");
-    assert_eq!(storage.latest_process_record("exec_REQUESTED").expect("latest").unwrap().process_record_id,"proc_unknown");
-    assert!(storage.insert_process_record(&NewProcessRecord {
-        process_record_id:"proc_bad".into(), execution_id:"missing".into(), pid:1,
-        parent_pid:None, state:"VERIFIED".into(), observed_at:"4".into()
-    }).is_err());
+    storage
+        .insert_command_execution(&command("REQUESTED", None, None))
+        .expect("execution");
+    storage
+        .insert_process_record(&NewProcessRecord {
+            process_record_id: "proc_expected".into(),
+            execution_id: "exec_REQUESTED".into(),
+            pid: 1001,
+            parent_pid: Some(900),
+            state: "EXPECTED".into(),
+            observed_at: "2".into(),
+        })
+        .expect("expected");
+    storage
+        .insert_process_record(&NewProcessRecord {
+            process_record_id: "proc_unknown".into(),
+            execution_id: "exec_REQUESTED".into(),
+            pid: 1001,
+            parent_pid: Some(900),
+            state: "UNKNOWN".into(),
+            observed_at: "3".into(),
+        })
+        .expect("unknown");
+    let rows = storage
+        .list_process_records("exec_REQUESTED")
+        .expect("rows");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].state, "UNKNOWN");
+    assert_eq!(
+        storage
+            .latest_process_record("exec_REQUESTED")
+            .expect("latest")
+            .unwrap()
+            .process_record_id,
+        "proc_unknown"
+    );
+    assert!(storage
+        .insert_process_record(&NewProcessRecord {
+            process_record_id: "proc_bad".into(),
+            execution_id: "missing".into(),
+            pid: 1,
+            parent_pid: None,
+            state: "VERIFIED".into(),
+            observed_at: "4".into()
+        })
+        .is_err());
 }
-
 
 #[test]
 fn schedulable_selector_is_dependency_safe_and_deterministic() {
@@ -149,158 +246,269 @@ fn schedulable_selector_is_dependency_safe_and_deterministic() {
     storage.conn().execute(
         "INSERT INTO task_dependencies (task_id, depends_on_task_id) VALUES ('task_blocked','task_high')", []
     ).expect("dependency");
-    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector");
-    assert_eq!(rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
-               vec!["task_high","task_low"]);
+    let rows = storage
+        .list_schedulable_tasks("prj_exec", 10)
+        .expect("selector");
+    assert_eq!(
+        rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
+        vec!["task_high", "task_low"]
+    );
     assert!(!rows.iter().any(|r| r.task_id == "task_blocked"));
 
-    storage.conn().execute("UPDATE tasks SET status='COMPLETED', updated_at='4' WHERE task_id='task_high'", [])
+    storage
+        .conn()
+        .execute(
+            "UPDATE tasks SET status='COMPLETED', updated_at='4' WHERE task_id='task_high'",
+            [],
+        )
         .expect("complete dependency");
-    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector after dependency");
-    assert_eq!(rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
-               vec!["task_blocked","task_low"]);
+    let rows = storage
+        .list_schedulable_tasks("prj_exec", 10)
+        .expect("selector after dependency");
+    assert_eq!(
+        rows.iter().map(|r| r.task_id.as_str()).collect::<Vec<_>>(),
+        vec!["task_blocked", "task_low"]
+    );
 
     storage.conn().execute(
         "INSERT INTO task_leases (lease_id,task_id,project_id,agent_id,session_id,workspace_id,lease_version,project_epoch,context_snapshot_id,state_digest,allowed_paths_json,required_capabilities_json,policy_scope,issued_at,heartbeat_at,expires_at,status)
          VALUES ('lease_high','task_low','prj_exec','agent_exec','sess_exec','ws_exec',1,0,'ctx_exec',
                  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','[]','[]','PROJECT_WRITE','1','1','9999','ACTIVE')", []
     ).expect("live lease");
-    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector with live lease");
+    let rows = storage
+        .list_schedulable_tasks("prj_exec", 10)
+        .expect("selector with live lease");
     assert!(!rows.iter().any(|r| r.task_id == "task_low"));
 }
-
 
 #[test]
 fn agent_session_lifecycle_is_cas_and_capability_snapshot_is_bound() {
     use mayasaba_storage::{NewAgentCapabilitySnapshot, NewAgentSession};
     let mut storage = project_storage();
 
-    let session = storage.create_agent_session(&NewAgentSession {
-        session_id:"sess_discovery".into(),
-        project_id:"prj_exec".into(),
-        agent_id:"agent_exec".into(),
-        workspace_id:Some("ws_exec".into()),
-        current_epoch:0,
-        started_at:"10".into(),
-    }).expect("session");
+    let session = storage
+        .create_agent_session(&NewAgentSession {
+            session_id: "sess_discovery".into(),
+            project_id: "prj_exec".into(),
+            agent_id: "agent_exec".into(),
+            workspace_id: Some("ws_exec".into()),
+            current_epoch: 0,
+            started_at: "10".into(),
+        })
+        .expect("session");
     assert_eq!(session.state, "DISCOVERED");
     assert_eq!(session.health_state, "UNKNOWN");
 
-    storage.transition_agent_session(
-        "sess_discovery","DISCOVERED","HANDSHAKING","AGENT_HANDSHAKING","11"
-    ).expect("handshake");
-    assert!(storage.transition_agent_session(
-        "sess_discovery","DISCOVERED","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING","12"
-    ).is_err(), "stale expected state must not overwrite session");
+    storage
+        .transition_agent_session(
+            "sess_discovery",
+            "DISCOVERED",
+            "HANDSHAKING",
+            "AGENT_HANDSHAKING",
+            "11",
+        )
+        .expect("handshake");
+    assert!(
+        storage
+            .transition_agent_session(
+                "sess_discovery",
+                "DISCOVERED",
+                "CAPABILITY_VALIDATING",
+                "AGENT_CAPABILITY_VALIDATING",
+                "12"
+            )
+            .is_err(),
+        "stale expected state must not overwrite session"
+    );
 
-    storage.transition_agent_session(
-        "sess_discovery","HANDSHAKING","CAPABILITY_VALIDATING","AGENT_CAPABILITY_VALIDATING","12"
-    ).expect("capability gate");
-    storage.insert_agent_capability_snapshot(&NewAgentCapabilitySnapshot {
-        capability_snapshot_id:"cap_1".into(),
-        agent_id:"agent_exec".into(),
-        session_id:Some("sess_discovery".into()),
-        capabilities_json:r#"{"version_probe":true,"structured_transport":true}"#.into(),
-        detected_at:"12".into(),
-    }).expect("capabilities");
-    storage.transition_agent_session(
-        "sess_discovery","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","AGENT_WORKSPACE_VALIDATING","13"
-    ).expect("workspace gate");
+    storage
+        .transition_agent_session(
+            "sess_discovery",
+            "HANDSHAKING",
+            "CAPABILITY_VALIDATING",
+            "AGENT_CAPABILITY_VALIDATING",
+            "12",
+        )
+        .expect("capability gate");
+    storage
+        .insert_agent_capability_snapshot(&NewAgentCapabilitySnapshot {
+            capability_snapshot_id: "cap_1".into(),
+            agent_id: "agent_exec".into(),
+            session_id: Some("sess_discovery".into()),
+            capabilities_json: r#"{"version_probe":true,"structured_transport":true}"#.into(),
+            detected_at: "12".into(),
+        })
+        .expect("capabilities");
+    storage
+        .transition_agent_session(
+            "sess_discovery",
+            "CAPABILITY_VALIDATING",
+            "WORKSPACE_VALIDATING",
+            "AGENT_WORKSPACE_VALIDATING",
+            "13",
+        )
+        .expect("workspace gate");
 }
 
 #[test]
 fn scheduler_refuses_ready_tasks_from_an_older_project_epoch() {
     let mut storage = project_storage();
-    storage.conn().execute(
-        "UPDATE projects SET current_epoch=1, updated_at='5' WHERE project_id='prj_exec'", []
-    ).expect("epoch");
-    let rows = storage.list_schedulable_tasks("prj_exec", 10).expect("selector");
-    assert!(rows.iter().all(|r| r.task_id != "task_exec"), "stale task epoch must not be schedulable");
+    storage
+        .conn()
+        .execute(
+            "UPDATE projects SET current_epoch=1, updated_at='5' WHERE project_id='prj_exec'",
+            [],
+        )
+        .expect("epoch");
+    let rows = storage
+        .list_schedulable_tasks("prj_exec", 10)
+        .expect("selector");
+    assert!(
+        rows.iter().all(|r| r.task_id != "task_exec"),
+        "stale task epoch must not be schedulable"
+    );
 }
-
 
 #[test]
 fn child_agent_slot_budget_is_atomic_and_reuses_free_slots() {
     let mut storage = project_storage();
-    storage.conn().execute(
-        "INSERT INTO task_scopes (task_id,allowed_paths_json,required_capabilities_json,validation_requirements_json,policy_scope,max_attempts,max_parallel_children,created_at,updated_at)
-         VALUES ('task_exec','[]','[]','[]','PROJECT_WRITE',3,2,'1','1')", []
-    ).expect("scope");
 
-    let first = storage.reserve_child_slot("slot_1","task_exec","lease_exec",3,"2","99")
+    let first = storage
+        .reserve_child_slot("slot_1", "task_exec", "lease_exec", 3, "2", "99")
         .expect("first slot");
-    let second = storage.reserve_child_slot("slot_2","task_exec","lease_exec",3,"2","99")
+    let second = storage
+        .reserve_child_slot("slot_2", "task_exec", "lease_exec", 3, "2", "99")
         .expect("second slot");
     assert_eq!(first, "task:task_exec:child:1");
     assert_eq!(second, "task:task_exec:child:2");
-    assert!(storage.reserve_child_slot("slot_3","task_exec","lease_exec",3,"2","99").is_err());
+    assert!(storage
+        .reserve_child_slot("slot_3", "task_exec", "lease_exec", 3, "2", "99")
+        .is_err());
 
-    storage.release_resource_reservation("slot_1",3,"3").expect("release first");
-    let reused = storage.reserve_child_slot("slot_3","task_exec","lease_exec",3,"4","99")
+    storage
+        .release_resource_reservation("slot_1", 3, "3")
+        .expect("release first");
+    let reused = storage
+        .reserve_child_slot("slot_3", "task_exec", "lease_exec", 3, "4", "99")
         .expect("reuse first free slot");
     assert_eq!(reused, "task:task_exec:child:1");
 }
 
-
 #[test]
 fn native_session_identity_cannot_be_rewritten_after_binding() {
     let storage = project_storage();
-    storage.bind_agent_process("sess_exec", 4242, Some("native-1"))
+    storage
+        .bind_agent_process("sess_exec", 4242, Some("native-1"))
         .expect("initial bind");
-    storage.bind_agent_process("sess_exec", 4242, Some("native-1"))
+    storage
+        .bind_agent_process("sess_exec", 4242, Some("native-1"))
         .expect("same identity is idempotent");
-    assert!(storage.bind_agent_process("sess_exec", 4242, Some("native-2")).is_err());
-    assert!(storage.bind_agent_process("sess_exec", 4243, Some("native-1")).is_err());
+    assert!(storage
+        .bind_agent_process("sess_exec", 4242, Some("native-2"))
+        .is_err());
+    assert!(storage
+        .bind_agent_process("sess_exec", 4243, Some("native-1"))
+        .is_err());
 
-    let row: (i64, String) = storage.conn().query_row(
-        "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id='sess_exec'",
-        [],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    ).expect("identity");
+    let row: (i64, String) = storage
+        .conn()
+        .query_row(
+            "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id='sess_exec'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("identity");
     assert_eq!(row, (4242, "native-1".to_owned()));
 }
 
- 
 #[test]
 fn artifact_evidence_and_validation_persistence_is_project_scoped() {
     let storage = project_storage();
-    storage.insert_artifact(&NewArtifact {
-        artifact_id:"artifact_1".into(), project_id:"prj_exec".into(), kind:"FILE".into(),
-        path:Some(r"C:\work\exec\out.txt".into()), sha256:Some("a".repeat(64)),
-        size_bytes:Some(7), created_at:"20".into()
-    }).expect("artifact");
-    storage.insert_evidence(&NewEvidence {
-        evidence_id:"evidence_1".into(), project_id:"prj_exec".into(), kind:"FILE_HASH".into(),
-        source_json:r#"{"artifact_id":"artifact_1"}"#.into(), sha256:Some("a".repeat(64)), created_at:"20".into()
-    }).expect("evidence");
-    storage.link_evidence_artifact("evidence_1","artifact_1").expect("link");
+    storage
+        .insert_artifact(&NewArtifact {
+            artifact_id: "artifact_1".into(),
+            project_id: "prj_exec".into(),
+            kind: "FILE".into(),
+            path: Some(r"C:\work\exec\out.txt".into()),
+            sha256: Some("a".repeat(64)),
+            size_bytes: Some(7),
+            created_at: "20".into(),
+        })
+        .expect("artifact");
+    storage
+        .insert_evidence(&NewEvidence {
+            evidence_id: "evidence_1".into(),
+            project_id: "prj_exec".into(),
+            kind: "FILE_HASH".into(),
+            source_json: r#"{"artifact_id":"artifact_1"}"#.into(),
+            sha256: Some("a".repeat(64)),
+            created_at: "20".into(),
+        })
+        .expect("evidence");
+    storage
+        .link_evidence_artifact("evidence_1", "artifact_1")
+        .expect("link");
     storage.insert_validation_run(&NewValidationRun {
         validation_id:"validation_1".into(), project_id:"prj_exec".into(), task_id:Some("task_exec".into()),
         scope_json:r#"{"task_id":"task_exec","workspace_id":"ws_exec"}"#.into(),
         checks_json:r#"[{"check_id":"FILE_HASH","predicate":{},"status":"PASS","evidence_refs":["evidence_1"]}]"#.into(),
         verdict:"PASS".into(), created_at:"21".into()
     }).expect("validation");
-    assert!(storage.insert_evidence(&NewEvidence {
-        evidence_id:"evidence_other".into(), project_id:"missing_project".into(), kind:"FILE_HASH".into(),
-        source_json:"{}".into(), sha256:None, created_at:"22".into()
-    }).is_err());
+    assert!(storage
+        .insert_evidence(&NewEvidence {
+            evidence_id: "evidence_other".into(),
+            project_id: "missing_project".into(),
+            kind: "FILE_HASH".into(),
+            source_json: "{}".into(),
+            sha256: None,
+            created_at: "22".into()
+        })
+        .is_err());
 }
-
 
 #[test]
 fn execution_artifacts_are_project_scoped() {
-    let storage = project_storage();
-    storage.insert_artifact(&NewArtifact {
-        artifact_id:"stdout_artifact".into(), project_id:"prj_exec".into(), kind:"LOG".into(),
-        path:Some(r"C:\logs\stdout.txt".into()), sha256:Some("a".repeat(64)),
-        size_bytes:Some(2), created_at:"30".into()
-    }).expect("artifact");
-    storage.insert_artifact(&NewArtifact {
-        artifact_id:"foreign_artifact".into(), project_id:"other_project".into(), kind:"LOG".into(),
-        path:Some(r"C:\logs\foreign.txt".into()), sha256:Some("b".repeat(64)),
-        size_bytes:Some(2), created_at:"30".into()
-    }).expect("foreign artifact");
-    storage.bind_execution_artifacts("exec_RUNNING", Some("stdout_artifact"), None)
+    let mut storage = project_storage();
+    storage
+        .insert_artifact(&NewArtifact {
+            artifact_id: "stdout_artifact".into(),
+            project_id: "prj_exec".into(),
+            kind: "LOG".into(),
+            path: Some(r"C:\logs\stdout.txt".into()),
+            sha256: Some("a".repeat(64)),
+            size_bytes: Some(2),
+            created_at: "30".into(),
+        })
+        .expect("artifact");
+    storage
+        .create_project(&mayasaba_storage::NewProject {
+            project_id: "other_project".into(),
+            local_path: r"C:\work\other".into(),
+            brief_id: "brief_other".into(),
+            brief_body: "other".into(),
+            brief_source: "TEST".into(),
+            event_id: "evt_other".into(),
+            created_at: "1".into(),
+        })
+        .expect("other project");
+    storage
+        .insert_artifact(&NewArtifact {
+            artifact_id: "foreign_artifact".into(),
+            project_id: "other_project".into(),
+            kind: "LOG".into(),
+            path: Some(r"C:\logs\foreign.txt".into()),
+            sha256: Some("b".repeat(64)),
+            size_bytes: Some(2),
+            created_at: "30".into(),
+        })
+        .expect("foreign artifact");
+    storage
+        .insert_command_execution(&command("RUNNING", Some("attempt_exec"), None))
+        .expect("execution");
+    storage
+        .bind_execution_artifacts("exec_RUNNING", Some("stdout_artifact"), None)
         .expect("binding");
-    assert!(storage.bind_execution_artifacts("exec_RUNNING", Some("foreign_artifact"), None).is_err());
+    assert!(storage
+        .bind_execution_artifacts("exec_RUNNING", Some("foreign_artifact"), None)
+        .is_err());
 }

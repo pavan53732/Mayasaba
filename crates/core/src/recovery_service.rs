@@ -10,8 +10,8 @@
 //! copies it, so a decision taken afterwards would be a decision about a replay that had already happened.
 
 use mayasaba_bus::{Bus, BusError, Clock, IdSource};
-use mayasaba_storage::{RecoverableAttempt, RecoverableExecution, Storage};
 use mayasaba_protocol::generated::envelope::MATERIAL_ACTION_MESSAGE_TYPES;
+use mayasaba_storage::{RecoverableAttempt, RecoverableExecution, Storage};
 use serde::Serialize;
 
 /// Why a replay did not happen.
@@ -341,7 +341,6 @@ mod tests {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeRecoveryAction {
     VerifyProcess,
@@ -396,10 +395,11 @@ pub fn build_runtime_recovery_plan(
     let executions = storage.list_recoverable_executions(project_id)?;
     let mut execution_candidates = Vec::with_capacity(executions.len());
     for execution in executions {
+        let action = classify_recovery_execution(&execution);
         execution_candidates.push(RuntimeRecoveryExecutionCandidate {
             execution_id: execution.execution_id,
             attempt_id: execution.attempt_id,
-            action: classify_recovery_execution(&execution),
+            action,
         });
     }
 
@@ -433,7 +433,9 @@ fn classify_recovery_attempt(attempt: &RecoverableAttempt) -> RuntimeRecoveryAct
         _ if attempt.current_lease_version != Some(attempt.fence_token)
             || attempt.lease_status.as_deref() != Some("ACTIVE")
                 && attempt.lease_status.as_deref() != Some("RENEWING") =>
-            RuntimeRecoveryAction::RecoverStaleFence,
+        {
+            RuntimeRecoveryAction::RecoverStaleFence
+        }
         _ if attempt.state == "CHECKPOINTED" => RuntimeRecoveryAction::VerifyProcess,
         _ => RuntimeRecoveryAction::VerifyProcess,
     }

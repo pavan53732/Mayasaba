@@ -4,15 +4,8 @@
 //! model; this module then re-checks the task-attempt fence immediately before the process crosses the OS boundary.
 //! Adapter-specific process policy arrives as a generic ProcessSpec so this crate does not depend on the agent crate.
 
-use mayasaba_storage::{
-    NewProcessRecord, Result as StorageResult, Storage, StorageError,
-};
-use std::{
-    collections::BTreeMap,
-    fmt,
-    process::Stdio,
-    time::Duration,
-};
+use mayasaba_storage::{NewProcessRecord, Result as StorageResult, Storage, StorageError};
+use std::{collections::BTreeMap, fmt, process::Stdio, time::Duration};
 
 mod process_tree;
 use process_tree::ProcessTreeOwner;
@@ -56,11 +49,7 @@ pub struct ProcessSpec {
 }
 
 impl ProcessSpec {
-    pub fn new(
-        executable: impl Into<String>,
-        argv: Vec<String>,
-        cwd: impl Into<String>,
-    ) -> Self {
+    pub fn new(executable: impl Into<String>, argv: Vec<String>, cwd: impl Into<String>) -> Self {
         Self {
             executable: executable.into(),
             argv,
@@ -142,11 +131,15 @@ pub async fn spawn_process(
 ) -> Result<SpawnedProcess, ExecutionError> {
     let execution = storage
         .get_command_execution(execution_id)?
-        .ok_or_else(|| ExecutionError::Durability(format!("command execution {execution_id} does not exist")))?;
+        .ok_or_else(|| {
+            ExecutionError::Durability(format!("command execution {execution_id} does not exist"))
+        })?;
 
     if let Some(attempt_id) = attempt_id {
         let fence = lease_version.ok_or_else(|| {
-            ExecutionError::InvalidSpec("attempt-bound execution requires lease_version".to_string())
+            ExecutionError::InvalidSpec(
+                "attempt-bound execution requires lease_version".to_string(),
+            )
         })?;
         authorize_execution(storage, attempt_id, fence)?;
         if execution.attempt_id.as_deref() != Some(attempt_id) {
@@ -171,8 +164,10 @@ pub async fn spawn_process(
             "process spec does not match persisted execution executable/cwd".to_string(),
         ));
     }
-    let persisted_args: Vec<String> = serde_json::from_str(&execution.arguments_json)
-        .map_err(|e| ExecutionError::InvalidSpec(format!("persisted arguments are invalid JSON: {e}")))?;
+    let persisted_args: Vec<String> =
+        serde_json::from_str(&execution.arguments_json).map_err(|e| {
+            ExecutionError::InvalidSpec(format!("persisted arguments are invalid JSON: {e}"))
+        })?;
     if persisted_args != spec.argv {
         return Err(ExecutionError::InvalidSpec(
             "process spec argv does not match the durably approved execution arguments".to_string(),
@@ -203,7 +198,7 @@ pub async fn spawn_process(
         command.env(key, value);
     }
 
-    let child = match command.spawn() {
+    let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => {
             // STARTING intentionally remains nonterminal: no process crossed the OS boundary, so CRASHED would
@@ -218,7 +213,8 @@ pub async fn spawn_process(
             let mut child = child;
             let _ = child.kill().await;
             return Err(ExecutionError::Durability(
-                "spawned process did not expose a PID and was terminated before supervision".to_string(),
+                "spawned process did not expose a PID and was terminated before supervision"
+                    .to_string(),
             ));
         }
     };
@@ -253,14 +249,10 @@ pub async fn spawn_process(
         };
     }
 
-    if let Err(err) = storage.transition_command_execution(
-        execution_id,
-        "STARTING",
-        "RUNNING",
-        None,
-        None,
-    ) {
-        let termination = terminate_owned_tree(pid).await;
+    if let Err(err) =
+        storage.transition_command_execution(execution_id, "STARTING", "RUNNING", None, None)
+    {
+        let termination = process_tree.terminate().await;
         return match termination {
             Ok(()) => Err(ExecutionError::Durability(format!(
                 "STARTING -> RUNNING persistence failed after spawn; owned process tree was terminated: {err}"
@@ -278,6 +270,7 @@ pub async fn spawn_process(
         execution_id: execution_id.to_owned(),
         pid,
         output_limit_bytes: output_limit_bytes.unwrap_or(DEFAULT_OUTPUT_LIMIT),
+        process_tree,
     })
 }
 
@@ -303,8 +296,15 @@ impl SpawnedProcess {
             return Ok(None);
         };
         let mut line = String::new();
-        let read = stdout.read_line(&mut line).await.map_err(ExecutionError::Spawn)?;
-        if read == 0 { Ok(None) } else { Ok(Some(line)) }
+        let read = stdout
+            .read_line(&mut line)
+            .await
+            .map_err(ExecutionError::Spawn)?;
+        if read == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(line))
+        }
     }
 
     /// Read one stderr line for diagnostics/session identity. stderr is deliberately separate from structured
@@ -315,13 +315,24 @@ impl SpawnedProcess {
             return Ok(None);
         };
         let mut line = String::new();
-        let read = stderr.read_line(&mut line).await.map_err(ExecutionError::Spawn)?;
-        if read == 0 { Ok(None) } else { Ok(Some(line)) }
+        let read = stderr
+            .read_line(&mut line)
+            .await
+            .map_err(ExecutionError::Spawn)?;
+        if read == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(line))
+        }
     }
 
     /// Wait until the process terminates. stdout/stderr are drained concurrently to avoid pipe back-pressure
     /// deadlocking a long-running coding agent. Output is bounded and truncation is explicit.
-    pub async fn wait(mut self, storage: &Storage, observed_at: &str) -> Result<CompletedProcess, ExecutionError> {
+    pub async fn wait(
+        mut self,
+        storage: &Storage,
+        observed_at: &str,
+    ) -> Result<CompletedProcess, ExecutionError> {
         self.finish_wait(storage, observed_at, None).await
     }
 
@@ -355,7 +366,13 @@ impl SpawnedProcess {
                 Err(_) => {
                     timed_out = true;
                     if let Err(err) = self.process_tree.terminate().await {
-                        insert_unknown_observation(storage, &self.execution_id, self.pid, observed_at).ok();
+                        insert_unknown_observation(
+                            storage,
+                            &self.execution_id,
+                            self.pid,
+                            observed_at,
+                        )
+                        .ok();
                         return Err(ExecutionError::Termination(err));
                     }
                     self.child.wait().await.map_err(ExecutionError::Spawn)?
@@ -376,7 +393,12 @@ impl SpawnedProcess {
         let exit_code = status.code().map(i64::from);
         let observation_state = if timed_out { "VERIFIED" } else { "VERIFIED" };
         let _ = storage.insert_process_record(&NewProcessRecord {
-            process_record_id: format!("proc_{}_{}_{}", self.execution_id, self.pid, observed_at.replace(':', "_")),
+            process_record_id: format!(
+                "proc_{}_{}_{}",
+                self.execution_id,
+                self.pid,
+                observed_at.replace(':', "_")
+            ),
             execution_id: self.execution_id.clone(),
             pid: i64::from(self.pid),
             parent_pid: Some(std::process::id().into()),
@@ -414,7 +436,10 @@ async fn read_bounded<R: AsyncRead + Unpin>(
         return Ok((Vec::new(), false));
     };
     let mut bytes = Vec::new();
-    reader.take(limit.saturating_add(1) as u64).read_to_end(&mut bytes).await?;
+    reader
+        .take(limit.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)
+        .await?;
     let truncated = bytes.len() > limit;
     if truncated {
         bytes.truncate(limit);
@@ -445,9 +470,16 @@ mod tests {
     #[test]
     fn process_spec_keeps_explicit_environment_boundaries() {
         let mut spec = ProcessSpec::new("hermes", vec!["chat".into()], r"C:\Work\Mayasaba");
-        spec.environment.insert("PWD".into(), r"C:\Work\Mayasaba".into());
-        spec.scrub_inherited_environment.push("HERMES_YOLO_MODE".into());
-        assert_eq!(spec.environment.get("PWD").map(String::as_str), Some(r"C:\Work\Mayasaba"));
-        assert!(spec.scrub_inherited_environment.contains(&"HERMES_YOLO_MODE".into()));
+        spec.environment
+            .insert("PWD".into(), r"C:\Work\Mayasaba".into());
+        spec.scrub_inherited_environment
+            .push("HERMES_YOLO_MODE".into());
+        assert_eq!(
+            spec.environment.get("PWD").map(String::as_str),
+            Some(r"C:\Work\Mayasaba")
+        );
+        assert!(spec
+            .scrub_inherited_environment
+            .contains(&"HERMES_YOLO_MODE".into()));
     }
 }

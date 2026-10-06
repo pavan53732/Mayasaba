@@ -64,9 +64,18 @@ pub enum StorageError {
         sequence: i64,
     },
     /// A task attempt presents a lease fence that is no longer authoritative.
-    StaleFence { attempt_id: String, attempt_fence: i64, current_lease_version: i64, presented: i64 },
+    StaleFence {
+        attempt_id: String,
+        attempt_fence: i64,
+        current_lease_version: i64,
+        presented: i64,
+    },
     /// A task-attempt state change is not allowed by the attempt lifecycle.
-    InvalidAttemptTransition { attempt_id: String, from: String, to: String },
+    InvalidAttemptTransition {
+        attempt_id: String,
+        from: String,
+        to: String,
+    },
 
     /// A write named a project that does not exist.
     ///
@@ -3236,13 +3245,16 @@ fn epoch_event_payload(
     reason: &str,
     invalidated_contexts: u64,
 ) -> Result<String> {
-    canonical::jcs_object(&[
+    Ok(canonical::jcs_object(&[
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("previous_epoch", canonical::JcsValue::Int(previous_epoch)),
         ("new_epoch", canonical::JcsValue::Int(new_epoch)),
         ("reason", canonical::JcsValue::Str(reason)),
-        ("invalidated_contexts", canonical::JcsValue::Int(invalidated_contexts as i64)),
-    ])
+        (
+            "invalidated_contexts",
+            canonical::JcsValue::Int(invalidated_contexts as i64),
+        ),
+    ])?)
 }
 
 fn context_event_payload(
@@ -3251,12 +3263,15 @@ fn context_event_payload(
     epoch: i64,
     state_digest: &str,
 ) -> Result<String> {
-    canonical::jcs_object(&[
-        ("context_snapshot_id", canonical::JcsValue::Str(context_snapshot_id)),
+    Ok(canonical::jcs_object(&[
+        (
+            "context_snapshot_id",
+            canonical::JcsValue::Str(context_snapshot_id),
+        ),
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("epoch", canonical::JcsValue::Int(epoch)),
         ("state_digest", canonical::JcsValue::Str(state_digest)),
-    ])
+    ])?)
 }
 
 fn agent_health_event_payload(
@@ -3265,12 +3280,12 @@ fn agent_health_event_payload(
     agent_id: &str,
     health_state: &str,
 ) -> Result<String> {
-    canonical::jcs_object(&[
+    Ok(canonical::jcs_object(&[
         ("session_id", canonical::JcsValue::Str(session_id)),
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("agent_id", canonical::JcsValue::Str(agent_id)),
         ("health_state", canonical::JcsValue::Str(health_state)),
-    ])
+    ])?)
 }
 
 fn agent_session_event_payload(
@@ -3279,12 +3294,12 @@ fn agent_session_event_payload(
     agent_id: &str,
     state: &str,
 ) -> Result<String> {
-    canonical::jcs_object(&[
+    Ok(canonical::jcs_object(&[
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("session_id", canonical::JcsValue::Str(session_id)),
         ("agent_id", canonical::JcsValue::Str(agent_id)),
         ("state", canonical::JcsValue::Str(state)),
-    ])
+    ])?)
 }
 
 fn task_lease_task_event_payload(
@@ -3293,12 +3308,12 @@ fn task_lease_task_event_payload(
     lease_id: &str,
     state: &str,
 ) -> Result<String> {
-    canonical::jcs_object(&[
+    Ok(canonical::jcs_object(&[
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("task_id", canonical::JcsValue::Str(task_id)),
         ("lease_id", canonical::JcsValue::Str(lease_id)),
         ("state", canonical::JcsValue::Str(state)),
-    ])
+    ])?)
 }
 
 fn lease_event_payload(
@@ -3308,13 +3323,13 @@ fn lease_event_payload(
     lease_version: i64,
     state: &str,
 ) -> Result<String> {
-    canonical::jcs_object(&[
+    Ok(canonical::jcs_object(&[
         ("project_id", canonical::JcsValue::Str(project_id)),
         ("task_id", canonical::JcsValue::Str(task_id)),
         ("lease_id", canonical::JcsValue::Str(lease_id)),
         ("lease_version", canonical::JcsValue::Int(lease_version)),
         ("state", canonical::JcsValue::Str(state)),
-    ])
+    ])?)
 }
 
 fn require_vocabulary<'a>(column: &str, value: &str, allowed: &'a [&'a str]) -> Result<&'a str> {
@@ -3756,7 +3771,6 @@ pub struct SchedulableTask {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentInstallationRecord {
     pub agent_id: String,
     pub agent_type: String,
@@ -3982,6 +3996,7 @@ pub struct ProcessRecord {
     pub observed_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTaskAttempt {
     pub attempt_id: String,
     pub task_id: String,
@@ -4086,23 +4101,86 @@ pub struct NewCertificationBinding {
     pub created_at: String,
 }
 
-const TASK_ATTEMPT_STATES: &[&str] = &["CREATED","STARTED","RUNNING","CHECKPOINTED","COMPLETED","FAILED","TIMED_OUT","LOST","CANCELLED","UNKNOWN"];
-const EXECUTION_CLASSIFICATIONS: &[&str] = &["READ_ONLY","SAFE_WRITE","PROJECT_WRITE","EXECUTE","INSTALL","ADMIN_REQUIRED"];
-const LEASE_STATES: &[&str] = &["REQUESTED","ACTIVE","RENEWING","EXPIRED","RELEASED","REVOKED"];
-const ADMISSION_KINDS: &[&str] = &["WORKSPACE_ADMISSION","INTEGRATION_ADMISSION"];
-const ADMISSION_CHECK_STATUSES: &[&str] = &["PASS","FAIL","NOT_APPLICABLE"];
-const ADMISSION_VERDICTS: &[&str] = &["ADMITTED","REFUSED","BLOCKED"];
+const TASK_ATTEMPT_STATES: &[&str] = &[
+    "CREATED",
+    "STARTED",
+    "RUNNING",
+    "CHECKPOINTED",
+    "COMPLETED",
+    "FAILED",
+    "TIMED_OUT",
+    "LOST",
+    "CANCELLED",
+    "UNKNOWN",
+];
+const EXECUTION_CLASSIFICATIONS: &[&str] = &[
+    "READ_ONLY",
+    "SAFE_WRITE",
+    "PROJECT_WRITE",
+    "EXECUTE",
+    "INSTALL",
+    "ADMIN_REQUIRED",
+];
+const LEASE_STATES: &[&str] = &[
+    "REQUESTED",
+    "ACTIVE",
+    "RENEWING",
+    "EXPIRED",
+    "RELEASED",
+    "REVOKED",
+];
+const ADMISSION_KINDS: &[&str] = &["WORKSPACE_ADMISSION", "INTEGRATION_ADMISSION"];
+const ADMISSION_CHECK_STATUSES: &[&str] = &["PASS", "FAIL", "NOT_APPLICABLE"];
+const ADMISSION_VERDICTS: &[&str] = &["ADMITTED", "REFUSED", "BLOCKED"];
 
-const AGENT_SESSION_STATES: &[&str] = &["DISCOVERED","HANDSHAKING","CAPABILITY_VALIDATING","WORKSPACE_VALIDATING","READY","ACTIVE","PAUSED","DRAINING","STOPPED","LOST","RECONNECTING","SYNCING","FAILED"];
-const AGENT_HEALTH_STATES: &[&str] = &["HEALTHY","DEGRADED","UNHEALTHY","UNKNOWN"];
-const EXECUTION_STATES: &[&str] = &["REQUESTED","POLICY_CHECK","APPROVED","STARTING","RUNNING","EXITED","EVIDENCE_CAPTURED","RECORDED","DENIED","TIMEOUT","CANCELED","CRASHED","CLEANUP_REQUIRED"];
-const PROCESS_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
-const RESOURCE_TYPES: &[&str] = &["CPU","RAM","GPU","DISK","PORT","WORKSPACE","PROCESS_SLOT","AGENT_SLOT","TOOLCHAIN"];
-const RESOURCE_MODES: &[&str] = &["EXCLUSIVE","SHARED"];
-const RESOURCE_STATES: &[&str] = &["HELD","RELEASED","EXPIRED","LOST"];
-const REVISION_SOURCES: &[&str] = &["CONTROLLER","AGENT","USER","EXTERNAL","GIT"];
-const REVISION_STATES: &[&str] = &["EXPECTED","VERIFIED","DRIFTED","UNKNOWN"];
-const CERTIFICATION_STATES: &[&str] = &["ASSERTED","INVALIDATED","EXPIRED"];
+const AGENT_SESSION_STATES: &[&str] = &[
+    "DISCOVERED",
+    "HANDSHAKING",
+    "CAPABILITY_VALIDATING",
+    "WORKSPACE_VALIDATING",
+    "READY",
+    "ACTIVE",
+    "PAUSED",
+    "DRAINING",
+    "STOPPED",
+    "LOST",
+    "RECONNECTING",
+    "SYNCING",
+    "FAILED",
+];
+const AGENT_HEALTH_STATES: &[&str] = &["HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"];
+const EXECUTION_STATES: &[&str] = &[
+    "REQUESTED",
+    "POLICY_CHECK",
+    "APPROVED",
+    "STARTING",
+    "RUNNING",
+    "EXITED",
+    "EVIDENCE_CAPTURED",
+    "RECORDED",
+    "DENIED",
+    "TIMEOUT",
+    "CANCELED",
+    "CRASHED",
+    "CLEANUP_REQUIRED",
+];
+const PROCESS_STATES: &[&str] = &["EXPECTED", "VERIFIED", "DRIFTED", "UNKNOWN"];
+const RESOURCE_TYPES: &[&str] = &[
+    "CPU",
+    "RAM",
+    "GPU",
+    "DISK",
+    "PORT",
+    "WORKSPACE",
+    "PROCESS_SLOT",
+    "AGENT_SLOT",
+    "TOOLCHAIN",
+];
+const RESOURCE_MODES: &[&str] = &["EXCLUSIVE", "SHARED"];
+const RESOURCE_STATES: &[&str] = &["HELD", "RELEASED", "EXPIRED", "LOST"];
+const REVISION_SOURCES: &[&str] = &["CONTROLLER", "AGENT", "USER", "EXTERNAL", "GIT"];
+const REVISION_STATES: &[&str] = &["EXPECTED", "VERIFIED", "DRIFTED", "UNKNOWN"];
+const CERTIFICATION_STATES: &[&str] = &["ASSERTED", "INVALIDATED", "EXPIRED"];
 
 impl Storage {
     /// Admit and activate one task lease in a single transaction.
@@ -4172,16 +4250,21 @@ impl Storage {
             });
         }
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let previous_epoch: i64 = tx.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [project_id],
-            |r| r.get(0),
-        ).optional().map_err(StorageError::Db)?
-        .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
-        let new_epoch = previous_epoch.checked_add(1).ok_or_else(|| StorageError::Malformed {
-            column: "projects.current_epoch".to_string(),
-            detail: "epoch overflow".to_string(),
-        })?;
+        let previous_epoch: i64 = tx
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [project_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
+        let new_epoch = previous_epoch
+            .checked_add(1)
+            .ok_or_else(|| StorageError::Malformed {
+                column: "projects.current_epoch".to_string(),
+                detail: "epoch overflow".to_string(),
+            })?;
 
         tx.execute(
             "UPDATE projects SET current_epoch=?1, updated_at=?2 WHERE project_id=?3 AND current_epoch=?4",
@@ -4189,8 +4272,9 @@ impl Storage {
         ).map_err(StorageError::Db)?;
         tx.execute(
             "INSERT INTO project_epochs (project_id,epoch,reason,created_at) VALUES (?1,?2,?3,?4)",
-            rusqlite::params![project_id,new_epoch,reason,now],
-        ).map_err(StorageError::Db)?;
+            rusqlite::params![project_id, new_epoch, reason, now],
+        )
+        .map_err(StorageError::Db)?;
 
         let invalidated = tx.execute(
             "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
@@ -4198,17 +4282,26 @@ impl Storage {
             rusqlite::params![now,project_id,new_epoch],
         ).map_err(StorageError::Db)? as u64;
 
-        append_event_in(&tx, &NewEvent {
-            event_id: format!("evt_epoch_{}_{}", project_id,new_epoch),
-            project_id: Some(project_id.to_owned()),
-            session_id: None,
-            event_type: "EPOCH_CHANGED".to_owned(),
-            correlation_id: Some(project_id.to_owned()),
-            causation_id: None,
-            epoch: Some(new_epoch),
-            payload_json: epoch_event_payload(project_id,previous_epoch,new_epoch,reason,invalidated)?,
-            created_at: now.to_owned(),
-        })?;
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: format!("evt_epoch_{}_{}", project_id, new_epoch),
+                project_id: Some(project_id.to_owned()),
+                session_id: None,
+                event_type: "EPOCH_CHANGED".to_owned(),
+                correlation_id: Some(project_id.to_owned()),
+                causation_id: None,
+                epoch: Some(new_epoch),
+                payload_json: epoch_event_payload(
+                    project_id,
+                    previous_epoch,
+                    new_epoch,
+                    reason,
+                    invalidated,
+                )?,
+                created_at: now.to_owned(),
+            },
+        )?;
         tx.commit().map_err(StorageError::Db)?;
 
         Ok(ProjectEpochAdvance {
@@ -4220,33 +4313,44 @@ impl Storage {
         })
     }
 
-    pub fn create_context_snapshot(&mut self, new: &NewContextSnapshot) -> Result<ContextSnapshotRecord> {
+    pub fn create_context_snapshot(
+        &mut self,
+        new: &NewContextSnapshot,
+    ) -> Result<ContextSnapshotRecord> {
         if new.epoch < 0 || new.scope.trim().is_empty() || new.created_at.trim().is_empty() {
             return Err(StorageError::Malformed {
                 column: "context_snapshots".to_string(),
                 detail: "epoch, scope and created_at must be valid".to_string(),
             });
         }
-        let pack: serde_json::Value = serde_json::from_str(&new.pack_json).map_err(|e| StorageError::Malformed {
-            column: "context_snapshots.pack_json".to_string(),
-            detail: format!("pack_json must be valid JSON: {e}"),
-        })?;
+        let pack: serde_json::Value =
+            serde_json::from_str(&new.pack_json).map_err(|e| StorageError::Malformed {
+                column: "context_snapshots.pack_json".to_string(),
+                detail: format!("pack_json must be valid JSON: {e}"),
+            })?;
         if !pack.is_object() {
             return Err(StorageError::Malformed {
                 column: "context_snapshots.pack_json".to_string(),
                 detail: "pack_json must be a JSON object".to_string(),
             });
         }
-        let current_epoch: i64 = self.conn.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [new.project_id.as_str()],
-            |r| r.get(0),
-        ).optional().map_err(StorageError::Db)?
-        .ok_or_else(|| StorageError::NotFound(format!("project {}", new.project_id)))?;
+        let current_epoch: i64 = self
+            .conn
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [new.project_id.as_str()],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("project {}", new.project_id)))?;
         if current_epoch != new.epoch {
             return Err(StorageError::Malformed {
                 column: "context_snapshots.epoch".to_string(),
-                detail: format!("snapshot epoch {} does not match project epoch {}", new.epoch, current_epoch),
+                detail: format!(
+                    "snapshot epoch {} does not match project epoch {}",
+                    new.epoch, current_epoch
+                ),
             });
         }
         let canonical = canonical::jcs_object(&[
@@ -4254,7 +4358,8 @@ impl Storage {
             ("epoch", canonical::JcsValue::Int(new.epoch)),
             ("scope", canonical::JcsValue::Str(&new.scope)),
             ("pack_json", canonical::JcsValue::Str(&new.pack_json)),
-        ]).map_err(|e| StorageError::Malformed {
+        ])
+        .map_err(|e| StorageError::Malformed {
             column: "context_snapshots.state_digest".to_string(),
             detail: format!("cannot canonicalize snapshot digest input: {e}"),
         })?;
@@ -4265,24 +4370,36 @@ impl Storage {
              VALUES (?1,?2,?3,?4,?5,?6,?7,NULL,NULL)",
             rusqlite::params![new.context_snapshot_id,new.project_id,new.epoch,new.scope,state_digest,new.pack_json,new.created_at],
         ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &NewEvent {
-            event_id: format!("evt_ctx_{}_CONTEXT_CREATED", new.context_snapshot_id),
-            project_id: Some(new.project_id.clone()),
-            session_id: None,
-            event_type: "CONTEXT_CREATED".to_owned(),
-            correlation_id: Some(new.context_snapshot_id.clone()),
-            causation_id: None,
-            epoch: Some(new.epoch),
-            payload_json: context_event_payload(&new.context_snapshot_id,&new.project_id,new.epoch,&state_digest)?,
-            created_at: new.created_at.clone(),
-        })?;
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: format!("evt_ctx_{}_CONTEXT_CREATED", new.context_snapshot_id),
+                project_id: Some(new.project_id.clone()),
+                session_id: None,
+                event_type: "CONTEXT_CREATED".to_owned(),
+                correlation_id: Some(new.context_snapshot_id.clone()),
+                causation_id: None,
+                epoch: Some(new.epoch),
+                payload_json: context_event_payload(
+                    &new.context_snapshot_id,
+                    &new.project_id,
+                    new.epoch,
+                    &state_digest,
+                )?,
+                created_at: new.created_at.clone(),
+            },
+        )?;
         tx.commit().map_err(StorageError::Db)?;
-        self.get_context_snapshot(&new.context_snapshot_id)?.ok_or_else(|| {
-            StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
-        })
+        self.get_context_snapshot(&new.context_snapshot_id)?
+            .ok_or_else(|| {
+                StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
+            })
     }
 
-    pub fn get_context_snapshot(&self, context_snapshot_id: &str) -> Result<Option<ContextSnapshotRecord>> {
+    pub fn get_context_snapshot(
+        &self,
+        context_snapshot_id: &str,
+    ) -> Result<Option<ContextSnapshotRecord>> {
         self.conn.query_row(
             "SELECT context_snapshot_id,project_id,epoch,scope,state_digest,pack_json,created_at,superseded_at,invalidated_at
              FROM context_snapshots WHERE context_snapshot_id=?1",
@@ -4305,12 +4422,16 @@ impl Storage {
         let Some(snapshot) = self.get_context_snapshot(context_snapshot_id)? else {
             return Ok(false);
         };
-        let current_epoch: i64 = self.conn.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [project_id],
-            |r| r.get(0),
-        ).optional().map_err(StorageError::Db)?
-        .unwrap_or(-1);
+        let current_epoch: i64 = self
+            .conn
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [project_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .unwrap_or(-1);
         Ok(snapshot.project_id == project_id
             && snapshot.epoch == expected_epoch
             && current_epoch == expected_epoch
@@ -4325,33 +4446,49 @@ impl Storage {
         superseded_at: &str,
     ) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let row: Option<(String,i64,String)> = tx.query_row(
-            "SELECT project_id,epoch,state_digest FROM context_snapshots
+        let row: Option<(String, i64, String)> = tx
+            .query_row(
+                "SELECT project_id,epoch,state_digest FROM context_snapshots
              WHERE context_snapshot_id=?1 AND invalidated_at IS NULL",
-            [context_snapshot_id],
-            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (project_id,epoch,state_digest) =
-            row.ok_or_else(|| StorageError::NotFound(format!("active context snapshot {context_snapshot_id}")))?;
-        let changed = tx.execute(
-            "UPDATE context_snapshots SET superseded_at=COALESCE(superseded_at,?1)
-             WHERE context_snapshot_id=?2 AND invalidated_at IS NULL",
-            rusqlite::params![superseded_at,context_snapshot_id],
-        ).map_err(StorageError::Db)?;
-        if changed != 1 {
-            return Err(StorageError::NotFound(format!("active context snapshot {context_snapshot_id}")));
-        }
-        append_event_in(&tx, &NewEvent {
-            event_id: format!("evt_ctx_{}_CONTEXT_SUPERSEDED", context_snapshot_id),
-            project_id: Some(project_id.clone()),
-            session_id: None,
-            event_type: "CONTEXT_SUPERSEDED".to_owned(),
-            correlation_id: Some(context_snapshot_id.to_owned()),
-            causation_id: None,
-            epoch: Some(epoch),
-            payload_json: context_event_payload(context_snapshot_id,&project_id,epoch,&state_digest)?,
-            created_at: superseded_at.to_owned(),
+                [context_snapshot_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (project_id, epoch, state_digest) = row.ok_or_else(|| {
+            StorageError::NotFound(format!("active context snapshot {context_snapshot_id}"))
         })?;
+        let changed = tx
+            .execute(
+                "UPDATE context_snapshots SET superseded_at=COALESCE(superseded_at,?1)
+             WHERE context_snapshot_id=?2 AND invalidated_at IS NULL",
+                rusqlite::params![superseded_at, context_snapshot_id],
+            )
+            .map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!(
+                "active context snapshot {context_snapshot_id}"
+            )));
+        }
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: format!("evt_ctx_{}_CONTEXT_SUPERSEDED", context_snapshot_id),
+                project_id: Some(project_id.clone()),
+                session_id: None,
+                event_type: "CONTEXT_SUPERSEDED".to_owned(),
+                correlation_id: Some(context_snapshot_id.to_owned()),
+                causation_id: None,
+                epoch: Some(epoch),
+                payload_json: context_event_payload(
+                    context_snapshot_id,
+                    &project_id,
+                    epoch,
+                    &state_digest,
+                )?,
+                created_at: superseded_at.to_owned(),
+            },
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -4367,27 +4504,40 @@ impl Storage {
             [context_snapshot_id],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (project_id,epoch,state_digest) =
-            row.ok_or_else(|| StorageError::NotFound(format!("context snapshot {context_snapshot_id}")))?;
-        let changed = tx.execute(
-            "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
-             WHERE context_snapshot_id=?2",
-            rusqlite::params![invalidated_at,context_snapshot_id],
-        ).map_err(StorageError::Db)?;
-        if changed != 1 {
-            return Err(StorageError::NotFound(format!("context snapshot {context_snapshot_id}")));
-        }
-        append_event_in(&tx, &NewEvent {
-            event_id: format!("evt_ctx_{}_CONTEXT_INVALIDATED", context_snapshot_id),
-            project_id: Some(project_id.clone()),
-            session_id: None,
-            event_type: "CONTEXT_INVALIDATED".to_owned(),
-            correlation_id: Some(context_snapshot_id.to_owned()),
-            causation_id: None,
-            epoch: Some(epoch),
-            payload_json: context_event_payload(context_snapshot_id,&project_id,epoch,&state_digest)?,
-            created_at: invalidated_at.to_owned(),
+        let (project_id, epoch, state_digest) = row.ok_or_else(|| {
+            StorageError::NotFound(format!("context snapshot {context_snapshot_id}"))
         })?;
+        let changed = tx
+            .execute(
+                "UPDATE context_snapshots SET invalidated_at=COALESCE(invalidated_at,?1)
+             WHERE context_snapshot_id=?2",
+                rusqlite::params![invalidated_at, context_snapshot_id],
+            )
+            .map_err(StorageError::Db)?;
+        if changed != 1 {
+            return Err(StorageError::NotFound(format!(
+                "context snapshot {context_snapshot_id}"
+            )));
+        }
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: format!("evt_ctx_{}_CONTEXT_INVALIDATED", context_snapshot_id),
+                project_id: Some(project_id.clone()),
+                session_id: None,
+                event_type: "CONTEXT_INVALIDATED".to_owned(),
+                correlation_id: Some(context_snapshot_id.to_owned()),
+                causation_id: None,
+                epoch: Some(epoch),
+                payload_json: context_event_payload(
+                    context_snapshot_id,
+                    &project_id,
+                    epoch,
+                    &state_digest,
+                )?,
+                created_at: invalidated_at.to_owned(),
+            },
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -4396,31 +4546,47 @@ impl Storage {
         if new.current_epoch < 0 || new.started_at.trim().is_empty() {
             return Err(StorageError::Malformed {
                 column: "agent_sessions".to_string(),
-                detail: "current_epoch must be non-negative and started_at must be non-empty".to_string(),
+                detail: "current_epoch must be non-negative and started_at must be non-empty"
+                    .to_string(),
             });
         }
-        let agent_project_ok: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
-            [new.agent_id.as_str()],
-            |r| r.get(0),
-        ).map_err(StorageError::Db)?;
+        let agent_project_ok: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
+                [new.agent_id.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if agent_project_ok != 1 {
-            return Err(StorageError::NotFound(format!("enabled agent {}", new.agent_id)));
+            return Err(StorageError::NotFound(format!(
+                "enabled agent {}",
+                new.agent_id
+            )));
         }
-        let project_exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM projects WHERE project_id=?1",
-            [new.project_id.as_str()],
-            |r| r.get(0),
-        ).map_err(StorageError::Db)?;
+        let project_exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE project_id=?1",
+                [new.project_id.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if project_exists != 1 {
-            return Err(StorageError::NotFound(format!("project {}", new.project_id)));
+            return Err(StorageError::NotFound(format!(
+                "project {}",
+                new.project_id
+            )));
         }
         if let Some(workspace_id) = new.workspace_id.as_deref() {
-            let exists: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
-                rusqlite::params![workspace_id,new.project_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+            let exists: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
+                    rusqlite::params![workspace_id, new.project_id],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if exists != 1 {
                 return Err(StorageError::Malformed {
                     column: "agent_sessions.workspace_id".to_string(),
@@ -4435,17 +4601,25 @@ impl Storage {
              VALUES (?1,?2,?3,NULL,'DISCOVERED','UNKNOWN',NULL,?4,NULL,?5,?6,NULL)",
             rusqlite::params![new.session_id,new.project_id,new.agent_id,new.workspace_id,new.current_epoch,new.started_at],
         ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            &new.session_id,
-            "AGENT_DISCOVERED",
-            &new.project_id,
-            &new.session_id,
-            &new.session_id,
-            None,
-            agent_session_event_payload(&new.project_id,&new.session_id,&new.agent_id,"DISCOVERED")?,
-            &new.started_at,
-        )?)?;
+            &transition_event(
+                &tx,
+                &new.session_id,
+                "AGENT_DISCOVERED",
+                &new.project_id,
+                &new.session_id,
+                &new.session_id,
+                None,
+                agent_session_event_payload(
+                    &new.project_id,
+                    &new.session_id,
+                    &new.agent_id,
+                    "DISCOVERED",
+                )?,
+                &new.started_at,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         self.get_agent_session(&new.session_id)?
             .ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))
@@ -4480,8 +4654,9 @@ impl Storage {
     ) -> Result<()> {
         if process_id <= 0 || now.trim().is_empty() {
             return Err(StorageError::Malformed {
-                column:"agent_sessions.process_id".to_string(),
-                detail:"activation requires a positive process_id and non-empty timestamp".to_string(),
+                column: "agent_sessions.process_id".to_string(),
+                detail: "activation requires a positive process_id and non-empty timestamp"
+                    .to_string(),
             });
         }
 
@@ -4497,13 +4672,23 @@ impl Storage {
                 )),
             ).optional().map_err(StorageError::Db)?;
 
-        let (project_id,agent_id,state,health,workspace_id,capability_snapshot_id,_old_native_epoch,current_epoch) =
-            row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+        let (
+            project_id,
+            agent_id,
+            state,
+            health,
+            workspace_id,
+            capability_snapshot_id,
+            _old_native_epoch,
+            current_epoch,
+        ) = row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
 
         if state != "READY" {
             return Err(StorageError::Malformed {
-                column:"agent_sessions.state".to_string(),
-                detail:format!("agent session {session_id} must be READY before activation; found {state}"),
+                column: "agent_sessions.state".to_string(),
+                detail: format!(
+                    "agent session {session_id} must be READY before activation; found {state}"
+                ),
             });
         }
         if health != "HEALTHY" || workspace_id.is_none() || capability_snapshot_id.is_none() {
@@ -4513,15 +4698,19 @@ impl Storage {
             });
         }
 
-        let project_epoch: i64 = tx.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [project_id.as_str()],
-            |r| r.get(0),
-        ).map_err(StorageError::Db)?;
+        let project_epoch: i64 = tx
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [project_id.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if project_epoch != current_epoch {
             return Err(StorageError::Malformed {
-                column:"agent_sessions.current_epoch".to_string(),
-                detail:format!("session epoch {current_epoch} is stale against project epoch {project_epoch}"),
+                column: "agent_sessions.current_epoch".to_string(),
+                detail: format!(
+                    "session epoch {current_epoch} is stale against project epoch {project_epoch}"
+                ),
             });
         }
 
@@ -4529,20 +4718,24 @@ impl Storage {
             "UPDATE agent_sessions
              SET process_id=?1,native_session_id=COALESCE(?2,native_session_id),state='ACTIVE'
              WHERE session_id=?3 AND state='READY' AND health_state='HEALTHY'",
-            rusqlite::params![process_id,native_session_id,session_id],
-        ).map_err(StorageError::Db)?;
+            rusqlite::params![process_id, native_session_id, session_id],
+        )
+        .map_err(StorageError::Db)?;
 
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            session_id,
-            "AGENT_ACTIVATED",
-            &project_id,
-            session_id,
-            session_id,
-            None,
-            agent_session_event_payload(&project_id,session_id,&agent_id,"ACTIVE")?,
-            now,
-        )?)?;
+            &transition_event(
+                &tx,
+                session_id,
+                "AGENT_ACTIVATED",
+                &project_id,
+                session_id,
+                session_id,
+                None,
+                agent_session_event_payload(&project_id, session_id, &agent_id, "ACTIVE")?,
+                now,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -4555,47 +4748,57 @@ impl Storage {
         event_type: &str,
         now: &str,
     ) -> Result<()> {
-        require_vocabulary("agent_sessions.expected_state", expected_state, AGENT_SESSION_STATES)?;
-        require_vocabulary("agent_sessions.next_state", next_state, AGENT_SESSION_STATES)?;
+        require_vocabulary(
+            "agent_sessions.expected_state",
+            expected_state,
+            AGENT_SESSION_STATES,
+        )?;
+        require_vocabulary(
+            "agent_sessions.next_state",
+            next_state,
+            AGENT_SESSION_STATES,
+        )?;
         let legal = matches!(
-            (expected_state,next_state),
-            ("DISCOVERED","HANDSHAKING")
-            | ("HANDSHAKING","CAPABILITY_VALIDATING")
-            | ("CAPABILITY_VALIDATING","WORKSPACE_VALIDATING")
-            | ("WORKSPACE_VALIDATING","READY")
-            | ("READY","ACTIVE")
-            | ("ACTIVE","PAUSED")
-            | ("PAUSED","DRAINING")
-            | ("DRAINING","STOPPED")
-            | ("READY","LOST")
-            | ("ACTIVE","LOST")
-            | ("LOST","RECONNECTING")
-            | ("RECONNECTING","SYNCING")
-            | ("SYNCING","READY")
-            | ("SYNCING","ACTIVE")
-            | ("SYNCING","FAILED")
+            (expected_state, next_state),
+            ("DISCOVERED", "HANDSHAKING")
+                | ("HANDSHAKING", "CAPABILITY_VALIDATING")
+                | ("CAPABILITY_VALIDATING", "WORKSPACE_VALIDATING")
+                | ("WORKSPACE_VALIDATING", "READY")
+                | ("READY", "ACTIVE")
+                | ("ACTIVE", "PAUSED")
+                | ("PAUSED", "DRAINING")
+                | ("DRAINING", "STOPPED")
+                | ("READY", "LOST")
+                | ("ACTIVE", "LOST")
+                | ("LOST", "RECONNECTING")
+                | ("RECONNECTING", "SYNCING")
+                | ("SYNCING", "READY")
+                | ("SYNCING", "ACTIVE")
+                | ("SYNCING", "FAILED")
         );
         if !legal {
             return Err(StorageError::Malformed {
                 column: "agent_sessions.state".to_string(),
-                detail: format!("illegal agent-session transition {expected_state} -> {next_state}"),
+                detail: format!(
+                    "illegal agent-session transition {expected_state} -> {next_state}"
+                ),
             });
         }
         let expected_event = match (expected_state, next_state) {
-            ("DISCOVERED","HANDSHAKING") => "AGENT_HANDSHAKING",
-            ("HANDSHAKING","CAPABILITY_VALIDATING") => "AGENT_CAPABILITY_VALIDATING",
-            ("CAPABILITY_VALIDATING","WORKSPACE_VALIDATING") => "AGENT_WORKSPACE_VALIDATING",
-            ("WORKSPACE_VALIDATING","READY") => "AGENT_READY",
-            ("READY","ACTIVE") => "AGENT_ACTIVATED",
-            ("ACTIVE","PAUSED") => "AGENT_PAUSED",
-            ("PAUSED","DRAINING") => "AGENT_DRAINING",
-            ("DRAINING","STOPPED") => "AGENT_STOPPED",
-            ("READY","LOST") | ("ACTIVE","LOST") => "AGENT_LOST",
-            ("LOST","RECONNECTING") => "AGENT_RECONNECTING",
-            ("RECONNECTING","SYNCING") => "AGENT_SYNCED",
-            ("SYNCING","READY") => "AGENT_READY",
-            ("SYNCING","ACTIVE") => "AGENT_ACTIVATED",
-            ("SYNCING","FAILED") => "AGENT_FAILED",
+            ("DISCOVERED", "HANDSHAKING") => "AGENT_HANDSHAKING",
+            ("HANDSHAKING", "CAPABILITY_VALIDATING") => "AGENT_CAPABILITY_VALIDATING",
+            ("CAPABILITY_VALIDATING", "WORKSPACE_VALIDATING") => "AGENT_WORKSPACE_VALIDATING",
+            ("WORKSPACE_VALIDATING", "READY") => "AGENT_READY",
+            ("READY", "ACTIVE") => "AGENT_ACTIVATED",
+            ("ACTIVE", "PAUSED") => "AGENT_PAUSED",
+            ("PAUSED", "DRAINING") => "AGENT_DRAINING",
+            ("DRAINING", "STOPPED") => "AGENT_STOPPED",
+            ("READY", "LOST") | ("ACTIVE", "LOST") => "AGENT_LOST",
+            ("LOST", "RECONNECTING") => "AGENT_RECONNECTING",
+            ("RECONNECTING", "SYNCING") => "AGENT_SYNCED",
+            ("SYNCING", "READY") => "AGENT_READY",
+            ("SYNCING", "ACTIVE") => "AGENT_ACTIVATED",
+            ("SYNCING", "FAILED") => "AGENT_FAILED",
             _ => "AGENT_SESSION_CHANGED",
         };
         if event_type != expected_event {
@@ -4611,12 +4814,14 @@ impl Storage {
             [session_id],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (project_id,agent_id,current,_) =
+        let (project_id, agent_id, current, _) =
             row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
         if current != expected_state {
             return Err(StorageError::Malformed {
                 column: "agent_sessions.state".to_string(),
-                detail: format!("compare-and-swap failed: expected {expected_state}, found {current}"),
+                detail: format!(
+                    "compare-and-swap failed: expected {expected_state}, found {current}"
+                ),
             });
         }
         if next_state == "READY" {
@@ -4626,18 +4831,23 @@ impl Storage {
                 [session_id],
                 |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)),
             ).map_err(StorageError::Db)?;
-            let (ready_project,ready_workspace,ready_caps,ready_health,ready_epoch) = ready_facts;
+            let (ready_project, ready_workspace, ready_caps, ready_health, ready_epoch) =
+                ready_facts;
             if ready_workspace.is_none() || ready_caps.is_none() || ready_health != "HEALTHY" {
                 return Err(StorageError::Malformed {
-                    column:"agent_sessions".to_string(),
-                    detail:"READY requires workspace binding, capability snapshot and HEALTHY status".to_string(),
+                    column: "agent_sessions".to_string(),
+                    detail:
+                        "READY requires workspace binding, capability snapshot and HEALTHY status"
+                            .to_string(),
                 });
             }
-            let project_epoch: i64 = tx.query_row(
-                "SELECT current_epoch FROM projects WHERE project_id=?1",
-                [ready_project.as_str()],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+            let project_epoch: i64 = tx
+                .query_row(
+                    "SELECT current_epoch FROM projects WHERE project_id=?1",
+                    [ready_project.as_str()],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if project_epoch != ready_epoch {
                 return Err(StorageError::Malformed {
                     column:"agent_sessions.current_epoch".to_string(),
@@ -4645,27 +4855,32 @@ impl Storage {
                 });
             }
         }
-        let changed = tx.execute(
-            "UPDATE agent_sessions SET state=?1 WHERE session_id=?2 AND state=?3",
-            rusqlite::params![next_state,session_id,expected_state],
-        ).map_err(StorageError::Db)?;
+        let changed = tx
+            .execute(
+                "UPDATE agent_sessions SET state=?1 WHERE session_id=?2 AND state=?3",
+                rusqlite::params![next_state, session_id, expected_state],
+            )
+            .map_err(StorageError::Db)?;
         if changed != 1 {
             return Err(StorageError::Malformed {
                 column: "agent_sessions.state".to_string(),
                 detail: "agent-session state changed concurrently".to_string(),
             });
         }
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            session_id,
-            event_type,
-            &project_id,
-            session_id,
-            session_id,
-            None,
-            agent_session_event_payload(&project_id,session_id,&agent_id,next_state)?,
-            now,
-        )?)?;
+            &transition_event(
+                &tx,
+                session_id,
+                event_type,
+                &project_id,
+                session_id,
+                session_id,
+                None,
+                agent_session_event_payload(&project_id, session_id, &agent_id, next_state)?,
+                now,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -4689,13 +4904,17 @@ impl Storage {
             });
         }
 
-        let row: Option<(Option<i64>, Option<String>)> = self.conn.query_row(
-            "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id=?1",
-            [session_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (existing_process, existing_native) = row
-            .ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+        let row: Option<(Option<i64>, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id=?1",
+                [session_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (existing_process, existing_native) =
+            row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
 
         if let Some(existing) = existing_process {
             if existing != process_id {
@@ -4727,58 +4946,75 @@ impl Storage {
         health_state: &str,
         now: &str,
     ) -> Result<()> {
-        require_vocabulary("agent_sessions.health_state", health_state, AGENT_HEALTH_STATES)?;
+        require_vocabulary(
+            "agent_sessions.health_state",
+            health_state,
+            AGENT_HEALTH_STATES,
+        )?;
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let row: Option<(String,String,String,String)> = tx.query_row(
             "SELECT project_id,agent_id,state,health_state FROM agent_sessions WHERE session_id=?1",
             [session_id],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (project_id,agent_id,_state,current) =
+        let (project_id, agent_id, _state, current) =
             row.ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
         if current == health_state {
             return Ok(());
         }
         tx.execute(
             "UPDATE agent_sessions SET health_state=?1 WHERE session_id=?2",
-            rusqlite::params![health_state,session_id],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &NewEvent {
-            event_id: format!("evt_agent_{}_HEALTH_{}", session_id, health_state),
-            project_id: Some(project_id.clone()),
-            session_id: Some(session_id.to_owned()),
-            event_type: "AGENT_HEALTH_CHANGED".to_owned(),
-            correlation_id: Some(session_id.to_owned()),
-            causation_id: None,
-            epoch: None,
-            payload_json: agent_health_event_payload(session_id,&project_id,&agent_id,health_state)?,
-            created_at: now.to_owned(),
-        })?;
+            rusqlite::params![health_state, session_id],
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
+            &tx,
+            &NewEvent {
+                event_id: format!("evt_agent_{}_HEALTH_{}", session_id, health_state),
+                project_id: Some(project_id.clone()),
+                session_id: Some(session_id.to_owned()),
+                event_type: "AGENT_HEALTH_CHANGED".to_owned(),
+                correlation_id: Some(session_id.to_owned()),
+                causation_id: None,
+                epoch: None,
+                payload_json: agent_health_event_payload(
+                    session_id,
+                    &project_id,
+                    &agent_id,
+                    health_state,
+                )?,
+                created_at: now.to_owned(),
+            },
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
 
     pub fn insert_agent_capability_snapshot(&self, new: &NewAgentCapabilitySnapshot) -> Result<()> {
-        let caps: serde_json::Value = serde_json::from_str(&new.capabilities_json).map_err(|e| StorageError::Malformed {
-            column:"agent_capabilities.capabilities_json".to_string(),
-            detail:format!("must be valid JSON object: {e}"),
-        })?;
+        let caps: serde_json::Value =
+            serde_json::from_str(&new.capabilities_json).map_err(|e| StorageError::Malformed {
+                column: "agent_capabilities.capabilities_json".to_string(),
+                detail: format!("must be valid JSON object: {e}"),
+            })?;
         if !caps.is_object() {
             return Err(StorageError::Malformed {
-                column:"agent_capabilities.capabilities_json".to_string(),
-                detail:"capabilities_json must be a JSON object".to_string(),
+                column: "agent_capabilities.capabilities_json".to_string(),
+                detail: "capabilities_json must be a JSON object".to_string(),
             });
         }
-        if let Some(session_id)=new.session_id.as_deref() {
-            let matches:i64=self.conn.query_row(
-                "SELECT COUNT(*) FROM agent_sessions WHERE session_id=?1 AND agent_id=?2",
-                rusqlite::params![session_id,new.agent_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
-            if matches!=1 {
+        if let Some(session_id) = new.session_id.as_deref() {
+            let matches: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM agent_sessions WHERE session_id=?1 AND agent_id=?2",
+                    rusqlite::params![session_id, new.agent_id],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
+            if matches != 1 {
                 return Err(StorageError::Malformed {
-                    column:"agent_capabilities.session_id".to_string(),
-                    detail:"capability session does not belong to agent".to_string(),
+                    column: "agent_capabilities.session_id".to_string(),
+                    detail: "capability session does not belong to agent".to_string(),
                 });
             }
         }
@@ -4804,8 +5040,8 @@ impl Storage {
             });
         }
 
-        let changed_paths: serde_json::Value =
-            serde_json::from_str(&new.changed_paths_json).map_err(|e| StorageError::Malformed {
+        let changed_paths: serde_json::Value = serde_json::from_str(&new.changed_paths_json)
+            .map_err(|e| StorageError::Malformed {
                 column: "admissions.changed_paths_json".to_string(),
                 detail: format!("must be valid JSON: {e}"),
             })?;
@@ -4833,33 +5069,44 @@ impl Storage {
         }
 
         const CHECK_IDS: &[&str] = &[
-            "REPOSITORY_IDENTITY","BASELINE_CLEAN","WORKTREE_ASSIGNED","PROTECTED_PATHS_DETERMINED",
-            "LEASE_BOUND","LEASE_OWNERSHIP","CONTEXT_FRESH","WORKSPACE_OWNERSHIP","BASE_CHECKPOINT_VALID",
-            "TESTS_EVIDENCE_PRESENT","PROTECTED_PATH_CLEAN","DEPENDENCY_CONFLICT_CLEAR",
+            "REPOSITORY_IDENTITY",
+            "BASELINE_CLEAN",
+            "WORKTREE_ASSIGNED",
+            "PROTECTED_PATHS_DETERMINED",
+            "LEASE_BOUND",
+            "LEASE_OWNERSHIP",
+            "CONTEXT_FRESH",
+            "WORKSPACE_OWNERSHIP",
+            "BASE_CHECKPOINT_VALID",
+            "TESTS_EVIDENCE_PRESENT",
+            "PROTECTED_PATH_CLEAN",
+            "DEPENDENCY_CONFLICT_CLEAR",
         ];
         for check in checks_array {
             let object = check.as_object().ok_or_else(|| StorageError::Malformed {
                 column: "admissions.checks_json".to_string(),
                 detail: "each check must be an object".to_string(),
             })?;
-            let id = object.get("check_id").and_then(serde_json::Value::as_str).ok_or_else(|| {
-                StorageError::Malformed {
+            let id = object
+                .get("check_id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| StorageError::Malformed {
                     column: "admissions.checks_json".to_string(),
                     detail: "every check requires check_id".to_string(),
-                }
-            })?;
+                })?;
             if !CHECK_IDS.contains(&id) {
                 return Err(StorageError::Malformed {
                     column: "admissions.checks_json".to_string(),
                     detail: format!("unknown check_id {id}"),
                 });
             }
-            let status = object.get("status").and_then(serde_json::Value::as_str).ok_or_else(|| {
-                StorageError::Malformed {
+            let status = object
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| StorageError::Malformed {
                     column: "admissions.checks_json".to_string(),
                     detail: format!("check {id} requires status"),
-                }
-            })?;
+                })?;
             if !ADMISSION_CHECK_STATUSES.contains(&status) {
                 return Err(StorageError::Malformed {
                     column: "admissions.checks_json".to_string(),
@@ -4868,9 +5115,9 @@ impl Storage {
             }
         }
 
-        let has_fail = checks_array.iter().any(|check|
-            check.get("status").and_then(serde_json::Value::as_str) == Some("FAIL")
-        );
+        let has_fail = checks_array
+            .iter()
+            .any(|check| check.get("status").and_then(serde_json::Value::as_str) == Some("FAIL"));
         if new.verdict == "ADMITTED" && has_fail {
             return Err(StorageError::Malformed {
                 column: "admissions.verdict".to_string(),
@@ -4879,14 +5126,19 @@ impl Storage {
         }
 
         if new.verdict == "REFUSED" {
-            let reasons = new.refusal_reasons_json.as_deref().ok_or_else(|| StorageError::Malformed {
-                column: "admissions.refusal_reasons_json".to_string(),
-                detail: "REFUSED admission requires at least one refusal reason".to_string(),
-            })?;
-            let reasons_value: serde_json::Value = serde_json::from_str(reasons).map_err(|e| StorageError::Malformed {
-                column: "admissions.refusal_reasons_json".to_string(),
-                detail: format!("must be valid JSON: {e}"),
-            })?;
+            let reasons =
+                new.refusal_reasons_json
+                    .as_deref()
+                    .ok_or_else(|| StorageError::Malformed {
+                        column: "admissions.refusal_reasons_json".to_string(),
+                        detail: "REFUSED admission requires at least one refusal reason"
+                            .to_string(),
+                    })?;
+            let reasons_value: serde_json::Value =
+                serde_json::from_str(reasons).map_err(|e| StorageError::Malformed {
+                    column: "admissions.refusal_reasons_json".to_string(),
+                    detail: format!("must be valid JSON: {e}"),
+                })?;
             let Some(reasons) = reasons_value.as_array() else {
                 return Err(StorageError::Malformed {
                     column: "admissions.refusal_reasons_json".to_string(),
@@ -4901,20 +5153,29 @@ impl Storage {
             }
         }
 
-        let project_exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM projects WHERE project_id=?1",
-            [new.project_id.as_str()],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let project_exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE project_id=?1",
+                [new.project_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if project_exists != 1 {
-            return Err(StorageError::NotFound(format!("project {}", new.project_id)));
+            return Err(StorageError::NotFound(format!(
+                "project {}",
+                new.project_id
+            )));
         }
 
-        let task_match: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2 AND workspace_id=?3",
-            rusqlite::params![new.task_id,new.project_id,new.workspace_id],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let task_match: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2 AND workspace_id=?3",
+                rusqlite::params![new.task_id, new.project_id, new.workspace_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if task_match != 1 {
             return Err(StorageError::Malformed {
                 column: "admissions.task_id".to_string(),
@@ -4922,11 +5183,15 @@ impl Storage {
             });
         }
 
-        let workspace_project: Option<String> = self.conn.query_row(
-            "SELECT project_id FROM workspaces WHERE workspace_id=?1",
-            [new.workspace_id.as_str()],
-            |row| row.get(0),
-        ).optional().map_err(StorageError::Db)?;
+        let workspace_project: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT project_id FROM workspaces WHERE workspace_id=?1",
+                [new.workspace_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
         if workspace_project.as_deref() != Some(new.project_id.as_str()) {
             return Err(StorageError::Malformed {
                 column: "admissions.workspace_id".to_string(),
@@ -4934,17 +5199,21 @@ impl Storage {
             });
         }
 
-        let effective_existing: Option<String> = self.conn.query_row(
-            "SELECT a.admission_id
+        let effective_existing: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT a.admission_id
              FROM admissions a
              WHERE a.project_id=?1 AND a.task_id=?2 AND a.workspace_id=?3 AND a.kind=?4
                AND NOT EXISTS (
                    SELECT 1 FROM admissions newer WHERE newer.supersedes_admission_id=a.admission_id
                )
              ORDER BY a.created_at DESC, a.admission_id DESC LIMIT 1",
-            rusqlite::params![new.project_id,new.task_id,new.workspace_id,new.kind],
-            |row| row.get(0),
-        ).optional().map_err(StorageError::Db)?;
+                rusqlite::params![new.project_id, new.task_id, new.workspace_id, new.kind],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
         match (effective_existing, new.supersedes_admission_id.as_deref()) {
             (Some(existing), Some(parent)) if existing != parent => {
                 return Err(StorageError::Malformed {
@@ -4954,8 +5223,8 @@ impl Storage {
             }
             (Some(existing), None) => {
                 return Err(StorageError::Malformed {
-                    column:"admissions.supersedes_admission_id".to_string(),
-                    detail:format!("re-evaluation must supersede current admission {existing}"),
+                    column: "admissions.supersedes_admission_id".to_string(),
+                    detail: format!("re-evaluation must supersede current admission {existing}"),
                 });
             }
             _ => {}
@@ -4969,12 +5238,16 @@ impl Storage {
             ).optional().map_err(StorageError::Db)?;
             match parent {
                 None => return Err(StorageError::NotFound(format!("admission {parent_id}"))),
-                Some((project,task,workspace,kind))
-                    if project != new.project_id || task != new.task_id || workspace != new.workspace_id || kind != new.kind =>
+                Some((project, task, workspace, kind))
+                    if project != new.project_id
+                        || task != new.task_id
+                        || workspace != new.workspace_id
+                        || kind != new.kind =>
                 {
                     return Err(StorageError::Malformed {
                         column: "admissions.supersedes_admission_id".to_string(),
-                        detail: "superseded admission does not match project/task/workspace/kind".to_string(),
+                        detail: "superseded admission does not match project/task/workspace/kind"
+                            .to_string(),
                     });
                 }
                 Some(_) => {}
@@ -4994,29 +5267,32 @@ impl Storage {
                 new.verdict,new.refusal_reasons_json,new.supersedes_admission_id,new.created_at
             ],
         ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            &format!("admission_{}", new.admission_id),
-            "ADMISSION_RECORDED",
-            &new.project_id,
-            new.session_id.as_deref().unwrap_or("workspace"),
-            &new.task_id,
-            new.supersedes_admission_id.as_deref(),
-            serde_json::json!({
-                "admission_id":new.admission_id,
-                "task_id":new.task_id,
-                "workspace_id":new.workspace_id,
-                "kind":new.kind,
-                "verdict":new.verdict
-            }).to_string(),
-            &new.created_at,
-        )?)?;
+            &transition_event(
+                &tx,
+                &format!("admission_{}", new.admission_id),
+                "ADMISSION_RECORDED",
+                &new.project_id,
+                new.session_id.as_deref().unwrap_or("workspace"),
+                &new.task_id,
+                new.supersedes_admission_id.as_deref(),
+                serde_json::json!({
+                    "admission_id":new.admission_id,
+                    "task_id":new.task_id,
+                    "workspace_id":new.workspace_id,
+                    "kind":new.kind,
+                    "verdict":new.verdict
+                })
+                .to_string(),
+                &new.created_at,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
 
-        self.get_latest_admission(&new.project_id,&new.task_id,&new.kind)?
-            .ok_or_else(|| StorageError::NotFound(format!("admission {}",new.admission_id)))
+        self.get_latest_admission(&new.project_id, &new.task_id, &new.kind)?
+            .ok_or_else(|| StorageError::NotFound(format!("admission {}", new.admission_id)))
     }
-
 
     pub fn get_latest_admission(
         &self,
@@ -5066,11 +5342,14 @@ impl Storage {
                 detail: "epoch must be non-negative and created_at must be non-empty".to_string(),
             });
         }
-        let exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
-            rusqlite::params![workspace_id,project_id],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspaces WHERE workspace_id=?1 AND project_id=?2",
+                rusqlite::params![workspace_id, project_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if exists != 1 {
             return Err(StorageError::Malformed {
                 column: "workspace_checkpoints.workspace_id".to_string(),
@@ -5090,7 +5369,7 @@ impl Storage {
                 });
             }
         }
-        const CHECKPOINT_KINDS: &[&str] = &["SAFE_POINT","BASELINE","INTEGRATION","ROLLBACK"];
+        const CHECKPOINT_KINDS: &[&str] = &["SAFE_POINT", "BASELINE", "INTEGRATION", "ROLLBACK"];
         if !CHECKPOINT_KINDS.contains(&kind) {
             return Err(StorageError::Malformed {
                 column: "workspace_checkpoints.kind".to_string(),
@@ -5098,9 +5377,12 @@ impl Storage {
             });
         }
         if let Some(head) = repository_head {
-            if head.trim().is_empty() { return Err(StorageError::Malformed {
-                column:"workspace_checkpoints.repository_head".to_string(), detail:"head cannot be empty".to_string()
-            });}
+            if head.trim().is_empty() {
+                return Err(StorageError::Malformed {
+                    column: "workspace_checkpoints.repository_head".to_string(),
+                    detail: "head cannot be empty".to_string(),
+                });
+            }
         }
         self.conn.execute(
             "INSERT INTO workspace_checkpoints (
@@ -5138,21 +5420,26 @@ impl Storage {
             });
         }
 
-        let agent_matches: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
-            [new.agent_id.as_str()],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let agent_matches: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM agents WHERE agent_id=?1 AND enabled=1",
+                [new.agent_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         let session: Option<(String,String,String,String,i64)> = tx.query_row(
             "SELECT project_id, agent_id, state, health_state, current_epoch FROM agent_sessions WHERE session_id=?1",
             [new.session_id.as_str()],
             |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
         ).optional().map_err(StorageError::Db)?;
         if agent_matches != 1 {
-            return Err(StorageError::NotFound(format!("enabled agent {}", new.agent_id)));
+            return Err(StorageError::NotFound(format!(
+                "enabled agent {}",
+                new.agent_id
+            )));
         }
-        let (session_project, session_agent, session_state, health, session_epoch) =
-            session.ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))?;
+        let (session_project, session_agent, session_state, health, session_epoch) = session
+            .ok_or_else(|| StorageError::NotFound(format!("agent session {}", new.session_id)))?;
         if session_project != new.project_id
             || session_agent != new.agent_id
             || !matches!(session_state.as_str(), "READY" | "ACTIVE")
@@ -5161,7 +5448,10 @@ impl Storage {
         {
             return Err(StorageError::Malformed {
                 column: "agent_sessions".to_string(),
-                detail: format!("agent session {} is not eligible for lease admission", new.session_id),
+                detail: format!(
+                    "agent session {} is not eligible for lease admission",
+                    new.session_id
+                ),
             });
         }
 
@@ -5170,9 +5460,10 @@ impl Storage {
             [new.context_snapshot_id.as_str()],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (context_project, context_epoch, context_digest, invalidated_at) = context.ok_or_else(|| {
-            StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
-        })?;
+        let (context_project, context_epoch, context_digest, invalidated_at) =
+            context.ok_or_else(|| {
+                StorageError::NotFound(format!("context snapshot {}", new.context_snapshot_id))
+            })?;
         if context_project != new.project_id
             || context_epoch != new.project_epoch
             || invalidated_at.is_some()
@@ -5186,8 +5477,9 @@ impl Storage {
 
         // A lease is never issued unless the latest workspace admission explicitly admitted this exact task/workspace
         // at the current epoch/context. This closes the path where a caller could bypass WorkspaceService's gate.
-        let admitted: Option<(String,i64,Option<String>)> = tx.query_row(
-            "SELECT admission_id, epoch, context_digest
+        let admitted: Option<(String, i64, Option<String>)> = tx
+            .query_row(
+                "SELECT admission_id, epoch, context_digest
              FROM admissions a
              WHERE a.project_id=?1 AND a.task_id=?2 AND a.workspace_id=?3
                AND a.kind='WORKSPACE_ADMISSION' AND a.verdict='ADMITTED'
@@ -5195,16 +5487,22 @@ impl Storage {
                    SELECT 1 FROM admissions newer WHERE newer.supersedes_admission_id=a.admission_id
                )
              ORDER BY a.created_at DESC, a.admission_id DESC LIMIT 1",
-            rusqlite::params![new.project_id,new.task_id,new.workspace_id],
-            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (admission_id, admission_epoch, admission_digest) = admitted.ok_or_else(|| {
-            StorageError::Malformed {
+                rusqlite::params![new.project_id, new.task_id, new.workspace_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (admission_id, admission_epoch, admission_digest) =
+            admitted.ok_or_else(|| StorageError::Malformed {
                 column: "admissions".to_string(),
-                detail: format!("task {} has no current ADMITTED WORKSPACE_ADMISSION", new.task_id),
-            }
-        })?;
-        if admission_epoch != new.project_epoch || admission_digest.as_deref() != Some(new.state_digest.as_str()) {
+                detail: format!(
+                    "task {} has no current ADMITTED WORKSPACE_ADMISSION",
+                    new.task_id
+                ),
+            })?;
+        if admission_epoch != new.project_epoch
+            || admission_digest.as_deref() != Some(new.state_digest.as_str())
+        {
             return Err(StorageError::Malformed {
                 column: "admissions".to_string(),
                 detail: format!("workspace admission {admission_id} is stale for the requested task epoch/context"),
@@ -5219,19 +5517,21 @@ impl Storage {
             [new.task_id.as_str()],
             |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (scope_paths,scope_caps,_scope_validation,scope_policy) = scope.ok_or_else(|| {
-            StorageError::Malformed {
+        let (scope_paths, scope_caps, _scope_validation, scope_policy) =
+            scope.ok_or_else(|| StorageError::Malformed {
                 column: "task_scopes".to_string(),
                 detail: format!("task {} has no durable task scope", new.task_id),
-            }
-        })?;
+            })?;
         if scope_paths != new.allowed_paths_json
             || scope_caps != new.required_capabilities_json
             || scope_policy != new.policy_scope
         {
             return Err(StorageError::Malformed {
                 column: "task_scopes".to_string(),
-                detail: format!("lease scope for task {} differs from authoritative task scope", new.task_id),
+                detail: format!(
+                    "lease scope for task {} differs from authoritative task scope",
+                    new.task_id
+                ),
             });
         }
 
@@ -5249,12 +5549,16 @@ impl Storage {
 
         for (column, json_field) in [
             ("task_leases.allowed_paths_json", &new.allowed_paths_json),
-            ("task_leases.required_capabilities_json", &new.required_capabilities_json),
+            (
+                "task_leases.required_capabilities_json",
+                &new.required_capabilities_json,
+            ),
         ] {
-            let value: serde_json::Value = serde_json::from_str(json_field).map_err(|e| StorageError::Malformed {
-                column: column.to_string(),
-                detail: format!("must be valid JSON: {e}"),
-            })?;
+            let value: serde_json::Value =
+                serde_json::from_str(json_field).map_err(|e| StorageError::Malformed {
+                    column: column.to_string(),
+                    detail: format!("must be valid JSON: {e}"),
+                })?;
             if !value.is_array() {
                 return Err(StorageError::Malformed {
                     column: column.to_string(),
@@ -5281,17 +5585,25 @@ impl Storage {
                 "UPDATE tasks SET status='LEASE_REQUESTED', updated_at=?1 WHERE task_id=?2 AND status='READY'",
                 rusqlite::params![new.issued_at, new.task_id],
             ).map_err(StorageError::Db)?;
-            append_event_in(&tx, &transition_event(
+            append_event_in(
                 &tx,
-                &format!("task_{}", new.task_id),
-                "LEASE_REQUESTED",
-                &new.project_id,
-                &new.session_id,
-                &new.lease_id,
-                None,
-                task_lease_task_event_payload(&new.project_id, &new.task_id, &new.lease_id, "LEASE_REQUESTED")?,
-                &new.issued_at,
-            )?)?;
+                &transition_event(
+                    &tx,
+                    &format!("task_{}", new.task_id),
+                    "LEASE_REQUESTED",
+                    &new.project_id,
+                    &new.session_id,
+                    &new.lease_id,
+                    None,
+                    task_lease_task_event_payload(
+                        &new.project_id,
+                        &new.task_id,
+                        &new.lease_id,
+                        "LEASE_REQUESTED",
+                    )?,
+                    &new.issued_at,
+                )?,
+            )?;
         }
 
         tx.execute(
@@ -5304,52 +5616,68 @@ impl Storage {
             ],
         ).map_err(StorageError::Db)?;
 
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            &format!("lease_{}", new.lease_id),
-            "LEASE_REQUESTED",
-            &new.project_id,
-            &new.session_id,
-            &new.lease_id,
-            None,
-            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"REQUESTED")?,
-            &new.issued_at,
-        )?)?;
+            &transition_event(
+                &tx,
+                &format!("lease_{}", new.lease_id),
+                "LEASE_REQUESTED",
+                &new.project_id,
+                &new.session_id,
+                &new.lease_id,
+                None,
+                lease_event_payload(&new.project_id, &new.task_id, &new.lease_id, 1, "REQUESTED")?,
+                &new.issued_at,
+            )?,
+        )?;
 
         tx.execute(
             "UPDATE task_leases SET status='ACTIVE' WHERE lease_id=?1 AND status='REQUESTED'",
             [new.lease_id.as_str()],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
             &tx,
-            &format!("lease_{}", new.lease_id),
-            "LEASE_ACTIVE",
-            &new.project_id,
-            &new.session_id,
-            &new.lease_id,
-            None,
-            lease_event_payload(&new.project_id,&new.task_id,&new.lease_id,1,"ACTIVE")?,
-            &new.issued_at,
-        )?)?;
+            &transition_event(
+                &tx,
+                &format!("lease_{}", new.lease_id),
+                "LEASE_ACTIVE",
+                &new.project_id,
+                &new.session_id,
+                &new.lease_id,
+                None,
+                lease_event_payload(&new.project_id, &new.task_id, &new.lease_id, 1, "ACTIVE")?,
+                &new.issued_at,
+            )?,
+        )?;
 
         tx.execute(
             "UPDATE tasks SET status='LEASED', updated_at=?1 WHERE task_id=?2 AND status='LEASE_REQUESTED'",
             rusqlite::params![new.issued_at, new.task_id],
         ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
+        append_event_in(
             &tx,
-            &format!("task_{}", new.task_id),
-            "TASK_LEASED",
-            &new.project_id,
-            &new.session_id,
-            &new.lease_id,
-            None,
-            task_lease_task_event_payload(&new.project_id,&new.task_id,&new.lease_id,"LEASED")?,
-            &new.issued_at,
-        )?)?;
+            &transition_event(
+                &tx,
+                &format!("task_{}", new.task_id),
+                "TASK_LEASED",
+                &new.project_id,
+                &new.session_id,
+                &new.lease_id,
+                None,
+                task_lease_task_event_payload(
+                    &new.project_id,
+                    &new.task_id,
+                    &new.lease_id,
+                    "LEASED",
+                )?,
+                &new.issued_at,
+            )?,
+        )?;
 
         tx.commit().map_err(StorageError::Db)?;
-        self.get_task_lease(&new.lease_id)?.ok_or_else(|| StorageError::NotFound(format!("task lease {}", new.lease_id)))
+        self.get_task_lease(&new.lease_id)?
+            .ok_or_else(|| StorageError::NotFound(format!("task lease {}", new.lease_id)))
     }
 
     pub fn get_task_lease(&self, lease_id: &str) -> Result<Option<TaskLeaseRecord>> {
@@ -5388,8 +5716,16 @@ impl Storage {
             [lease_id],
             |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?,row.get(7)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (task_id,project_id,agent_id,session_id,workspace_id,status,current_version,project_epoch) =
-            lease.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))?;
+        let (
+            task_id,
+            project_id,
+            agent_id,
+            session_id,
+            workspace_id,
+            status,
+            current_version,
+            project_epoch,
+        ) = lease.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))?;
         if status != "ACTIVE" {
             return Err(StorageError::Malformed {
                 column: "task_leases.status".to_string(),
@@ -5405,29 +5741,37 @@ impl Storage {
             });
         }
 
-        let session_ok: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM agent_sessions
+        let session_ok: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM agent_sessions
              WHERE session_id=?1 AND project_id=?2 AND agent_id=?3
                AND current_epoch=?4 AND state IN ('READY','ACTIVE') AND health_state='HEALTHY'",
-            rusqlite::params![session_id,project_id,agent_id,project_epoch],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+                rusqlite::params![session_id, project_id, agent_id, project_epoch],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if session_ok != 1 {
             return Err(StorageError::Malformed {
                 column: "agent_sessions".to_string(),
-                detail: format!("agent session {session_id} is no longer healthy for lease renewal"),
+                detail: format!(
+                    "agent session {session_id} is no longer healthy for lease renewal"
+                ),
             });
         }
 
-        let current_epoch: i64 = tx.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [project_id.as_str()],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let current_epoch: i64 = tx
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [project_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if current_epoch != project_epoch {
             return Err(StorageError::Malformed {
                 column: "task_leases.project_epoch".to_string(),
-                detail: format!("lease epoch {project_epoch} is stale against project epoch {current_epoch}"),
+                detail: format!(
+                    "lease epoch {project_epoch} is stale against project epoch {current_epoch}"
+                ),
             });
         }
 
@@ -5436,26 +5780,65 @@ impl Storage {
         tx.execute(
             "UPDATE task_leases SET status='RENEWING', heartbeat_at=?1, expires_at=?2
              WHERE lease_id=?3 AND status='ACTIVE' AND lease_version=?4",
-            rusqlite::params![heartbeat_at,expires_at,lease_id,expected_version],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
-            &tx,lease_id,"LEASE_RENEWED",&project_id,&session_id,lease_id,None,
-            lease_event_payload(&project_id,&task_id,lease_id,expected_version,"RENEWING")?,heartbeat_at
-        )?)?;
+            rusqlite::params![heartbeat_at, expires_at, lease_id, expected_version],
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
+            &tx,
+            &transition_event(
+                &tx,
+                lease_id,
+                "LEASE_RENEWED",
+                &project_id,
+                &session_id,
+                lease_id,
+                None,
+                lease_event_payload(
+                    &project_id,
+                    &task_id,
+                    lease_id,
+                    expected_version,
+                    "RENEWING",
+                )?,
+                heartbeat_at,
+            )?,
+        )?;
         tx.execute(
             "UPDATE task_leases SET status='ACTIVE' WHERE lease_id=?1 AND status='RENEWING' AND lease_version=?2",
             rusqlite::params![lease_id,expected_version],
         ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
-            &tx,lease_id,"LEASE_ACTIVE",&project_id,&session_id,lease_id,None,
-            lease_event_payload(&project_id,&task_id,lease_id,expected_version,"ACTIVE")?,heartbeat_at
-        )?)?;
+        append_event_in(
+            &tx,
+            &transition_event(
+                &tx,
+                lease_id,
+                "LEASE_ACTIVE",
+                &project_id,
+                &session_id,
+                lease_id,
+                None,
+                lease_event_payload(&project_id, &task_id, lease_id, expected_version, "ACTIVE")?,
+                heartbeat_at,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
-        self.get_task_lease(lease_id)?.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))
+        self.get_task_lease(lease_id)?
+            .ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))
     }
 
-    pub fn release_lease(&mut self, lease_id: &str, expected_version: i64, now: &str) -> Result<()> {
-        self.finish_lease(lease_id, expected_version, "RELEASED", "LEASE_RELEASED", now)
+    pub fn release_lease(
+        &mut self,
+        lease_id: &str,
+        expected_version: i64,
+        now: &str,
+    ) -> Result<()> {
+        self.finish_lease(
+            lease_id,
+            expected_version,
+            "RELEASED",
+            "LEASE_RELEASED",
+            now,
+        )
     }
 
     pub fn revoke_lease(&mut self, lease_id: &str, expected_version: i64, now: &str) -> Result<()> {
@@ -5464,29 +5847,51 @@ impl Storage {
 
     pub fn expire_due_leases(&mut self, now: &str) -> Result<u64> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let mut stmt = tx.prepare(
-            "SELECT lease_id,task_id,project_id,session_id,lease_version,status
+        let mut stmt = tx
+            .prepare(
+                "SELECT lease_id,task_id,project_id,session_id,lease_version,status
              FROM task_leases
              WHERE status IN ('ACTIVE','RENEWING') AND expires_at <= ?1
-             ORDER BY lease_id ASC"
-        ).map_err(StorageError::Db)?;
-        let leases: Vec<(String,String,String,String,i64,String)> = stmt.query_map([now], |row|
-            Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?))
-        ).map_err(StorageError::Db)?
-        .collect::<std::result::Result<Vec<_>,_>>()
-        .map_err(StorageError::Db)?;
+             ORDER BY lease_id ASC",
+            )
+            .map_err(StorageError::Db)?;
+        let leases: Vec<(String, String, String, String, i64, String)> = stmt
+            .query_map([now], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            })
+            .map_err(StorageError::Db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)?;
         drop(stmt);
 
-        for (lease_id,task_id,project_id,session_id,version,status) in &leases {
+        for (lease_id, task_id, project_id, session_id, version, status) in &leases {
             tx.execute(
                 "UPDATE task_leases SET status='EXPIRED'
                  WHERE lease_id=?1 AND status=?2 AND lease_version=?3",
-                rusqlite::params![lease_id,status,version],
-            ).map_err(StorageError::Db)?;
-            append_event_in(&tx, &transition_event(
-                &tx,&format!("lease_{lease_id}"),"LEASE_EXPIRED",&project_id,&session_id,lease_id,None,
-                lease_event_payload(&project_id,&task_id,lease_id,*version,"EXPIRED")?,now
-            )?)?;
+                rusqlite::params![lease_id, status, version],
+            )
+            .map_err(StorageError::Db)?;
+            append_event_in(
+                &tx,
+                &transition_event(
+                    &tx,
+                    &format!("lease_{lease_id}"),
+                    "LEASE_EXPIRED",
+                    &project_id,
+                    &session_id,
+                    lease_id,
+                    None,
+                    lease_event_payload(&project_id, &task_id, lease_id, *version, "EXPIRED")?,
+                    now,
+                )?,
+            )?;
 
             // Expiry is a cross-machine consequence owned by TaskService, but both durable mutations are persisted
             // in this one transaction so a crash cannot leave a freed lease with a still-claimed live task.
@@ -5496,10 +5901,25 @@ impl Storage {
                  WHERE task_id=?2 AND status IN ('LEASED','ACCEPTED','IN_PROGRESS','REPAIR_PENDING')",
                 rusqlite::params![now,task_id],
             ).map_err(StorageError::Db)?;
-            append_event_in(&tx, &transition_event(
-                &tx,&format!("task_{task_id}"),"LEASE_EXPIRED",&project_id,&session_id,lease_id,None,
-                task_lease_task_event_payload(&project_id,&task_id,lease_id,"LEASE_EXPIRED")?,now
-            )?)?;
+            append_event_in(
+                &tx,
+                &transition_event(
+                    &tx,
+                    &format!("task_{task_id}"),
+                    "LEASE_EXPIRED",
+                    &project_id,
+                    &session_id,
+                    lease_id,
+                    None,
+                    task_lease_task_event_payload(
+                        &project_id,
+                        &task_id,
+                        lease_id,
+                        "LEASE_EXPIRED",
+                    )?,
+                    now,
+                )?,
+            )?;
         }
 
         let count = leases.len() as u64;
@@ -5510,12 +5930,15 @@ impl Storage {
     /// Move an expired Task into recovery pending once no live lease remains.
     pub fn queue_expired_task_for_recovery(&mut self, task_id: &str, now: &str) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let task: Option<(String,String,String)> = tx.query_row(
-            "SELECT project_id,status FROM tasks WHERE task_id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?,row.get(1)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (project_id,status) =
+        let task: Option<(String, String)> = tx
+            .query_row(
+                "SELECT project_id,status FROM tasks WHERE task_id=?1",
+                [task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (project_id, status) =
             task.ok_or_else(|| StorageError::NotFound(format!("task {task_id}")))?;
         if status != "LEASE_EXPIRED" {
             return Err(StorageError::Malformed {
@@ -5537,12 +5960,28 @@ impl Storage {
         tx.execute(
             "UPDATE tasks SET status='RECOVERY_PENDING', updated_at=?1
              WHERE task_id=?2 AND status='LEASE_EXPIRED'",
-            rusqlite::params![now,task_id],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
-            &tx,&format!("task_{task_id}"),"LEASE_EXPIRED",&project_id,"recovery",task_id,None,
-            task_lease_task_event_payload(&project_id,task_id,"recovery","RECOVERY_PENDING")?,now
-        )?)?;
+            rusqlite::params![now, task_id],
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
+            &tx,
+            &transition_event(
+                &tx,
+                &format!("task_{task_id}"),
+                "LEASE_EXPIRED",
+                &project_id,
+                "recovery",
+                task_id,
+                None,
+                task_lease_task_event_payload(
+                    &project_id,
+                    task_id,
+                    "recovery",
+                    "RECOVERY_PENDING",
+                )?,
+                now,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -5550,12 +5989,15 @@ impl Storage {
     /// Return an expired task to READY only after all durable physical recovery signals are clear.
     pub fn recover_expired_task(&mut self, task_id: &str, now: &str) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let task: Option<(String,String,String,String)> = tx.query_row(
-            "SELECT project_id,status,workspace_id,current_epoch FROM tasks WHERE task_id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (project_id,status,workspace_id,current_epoch) =
+        let task: Option<(String, String, String, String)> = tx
+            .query_row(
+                "SELECT project_id,status,workspace_id,current_epoch FROM tasks WHERE task_id=?1",
+                [task_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (project_id, status, workspace_id, current_epoch) =
             task.ok_or_else(|| StorageError::NotFound(format!("task {task_id}")))?;
         if status != "RECOVERY_PENDING" {
             return Err(StorageError::Malformed {
@@ -5576,21 +6018,26 @@ impl Storage {
             });
         }
 
-        let unresolved_attempts: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM task_attempts
+        let unresolved_attempts: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM task_attempts
              WHERE task_id=?1 AND state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')",
-            [task_id],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+                [task_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if unresolved_attempts != 0 {
             return Err(StorageError::Malformed {
                 column: "task_attempts".to_string(),
-                detail: format!("task {task_id} still has {unresolved_attempts} unresolved attempt(s)"),
+                detail: format!(
+                    "task {task_id} still has {unresolved_attempts} unresolved attempt(s)"
+                ),
             });
         }
 
-        let unresolved_executions: i64 = tx.query_row(
-            "SELECT COUNT(*)
+        let unresolved_executions: i64 = tx
+            .query_row(
+                "SELECT COUNT(*)
              FROM command_executions ce
              WHERE ce.task_id=?1
                AND (
@@ -5607,9 +6054,10 @@ impl Storage {
                          )
                    )
                )",
-            [task_id],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+                [task_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if unresolved_executions != 0 {
             return Err(StorageError::Malformed {
                 column: "command_executions.status".to_string(),
@@ -5620,20 +6068,37 @@ impl Storage {
         tx.execute(
             "UPDATE tasks SET status='READY', updated_at=?1
              WHERE task_id=?2 AND status='RECOVERY_PENDING'",
-            rusqlite::params![now,task_id],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
-            &tx,&format!("task_{task_id}"),"TASK_READY",&project_id,&format!("recovery:{workspace_id}"),task_id,None,
-            task_lease_task_event_payload(&project_id,task_id,"recovery", "READY")?,now
-        )?)?;
+            rusqlite::params![now, task_id],
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
+            &tx,
+            &transition_event(
+                &tx,
+                &format!("task_{task_id}"),
+                "TASK_READY",
+                &project_id,
+                &format!("recovery:{workspace_id}"),
+                task_id,
+                None,
+                task_lease_task_event_payload(&project_id, task_id, "recovery", "READY")?,
+                now,
+            )?,
+        )?;
 
         tx.commit().map_err(StorageError::Db)?;
         let _ = current_epoch;
         Ok(())
     }
 
-
-    fn finish_lease(&mut self, lease_id: &str, expected_version: i64, terminal: &str, event_type: &str, now: &str) -> Result<()> {
+    fn finish_lease(
+        &mut self,
+        lease_id: &str,
+        expected_version: i64,
+        terminal: &str,
+        event_type: &str,
+        now: &str,
+    ) -> Result<()> {
         require_vocabulary("task_leases.status", terminal, LEASE_STATES)?;
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
         let lease: Option<(String,String,String,String,String,String,i64)> = tx.query_row(
@@ -5641,7 +6106,7 @@ impl Storage {
             [lease_id],
             |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (task_id,project_id,_agent_id,session_id,_workspace,status,current_version) =
+        let (task_id, project_id, _agent_id, session_id, _workspace, status, current_version) =
             lease.ok_or_else(|| StorageError::NotFound(format!("task lease {lease_id}")))?;
         if !matches!(status.as_str(), "ACTIVE" | "RENEWING") {
             return Err(StorageError::Malformed {
@@ -5659,12 +6124,23 @@ impl Storage {
         }
         tx.execute(
             "UPDATE task_leases SET status=?1 WHERE lease_id=?2 AND status=?3 AND lease_version=?4",
-            rusqlite::params![terminal,lease_id,status,expected_version],
-        ).map_err(StorageError::Db)?;
-        append_event_in(&tx, &transition_event(
-            &tx,lease_id,event_type,&project_id,&session_id,lease_id,None,
-            lease_event_payload(&project_id,&task_id,lease_id,current_version,terminal)?,now
-        )?)?;
+            rusqlite::params![terminal, lease_id, status, expected_version],
+        )
+        .map_err(StorageError::Db)?;
+        append_event_in(
+            &tx,
+            &transition_event(
+                &tx,
+                lease_id,
+                event_type,
+                &project_id,
+                &session_id,
+                lease_id,
+                None,
+                lease_event_payload(&project_id, &task_id, lease_id, current_version, terminal)?,
+                now,
+            )?,
+        )?;
         tx.commit().map_err(StorageError::Db)?;
         Ok(())
     }
@@ -5673,7 +6149,11 @@ impl Storage {
     ///
     /// Ordering is deterministic: higher explicit priority first, then oldest update, then oldest creation and
     /// finally task_id. The selector does not mutate state; TaskService remains the owner of lease admission.
-    pub fn list_schedulable_tasks(&self, project_id: &str, limit: usize) -> Result<Vec<SchedulableTask>> {
+    pub fn list_schedulable_tasks(
+        &self,
+        project_id: &str,
+        limit: usize,
+    ) -> Result<Vec<SchedulableTask>> {
         let limit = limit.max(1).min(256) as i64;
         let mut stmt = self.conn.prepare(
             "SELECT t.task_id, t.project_id, t.workspace_id, t.priority, t.risk, t.created_at, t.updated_at
@@ -5697,21 +6177,30 @@ impl Storage {
              ORDER BY t.priority DESC, t.updated_at ASC, t.created_at ASC, t.task_id ASC
              LIMIT ?2"
         ).map_err(StorageError::Db)?;
-        let rows = stmt.query_map(rusqlite::params![project_id, limit], |row| Ok(SchedulableTask {
-            task_id: row.get(0)?,
-            project_id: row.get(1)?,
-            workspace_id: row.get(2)?,
-            priority: row.get(3)?,
-            risk: row.get(4)?,
-            created_at: row.get(5)?,
-            updated_at: row.get(6)?,
-        })).map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+        let rows = stmt
+            .query_map(rusqlite::params![project_id, limit], |row| {
+                Ok(SchedulableTask {
+                    task_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    workspace_id: row.get(2)?,
+                    priority: row.get(3)?,
+                    risk: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 
     /// Persist a command execution after admission. Material attempts are re-fenced against the current lease.
     pub fn insert_command_execution(&self, new: &NewCommandExecution) -> Result<()> {
-        require_vocabulary("command_executions.classification", &new.classification, EXECUTION_CLASSIFICATIONS)?;
+        require_vocabulary(
+            "command_executions.classification",
+            &new.classification,
+            EXECUTION_CLASSIFICATIONS,
+        )?;
         require_vocabulary("command_executions.status", &new.status, EXECUTION_STATES)?;
         if new.timeout_seconds < 1 {
             return Err(StorageError::Malformed {
@@ -5719,10 +6208,11 @@ impl Storage {
                 detail: "timeout_seconds must be positive".to_string(),
             });
         }
-        let arguments: serde_json::Value = serde_json::from_str(&new.arguments_json).map_err(|e| StorageError::Malformed {
-            column: "command_executions.arguments_json".to_string(),
-            detail: format!("must be valid JSON: {e}"),
-        })?;
+        let arguments: serde_json::Value =
+            serde_json::from_str(&new.arguments_json).map_err(|e| StorageError::Malformed {
+                column: "command_executions.arguments_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
         if !arguments.is_array() {
             return Err(StorageError::Malformed {
                 column: "command_executions.arguments_json".to_string(),
@@ -5737,15 +6227,21 @@ impl Storage {
         }
 
         if let Some(task_id) = &new.task_id {
-            let matches: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM tasks WHERE task_id = ?1 AND project_id = ?2",
-                rusqlite::params![task_id, new.project_id],
-                |row| row.get(0),
-            ).map_err(StorageError::Db)?;
+            let matches: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE task_id = ?1 AND project_id = ?2",
+                    rusqlite::params![task_id, new.project_id],
+                    |row| row.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if matches != 1 {
                 return Err(StorageError::Malformed {
                     column: "command_executions.task_id".to_string(),
-                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                    detail: format!(
+                        "task {task_id} does not belong to project {}",
+                        new.project_id
+                    ),
                 });
             }
         }
@@ -5777,12 +6273,19 @@ impl Storage {
                 [snapshot_id.as_str()],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             ).optional().map_err(StorageError::Db)?;
-            let (project_id, workspace_id, task_id, execution_id) =
-                row.ok_or_else(|| StorageError::NotFound(format!("environment snapshot {snapshot_id}")))?;
+            let (project_id, workspace_id, task_id, execution_id) = row.ok_or_else(|| {
+                StorageError::NotFound(format!("environment snapshot {snapshot_id}"))
+            })?;
             if project_id != new.project_id
-                || workspace_id.as_deref().is_some_and(|id| id != new.workspace_id)
-                || task_id.as_deref().is_some_and(|id| Some(id) != new.task_id.as_ref())
-                || execution_id.as_deref().is_some_and(|id| id != new.execution_id)
+                || workspace_id
+                    .as_deref()
+                    .is_some_and(|id| id != new.workspace_id)
+                || task_id
+                    .as_deref()
+                    .is_some_and(|id| Some(id) != new.task_id.as_deref())
+                || execution_id
+                    .as_deref()
+                    .is_some_and(|id| id != new.execution_id)
             {
                 return Err(StorageError::Malformed {
                     column: "command_executions.environment_snapshot_id".to_string(),
@@ -5806,7 +6309,10 @@ impl Storage {
     }
 
     /// Read one durable command execution record.
-    pub fn get_command_execution(&self, execution_id: &str) -> Result<Option<CommandExecutionRecord>> {
+    pub fn get_command_execution(
+        &self,
+        execution_id: &str,
+    ) -> Result<Option<CommandExecutionRecord>> {
         self.conn.query_row(
             "SELECT execution_id,project_id,task_id,attempt_id,workspace_id,requested_by_agent_id,environment_snapshot_id,supersedes_binding_id,classification,executable,arguments_json,cwd,status,exit_code,started_at,ended_at,timeout_seconds,stdout_artifact_id,stderr_artifact_id FROM command_executions WHERE execution_id = ?1",
             [execution_id],
@@ -5843,22 +6349,30 @@ impl Storage {
         exit_code: Option<i64>,
         ended_at: Option<&str>,
     ) -> Result<()> {
-        require_vocabulary("command_executions.expected_state", expected_state, EXECUTION_STATES)?;
-        require_vocabulary("command_executions.next_state", next_state, EXECUTION_STATES)?;
+        require_vocabulary(
+            "command_executions.expected_state",
+            expected_state,
+            EXECUTION_STATES,
+        )?;
+        require_vocabulary(
+            "command_executions.next_state",
+            next_state,
+            EXECUTION_STATES,
+        )?;
         let legal = matches!(
             (expected_state, next_state),
-            ("REQUESTED","POLICY_CHECK")
-            | ("POLICY_CHECK","APPROVED")
-            | ("APPROVED","STARTING")
-            | ("STARTING","RUNNING")
-            | ("RUNNING","EXITED")
-            | ("EXITED","EVIDENCE_CAPTURED")
-            | ("EVIDENCE_CAPTURED","RECORDED")
-            | ("POLICY_CHECK","DENIED")
-            | ("RUNNING","TIMEOUT")
-            | ("RUNNING","CANCELED")
-            | ("RUNNING","CRASHED")
-            | ("CRASHED","CLEANUP_REQUIRED")
+            ("REQUESTED", "POLICY_CHECK")
+                | ("POLICY_CHECK", "APPROVED")
+                | ("APPROVED", "STARTING")
+                | ("STARTING", "RUNNING")
+                | ("RUNNING", "EXITED")
+                | ("EXITED", "EVIDENCE_CAPTURED")
+                | ("EVIDENCE_CAPTURED", "RECORDED")
+                | ("POLICY_CHECK", "DENIED")
+                | ("RUNNING", "TIMEOUT")
+                | ("RUNNING", "CANCELED")
+                | ("RUNNING", "CRASHED")
+                | ("CRASHED", "CLEANUP_REQUIRED")
         );
         if !legal {
             return Err(StorageError::Malformed {
@@ -5871,13 +6385,18 @@ impl Storage {
             rusqlite::params![next_state, exit_code, ended_at, execution_id, expected_state],
         ).map_err(StorageError::Db)?;
         if changed == 0 {
-            let exists = self.conn.query_row(
-                "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
-                [execution_id],
-                |row| row.get::<_,i64>(0),
-            ).map_err(StorageError::Db)?;
+            let exists = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
+                    [execution_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(StorageError::Db)?;
             if exists == 0 {
-                return Err(StorageError::NotFound(format!("command execution {execution_id}")));
+                return Err(StorageError::NotFound(format!(
+                    "command execution {execution_id}"
+                )));
             }
             return Err(StorageError::Malformed {
                 column: "command_executions.status".to_string(),
@@ -5896,13 +6415,19 @@ impl Storage {
                 detail: "pid values must be positive".to_string(),
             });
         }
-        let exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
-            [new.execution_id.as_str()],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_executions WHERE execution_id=?1",
+                [new.execution_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if exists != 1 {
-            return Err(StorageError::NotFound(format!("command execution {}", new.execution_id)));
+            return Err(StorageError::NotFound(format!(
+                "command execution {}",
+                new.execution_id
+            )));
         }
         self.conn.execute(
             "INSERT INTO process_records (process_record_id,execution_id,pid,parent_pid,state,observed_at) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -5919,15 +6444,20 @@ impl Storage {
             "SELECT process_record_id,execution_id,pid,parent_pid,state,observed_at
              FROM process_records WHERE execution_id=?1 ORDER BY observed_at DESC, process_record_id DESC"
         ).map_err(StorageError::Db)?;
-        let rows = stmt.query_map([execution_id], |row| Ok(ProcessRecord {
-            process_record_id: row.get(0)?,
-            execution_id: row.get(1)?,
-            pid: row.get(2)?,
-            parent_pid: row.get(3)?,
-            state: row.get(4)?,
-            observed_at: row.get(5)?,
-        })).map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+        let rows = stmt
+            .query_map([execution_id], |row| {
+                Ok(ProcessRecord {
+                    process_record_id: row.get(0)?,
+                    execution_id: row.get(1)?,
+                    pid: row.get(2)?,
+                    parent_pid: row.get(3)?,
+                    state: row.get(4)?,
+                    observed_at: row.get(5)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 
     /// The most recent process observation, if any.
@@ -5945,11 +6475,24 @@ impl Storage {
             [new.lease_id.as_str()],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?)),
         ).optional().map_err(StorageError::Db)?;
-        let (lease_task,lease_project,lease_agent,lease_session,lease_workspace,lease_epoch,lease_context,lease_version) =
-            match lease {
-                Some(v) => v,
-                None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))),
-            };
+        let (
+            lease_task,
+            lease_project,
+            lease_agent,
+            lease_session,
+            lease_workspace,
+            lease_epoch,
+            lease_context,
+            lease_version,
+        ) = match lease {
+            Some(v) => v,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "active lease {}",
+                    new.lease_id
+                )))
+            }
+        };
         if lease_version != new.fence_token {
             return Err(StorageError::StaleFence {
                 attempt_id: new.attempt_id.clone(),
@@ -5958,28 +6501,40 @@ impl Storage {
                 presented: new.fence_token,
             });
         }
-        if lease_task != new.task_id || lease_project != new.project_id || lease_agent != new.agent_id
-            || lease_session != new.session_id || lease_workspace != new.workspace_id
-            || lease_epoch != new.project_epoch || lease_context != new.context_snapshot_id {
+        if lease_task != new.task_id
+            || lease_project != new.project_id
+            || lease_agent != new.agent_id
+            || lease_session != new.session_id
+            || lease_workspace != new.workspace_id
+            || lease_epoch != new.project_epoch
+            || lease_context != new.context_snapshot_id
+        {
             return Err(StorageError::Malformed {
                 column: "task_attempts".to_string(),
                 detail: format!("attempt {} does not match the authoritative lease/task/workspace/context binding", new.attempt_id),
             });
         }
-        let scope: Option<i64> = self.conn.query_row(
-            "SELECT max_attempts FROM task_scopes WHERE task_id=?1",
-            [new.task_id.as_str()],
-            |row| row.get(0),
-        ).optional().map_err(StorageError::Db)?;
+        let scope: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT max_attempts FROM task_scopes WHERE task_id=?1",
+                [new.task_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
         let max_attempts = scope.ok_or_else(|| StorageError::Malformed {
-            column:"task_scopes.max_attempts".to_string(),
-            detail:format!("task {} has no durable retry budget", new.task_id),
+            column: "task_scopes.max_attempts".to_string(),
+            detail: format!("task {} has no durable retry budget", new.task_id),
         })?;
-        let previous_attempt_no: i64 = self.conn.query_row(
-            "SELECT COALESCE(MAX(attempt_no),0) FROM task_attempts WHERE task_id=?1",
-            [new.task_id.as_str()],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+        let previous_attempt_no: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(attempt_no),0) FROM task_attempts WHERE task_id=?1",
+                [new.task_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if new.attempt_no != previous_attempt_no + 1 || new.attempt_no > max_attempts {
             return Err(StorageError::Malformed {
                 column:"task_attempts.attempt_no".to_string(),
@@ -6002,40 +6557,51 @@ impl Storage {
         heartbeat_at: &str,
     ) -> Result<()> {
         self.verify_attempt_fence(attempt_id, lease_version)?;
-        let changed = self.conn.execute(
-            "UPDATE task_attempts
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE task_attempts
              SET heartbeat_at = ?1
              WHERE attempt_id = ?2 AND state IN ('STARTED','RUNNING','CHECKPOINTED')",
-            rusqlite::params![heartbeat_at, attempt_id],
-        ).map_err(StorageError::Db)?;
+                rusqlite::params![heartbeat_at, attempt_id],
+            )
+            .map_err(StorageError::Db)?;
         if changed != 1 {
-            return Err(StorageError::NotFound(format!("active task attempt {attempt_id}")));
+            return Err(StorageError::NotFound(format!(
+                "active task attempt {attempt_id}"
+            )));
         }
         Ok(())
     }
 
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
-    pub fn transition_task_attempt(&self, attempt_id: &str, expected_state: &str, next_state: &str, ended_at: Option<&str>) -> Result<()> {
+    pub fn transition_task_attempt(
+        &self,
+        attempt_id: &str,
+        expected_state: &str,
+        next_state: &str,
+        ended_at: Option<&str>,
+    ) -> Result<()> {
         require_vocabulary("task_attempts.next_state", next_state, TASK_ATTEMPT_STATES)?;
         let allowed = match (expected_state, next_state) {
-            ("CREATED","STARTED")
-            | ("STARTED","RUNNING")
-            | ("STARTED","FAILED")
-            | ("STARTED","CANCELLED")
-            | ("STARTED","UNKNOWN")
-            | ("RUNNING","CHECKPOINTED")
-            | ("RUNNING","COMPLETED")
-            | ("RUNNING","FAILED")
-            | ("RUNNING","TIMED_OUT")
-            | ("RUNNING","LOST")
-            | ("RUNNING","CANCELLED")
-            | ("RUNNING","UNKNOWN")
-            | ("CHECKPOINTED","RUNNING")
-            | ("CHECKPOINTED","COMPLETED")
-            | ("CHECKPOINTED","FAILED")
-            | ("CHECKPOINTED","LOST")
-            | ("CHECKPOINTED","CANCELLED")
-            | ("CHECKPOINTED","UNKNOWN") => true,
+            ("CREATED", "STARTED")
+            | ("STARTED", "RUNNING")
+            | ("STARTED", "FAILED")
+            | ("STARTED", "CANCELLED")
+            | ("STARTED", "UNKNOWN")
+            | ("RUNNING", "CHECKPOINTED")
+            | ("RUNNING", "COMPLETED")
+            | ("RUNNING", "FAILED")
+            | ("RUNNING", "TIMED_OUT")
+            | ("RUNNING", "LOST")
+            | ("RUNNING", "CANCELLED")
+            | ("RUNNING", "UNKNOWN")
+            | ("CHECKPOINTED", "RUNNING")
+            | ("CHECKPOINTED", "COMPLETED")
+            | ("CHECKPOINTED", "FAILED")
+            | ("CHECKPOINTED", "LOST")
+            | ("CHECKPOINTED", "CANCELLED")
+            | ("CHECKPOINTED", "UNKNOWN") => true,
             _ => false,
         };
         if !allowed {
@@ -6060,16 +6626,31 @@ impl Storage {
     }
 
     /// Refuse a material operation when the task lease version no longer equals the attempt's fence value.
-    pub fn verify_attempt_fence(&self, attempt_id: &str, presented_lease_version: i64) -> Result<()> {
+    pub fn verify_attempt_fence(
+        &self,
+        attempt_id: &str,
+        presented_lease_version: i64,
+    ) -> Result<()> {
         let row: Option<(i64, i64)> = self.conn.query_row(
             "SELECT ta.fence_token, tl.lease_version FROM task_attempts ta JOIN task_leases tl ON tl.lease_id = ta.lease_id WHERE ta.attempt_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED') AND tl.status IN ('ACTIVE','RENEWING')",
             [attempt_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional().map_err(StorageError::Db)?;
         match row {
-            Some((fence_token, current)) if fence_token == current && presented_lease_version == current => Ok(()),
-            Some((fence_token, current)) => Err(StorageError::StaleFence { attempt_id: attempt_id.to_string(), attempt_fence: fence_token, current_lease_version: current, presented: presented_lease_version }),
-            None => Err(StorageError::NotFound(format!("active lease for task attempt {attempt_id}"))),
+            Some((fence_token, current))
+                if fence_token == current && presented_lease_version == current =>
+            {
+                Ok(())
+            }
+            Some((fence_token, current)) => Err(StorageError::StaleFence {
+                attempt_id: attempt_id.to_string(),
+                attempt_fence: fence_token,
+                current_lease_version: current,
+                presented: presented_lease_version,
+            }),
+            None => Err(StorageError::NotFound(format!(
+                "active lease for task attempt {attempt_id}"
+            ))),
         }
     }
 
@@ -6097,7 +6678,7 @@ impl Storage {
                 [attempt_id],
                 |r| Ok((
                     r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,
-                    r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?,r.get(9)?,r.get(10)?
+                    r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?,r.get(9)?,r.get(10)?,r.get(11)?
                 )),
             ).optional().map_err(StorageError::Db)?;
 
@@ -6114,9 +6695,11 @@ impl Storage {
             lease_digest,
             superseded_at,
             invalidated_at,
-        ) = row.ok_or_else(|| StorageError::NotFound(format!("active task attempt {attempt_id}")))?;
+        ) =
+            row.ok_or_else(|| StorageError::NotFound(format!("active task attempt {attempt_id}")))?;
 
-        if fence_token != current_lease_version || presented_lease_version != current_lease_version {
+        if fence_token != current_lease_version || presented_lease_version != current_lease_version
+        {
             return Err(StorageError::StaleFence {
                 attempt_id: attempt_id.to_owned(),
                 attempt_fence: fence_token,
@@ -6126,15 +6709,21 @@ impl Storage {
         }
 
         if lease_status != "ACTIVE" && lease_status != "RENEWING" {
-            return Err(StorageError::NotFound(format!("active lease for task attempt {attempt_id}")));
+            return Err(StorageError::NotFound(format!(
+                "active lease for task attempt {attempt_id}"
+            )));
         }
 
-        let project_epoch: i64 = self.conn.query_row(
-            "SELECT current_epoch FROM projects WHERE project_id=?1",
-            [project_id.as_str()],
-            |r| r.get(0),
-        ).optional().map_err(StorageError::Db)?
-        .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
+        let project_epoch: i64 = self
+            .conn
+            .query_row(
+                "SELECT current_epoch FROM projects WHERE project_id=?1",
+                [project_id.as_str()],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("project {project_id}")))?;
 
         if attempt_epoch != project_epoch {
             return Err(StorageError::Malformed {
@@ -6146,14 +6735,25 @@ impl Storage {
             });
         }
 
-        let context: Option<(String,i64,String,Option<String>,Option<String>)> = self.conn.query_row(
-            "SELECT project_id,epoch,state_digest,superseded_at,invalidated_at
+        let context: Option<(String, i64, String, Option<String>, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT project_id,epoch,state_digest,superseded_at,invalidated_at
              FROM context_snapshots WHERE context_snapshot_id=?1",
-            [context_snapshot_id.as_str()],
-            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (context_project, context_epoch, context_digest, context_superseded, context_invalidated) =
-            context.ok_or_else(|| StorageError::NotFound(format!("context snapshot {context_snapshot_id}")))?;
+                [context_snapshot_id.as_str()],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (
+            context_project,
+            context_epoch,
+            context_digest,
+            context_superseded,
+            context_invalidated,
+        ) = context.ok_or_else(|| {
+            StorageError::NotFound(format!("context snapshot {context_snapshot_id}"))
+        })?;
 
         if context_project != project_id
             || context_epoch != attempt_epoch
@@ -6186,46 +6786,54 @@ impl Storage {
         expires_at: &str,
     ) -> Result<String> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let scope: Option<(String,i64)> = tx.query_row(
-            "SELECT policy_scope,max_parallel_children FROM task_scopes WHERE task_id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?,row.get(1)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (_policy_scope,max_children) = scope.ok_or_else(|| StorageError::Malformed {
-            column:"task_scopes.max_parallel_children".to_string(),
-            detail:format!("task {task_id} has no durable child budget"),
+        let scope: Option<(String, i64)> = tx
+            .query_row(
+                "SELECT policy_scope,max_parallel_children FROM task_scopes WHERE task_id=?1",
+                [task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (_policy_scope, max_children) = scope.ok_or_else(|| StorageError::Malformed {
+            column: "task_scopes.max_parallel_children".to_string(),
+            detail: format!("task {task_id} has no durable child budget"),
         })?;
 
-        let lease: Option<(String,String,i64)> = tx.query_row(
-            "SELECT project_id,agent_id,lease_version
+        let lease: Option<(String, String, i64)> = tx
+            .query_row(
+                "SELECT project_id,agent_id,lease_version
              FROM task_leases
              WHERE lease_id=?1 AND task_id=?2 AND status IN ('ACTIVE','RENEWING')",
-            rusqlite::params![lease_id,task_id],
-            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (project_id,_agent_id,current_version) = lease.ok_or_else(|| {
+                rusqlite::params![lease_id, task_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (project_id, _agent_id, current_version) = lease.ok_or_else(|| {
             StorageError::NotFound(format!("active lease {lease_id} for task {task_id}"))
         })?;
         if current_version != lease_version {
             return Err(StorageError::StaleFence {
-                attempt_id:format!("child_slot:{reservation_id}"),
-                attempt_fence:lease_version,
-                current_lease_version:current_version,
-                presented:lease_version,
+                attempt_id: format!("child_slot:{reservation_id}"),
+                attempt_fence: lease_version,
+                current_lease_version: current_version,
+                presented: lease_version,
             });
         }
 
-        let held: i64 = tx.query_row(
-            "SELECT COALESCE(SUM(quantity),0)
+        let held: i64 = tx
+            .query_row(
+                "SELECT COALESCE(SUM(quantity),0)
              FROM resource_reservations
              WHERE task_id=?1 AND resource_type='PROCESS_SLOT' AND state='HELD'",
-            [task_id],
-            |row| row.get(0),
-        ).map_err(StorageError::Db)?;
+                [task_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::Db)?;
         if held >= max_children {
             return Err(StorageError::Malformed {
-                column:"task_scopes.max_parallel_children".to_string(),
-                detail:format!("task {task_id} child budget exhausted: {held}/{max_children}"),
+                column: "task_scopes.max_parallel_children".to_string(),
+                detail: format!("task {task_id} child budget exhausted: {held}/{max_children}"),
             });
         }
 
@@ -6245,8 +6853,8 @@ impl Storage {
         }
         if slot > max_children {
             return Err(StorageError::Malformed {
-                column:"task_scopes.max_parallel_children".to_string(),
-                detail:format!("task {task_id} has no free child slot despite budget accounting"),
+                column: "task_scopes.max_parallel_children".to_string(),
+                detail: format!("task {task_id} has no free child slot despite budget accounting"),
             });
         }
         tx.execute(
@@ -6265,7 +6873,11 @@ impl Storage {
     }
 
     pub fn insert_resource_reservation(&self, new: &NewResourceReservation) -> Result<()> {
-        require_vocabulary("resource_reservations.resource_type", &new.resource_type, RESOURCE_TYPES)?;
+        require_vocabulary(
+            "resource_reservations.resource_type",
+            &new.resource_type,
+            RESOURCE_TYPES,
+        )?;
         require_vocabulary("resource_reservations.mode", &new.mode, RESOURCE_MODES)?;
         require_vocabulary("resource_reservations.state", &new.state, RESOURCE_STATES)?;
         if new.state != "HELD" {
@@ -6274,21 +6886,50 @@ impl Storage {
                 detail:"new reservations must enter through HELD; RELEASED/EXPIRED/LOST are observations or terminal outcomes".to_string(),
             });
         }
-        if new.quantity <= 0 || new.issued_at.trim().is_empty() || new.expires_at.trim().is_empty() {
+        if new.quantity <= 0 || new.issued_at.trim().is_empty() || new.expires_at.trim().is_empty()
+        {
             return Err(StorageError::Malformed {
-                column:"resource_reservations".to_string(),
-                detail:"quantity must be positive and issued_at/expires_at are required".to_string(),
+                column: "resource_reservations".to_string(),
+                detail: "quantity must be positive and issued_at/expires_at are required"
+                    .to_string(),
             });
         }
-        let lease: Option<(String,String,String,String,String,i64)> = self.conn.query_row(
-            "SELECT task_id, project_id, agent_id, session_id, workspace_id, lease_version
+        let lease: Option<(String, String, String, String, String, i64)> = self
+            .conn
+            .query_row(
+                "SELECT task_id, project_id, agent_id, session_id, workspace_id, lease_version
              FROM task_leases
              WHERE lease_id = ?1 AND status IN ('ACTIVE','RENEWING')",
-            [new.lease_id.as_str()],
-            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?)),
-        ).optional().map_err(StorageError::Db)?;
-        let (lease_task,lease_project,_lease_agent,_lease_session,_lease_workspace,lease_version) =
-            match lease { Some(v) => v, None => return Err(StorageError::NotFound(format!("active lease {}", new.lease_id))) };
+                [new.lease_id.as_str()],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (
+            lease_task,
+            lease_project,
+            _lease_agent,
+            _lease_session,
+            _lease_workspace,
+            lease_version,
+        ) = match lease {
+            Some(v) => v,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "active lease {}",
+                    new.lease_id
+                )))
+            }
+        };
         if lease_version != new.lease_version {
             return Err(StorageError::StaleFence {
                 attempt_id: format!("reservation:{}", new.reservation_id),
@@ -6300,7 +6941,10 @@ impl Storage {
         if lease_task != new.task_id || lease_project != new.project_id {
             return Err(StorageError::Malformed {
                 column: "resource_reservations".to_string(),
-                detail: format!("reservation {} does not match the authoritative task/project/lease binding", new.reservation_id),
+                detail: format!(
+                    "reservation {} does not match the authoritative task/project/lease binding",
+                    new.reservation_id
+                ),
             });
         }
         self.conn.execute(
@@ -6321,14 +6965,28 @@ impl Storage {
     }
 
     pub fn insert_environment_snapshot(&self, new: &NewEnvironmentSnapshot) -> Result<()> {
-        require_vocabulary("environment_snapshots.source", &new.source, &["PREFLIGHT", "EXECUTION", "VALIDATION"])?;
+        require_vocabulary(
+            "environment_snapshots.source",
+            &new.source,
+            &["PREFLIGHT", "EXECUTION", "VALIDATION"],
+        )?;
         let json_ok: i64 = self.conn.query_row(
-            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '
+            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '$') = 'object' THEN 1 ELSE 0 END",
+            [new.runtime_versions_json.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if json_ok != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "environment_snapshots.runtime_versions_json".to_string(),
+            });
+        }
+        self.conn.execute(
             "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
         ).map_err(StorageError::Db)?;
         Ok(())
     }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewBuild {
@@ -6393,42 +7051,74 @@ pub struct NewEvidence {
     pub created_at: String,
 }
 
-const BUILD_STATUSES: &[&str] = &["REQUESTED","RUNNING","PASSED","FAILED","BLOCKED"];
-const TEST_RUN_STATUSES: &[&str] = &["REQUESTED","RUNNING","PASSED","FAILED","BLOCKED"];
-const VALIDATION_VERDICTS: &[&str] = &["PASS","FAIL","BLOCKED"];
-const ARTIFACT_KINDS: &[&str] = &["FILE","DIRECTORY","DIFF","BUILD_OUTPUT","TEST_OUTPUT","LOG","BUNDLE"];
-const EVIDENCE_KINDS: &[&str] = &["COMMAND_RESULT","TEST_RESULT","BUILD_RESULT","RUNTIME_RESULT","REVIEW","FILE_HASH","DIFF","SCREENSHOT","LOG","PROBE_RESULT"];
+const BUILD_STATUSES: &[&str] = &["REQUESTED", "RUNNING", "PASSED", "FAILED", "BLOCKED"];
+const TEST_RUN_STATUSES: &[&str] = &["REQUESTED", "RUNNING", "PASSED", "FAILED", "BLOCKED"];
+const VALIDATION_VERDICTS: &[&str] = &["PASS", "FAIL", "BLOCKED"];
+const ARTIFACT_KINDS: &[&str] = &[
+    "FILE",
+    "DIRECTORY",
+    "DIFF",
+    "BUILD_OUTPUT",
+    "TEST_OUTPUT",
+    "LOG",
+    "BUNDLE",
+];
+const EVIDENCE_KINDS: &[&str] = &[
+    "COMMAND_RESULT",
+    "TEST_RESULT",
+    "BUILD_RESULT",
+    "RUNTIME_RESULT",
+    "REVIEW",
+    "FILE_HASH",
+    "DIFF",
+    "SCREENSHOT",
+    "LOG",
+    "PROBE_RESULT",
+];
 
 fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-
+impl Storage {
     pub fn insert_build(&self, new: &NewBuild) -> Result<()> {
         require_vocabulary("builds.status", &new.status, BUILD_STATUSES)?;
         if let Some(task_id) = new.task_id.as_deref() {
-            let matches: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
-                rusqlite::params![task_id, new.project_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+            let matches: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                    rusqlite::params![task_id, new.project_id],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if matches != 1 {
                 return Err(StorageError::Malformed {
                     column: "task_id".to_string(),
-                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                    detail: format!(
+                        "task {task_id} does not belong to project {}",
+                        new.project_id
+                    ),
                 });
             }
         }
         if let Some(execution_id) = new.command_execution_id.as_deref() {
-            let project_id: String = self.conn.query_row(
-                "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
-                |r| r.get(0)
-            ).optional().map_err(StorageError::Db)?
-             .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+            let project_id: String = self
+                .conn
+                .query_row(
+                    "SELECT project_id FROM command_executions WHERE execution_id=?1",
+                    [execution_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(StorageError::Db)?
+                .ok_or_else(|| {
+                    StorageError::NotFound(format!("command execution {execution_id}"))
+                })?;
             if project_id != new.project_id {
                 return Err(StorageError::Malformed {
-                    column:"builds.command_execution_id".to_string(),
-                    detail:"build command execution belongs to another project".to_string()
+                    column: "builds.command_execution_id".to_string(),
+                    detail: "build command execution belongs to another project".to_string(),
                 });
             }
         }
@@ -6442,28 +7132,41 @@ fn is_sha256_hex(value: &str) -> bool {
     pub fn insert_test_run(&self, new: &NewTestRun) -> Result<()> {
         require_vocabulary("test_runs.status", &new.status, TEST_RUN_STATUSES)?;
         if let Some(task_id) = new.task_id.as_deref() {
-            let matches: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
-                rusqlite::params![task_id, new.project_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+            let matches: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                    rusqlite::params![task_id, new.project_id],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if matches != 1 {
                 return Err(StorageError::Malformed {
                     column: "task_id".to_string(),
-                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                    detail: format!(
+                        "task {task_id} does not belong to project {}",
+                        new.project_id
+                    ),
                 });
             }
         }
         if let Some(execution_id) = new.command_execution_id.as_deref() {
-            let project_id: String = self.conn.query_row(
-                "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
-                |r| r.get(0)
-            ).optional().map_err(StorageError::Db)?
-             .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+            let project_id: String = self
+                .conn
+                .query_row(
+                    "SELECT project_id FROM command_executions WHERE execution_id=?1",
+                    [execution_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(StorageError::Db)?
+                .ok_or_else(|| {
+                    StorageError::NotFound(format!("command execution {execution_id}"))
+                })?;
             if project_id != new.project_id {
                 return Err(StorageError::Malformed {
-                    column:"test_runs.command_execution_id".to_string(),
-                    detail:"test command execution belongs to another project".to_string()
+                    column: "test_runs.command_execution_id".to_string(),
+                    detail: "test command execution belongs to another project".to_string(),
                 });
             }
         }
@@ -6476,32 +7179,51 @@ fn is_sha256_hex(value: &str) -> bool {
 
     pub fn insert_validation_run(&self, new: &NewValidationRun) -> Result<()> {
         require_vocabulary("validation_runs.verdict", &new.verdict, VALIDATION_VERDICTS)?;
-        let scope: serde_json::Value = serde_json::from_str(&new.scope_json).map_err(|e| StorageError::Malformed {
-            column:"validation_runs.scope_json".to_string(), detail:format!("must be valid JSON: {e}")
-        })?;
+        let scope: serde_json::Value =
+            serde_json::from_str(&new.scope_json).map_err(|e| StorageError::Malformed {
+                column: "validation_runs.scope_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
         if !scope.is_object() {
-            return Err(StorageError::Malformed { column:"validation_runs.scope_json".to_string(), detail:"scope_json must be a JSON object".to_string() });
+            return Err(StorageError::Malformed {
+                column: "validation_runs.scope_json".to_string(),
+                detail: "scope_json must be a JSON object".to_string(),
+            });
         }
-        let checks: serde_json::Value = serde_json::from_str(&new.checks_json).map_err(|e| StorageError::Malformed {
-            column:"validation_runs.checks_json".to_string(), detail:format!("must be valid JSON: {e}")
-        })?;
+        let checks: serde_json::Value =
+            serde_json::from_str(&new.checks_json).map_err(|e| StorageError::Malformed {
+                column: "validation_runs.checks_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
         if !checks.is_array() {
-            return Err(StorageError::Malformed { column:"validation_runs.checks_json".to_string(), detail:"checks_json must be a JSON array".to_string() });
+            return Err(StorageError::Malformed {
+                column: "validation_runs.checks_json".to_string(),
+                detail: "checks_json must be a JSON array".to_string(),
+            });
         }
-        if let Some(task_id)=new.task_id.as_deref() {
-            let matches: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
-                rusqlite::params![task_id, new.project_id],
-                |r| r.get(0),
-            ).map_err(StorageError::Db)?;
+        if let Some(task_id) = new.task_id.as_deref() {
+            let matches: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                    rusqlite::params![task_id, new.project_id],
+                    |r| r.get(0),
+                )
+                .map_err(StorageError::Db)?;
             if matches != 1 {
                 return Err(StorageError::Malformed {
                     column: "task_id".to_string(),
-                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                    detail: format!(
+                        "task {task_id} does not belong to project {}",
+                        new.project_id
+                    ),
                 });
             }
             if scope.get("task_id").and_then(serde_json::Value::as_str) != Some(task_id) {
-                return Err(StorageError::Malformed { column:"validation_runs.scope_json".to_string(), detail:"scope.task_id must match validation task_id".to_string() });
+                return Err(StorageError::Malformed {
+                    column: "validation_runs.scope_json".to_string(),
+                    detail: "scope.task_id must match validation task_id".to_string(),
+                });
             }
         }
         self.conn.execute(
@@ -6512,43 +7234,73 @@ fn is_sha256_hex(value: &str) -> bool {
     }
 
     pub fn insert_artifact(&self, new: &NewArtifact) -> Result<ArtifactRecord> {
-        require_vocabulary("artifacts.kind",&new.kind,ARTIFACT_KINDS)?;
+        require_vocabulary("artifacts.kind", &new.kind, ARTIFACT_KINDS)?;
         if new.artifact_id.trim().is_empty() || new.project_id.trim().is_empty() {
-            return Err(StorageError::Malformed { column:"artifacts".to_string(), detail:"artifact_id and project_id must be non-empty".to_string() });
+            return Err(StorageError::Malformed {
+                column: "artifacts".to_string(),
+                detail: "artifact_id and project_id must be non-empty".to_string(),
+            });
         }
-        if let Some(hash)=new.sha256.as_deref() {
+        if let Some(hash) = new.sha256.as_deref() {
             if !is_sha256_hex(hash) {
-                return Err(StorageError::Malformed { column:"artifacts.sha256".to_string(), detail:"sha256 must be exactly 64 hexadecimal characters".to_string() });
+                return Err(StorageError::Malformed {
+                    column: "artifacts.sha256".to_string(),
+                    detail: "sha256 must be exactly 64 hexadecimal characters".to_string(),
+                });
             }
         }
-        if new.size_bytes.is_some_and(|n| n<0) {
-            return Err(StorageError::Malformed { column:"artifacts.size_bytes".to_string(), detail:"size_bytes cannot be negative".to_string() });
+        if new.size_bytes.is_some_and(|n| n < 0) {
+            return Err(StorageError::Malformed {
+                column: "artifacts.size_bytes".to_string(),
+                detail: "size_bytes cannot be negative".to_string(),
+            });
         }
-        if !project_exists(&self.conn, &new.project_id)? { return Err(StorageError::UnknownProject { project_id: new.project_id.clone() }); }
+        if !project_exists(&self.conn, &new.project_id)? {
+            return Err(StorageError::UnknownProject {
+                project_id: new.project_id.clone(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO artifacts(artifact_id,project_id,kind,path,sha256,size_bytes,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
             rusqlite::params![new.artifact_id,new.project_id,new.kind,new.path,new.sha256,new.size_bytes,new.created_at],
         ).map_err(StorageError::Db)?;
         Ok(ArtifactRecord {
-            artifact_id:new.artifact_id.clone(), project_id:new.project_id.clone(), kind:new.kind.clone(),
-            path:new.path.clone(), sha256:new.sha256.clone(), size_bytes:new.size_bytes, created_at:new.created_at.clone()
+            artifact_id: new.artifact_id.clone(),
+            project_id: new.project_id.clone(),
+            kind: new.kind.clone(),
+            path: new.path.clone(),
+            sha256: new.sha256.clone(),
+            size_bytes: new.size_bytes,
+            created_at: new.created_at.clone(),
         })
     }
 
     pub fn insert_evidence(&self, new: &NewEvidence) -> Result<()> {
-        require_vocabulary("evidence.kind",&new.kind,EVIDENCE_KINDS)?;
-        let source: serde_json::Value = serde_json::from_str(&new.source_json).map_err(|e| StorageError::Malformed {
-            column:"evidence.source_json".to_string(), detail:format!("must be valid JSON: {e}")
-        })?;
+        require_vocabulary("evidence.kind", &new.kind, EVIDENCE_KINDS)?;
+        let source: serde_json::Value =
+            serde_json::from_str(&new.source_json).map_err(|e| StorageError::Malformed {
+                column: "evidence.source_json".to_string(),
+                detail: format!("must be valid JSON: {e}"),
+            })?;
         if !source.is_object() {
-            return Err(StorageError::Malformed { column:"evidence.source_json".to_string(), detail:"source_json must be a JSON object".to_string() });
+            return Err(StorageError::Malformed {
+                column: "evidence.source_json".to_string(),
+                detail: "source_json must be a JSON object".to_string(),
+            });
         }
-        if let Some(hash)=new.sha256.as_deref() {
+        if let Some(hash) = new.sha256.as_deref() {
             if !is_sha256_hex(hash) {
-                return Err(StorageError::Malformed { column:"evidence.sha256".to_string(), detail:"sha256 must be exactly 64 hexadecimal characters".to_string() });
+                return Err(StorageError::Malformed {
+                    column: "evidence.sha256".to_string(),
+                    detail: "sha256 must be exactly 64 hexadecimal characters".to_string(),
+                });
             }
         }
-        if !project_exists(&self.conn, &new.project_id)? { return Err(StorageError::UnknownProject { project_id: new.project_id.clone() }); }
+        if !project_exists(&self.conn, &new.project_id)? {
+            return Err(StorageError::UnknownProject {
+                project_id: new.project_id.clone(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO evidence(evidence_id,project_id,kind,source_json,sha256,created_at) VALUES(?1,?2,?3,?4,?5,?6)",
             rusqlite::params![new.evidence_id,new.project_id,new.kind,new.source_json,new.sha256,new.created_at],
@@ -6556,16 +7308,26 @@ fn is_sha256_hex(value: &str) -> bool {
         Ok(())
     }
 
-    pub fn link_evidence_artifact(&self,evidence_id:&str,artifact_id:&str)->Result<()> {
+    pub fn link_evidence_artifact(&self, evidence_id: &str, artifact_id: &str) -> Result<()> {
         let pair: Option<(String,String)> = self.conn.query_row(
             "SELECT e.project_id,a.project_id FROM evidence e JOIN artifacts a ON a.artifact_id=?2 WHERE e.evidence_id=?1",
             rusqlite::params![evidence_id,artifact_id], |r| Ok((r.get(0)?,r.get(1)?))
         ).optional().map_err(StorageError::Db)?;
-        let (ep,ap)=pair.ok_or_else(||StorageError::NotFound(format!("evidence/artifact {evidence_id}/{artifact_id}")))?;
-        if ep!=ap {
-            return Err(StorageError::Malformed { column:"evidence_links".to_string(), detail:"evidence and artifact must belong to the same project".to_string() });
+        let (ep, ap) = pair.ok_or_else(|| {
+            StorageError::NotFound(format!("evidence/artifact {evidence_id}/{artifact_id}"))
+        })?;
+        if ep != ap {
+            return Err(StorageError::Malformed {
+                column: "evidence_links".to_string(),
+                detail: "evidence and artifact must belong to the same project".to_string(),
+            });
         }
-        self.conn.execute("INSERT INTO evidence_links(evidence_id,artifact_id) VALUES(?1,?2)",rusqlite::params![evidence_id,artifact_id]).map_err(StorageError::Db)?;
+        self.conn
+            .execute(
+                "INSERT INTO evidence_links(evidence_id,artifact_id) VALUES(?1,?2)",
+                rusqlite::params![evidence_id, artifact_id],
+            )
+            .map_err(StorageError::Db)?;
         Ok(())
     }
 
@@ -6576,20 +7338,31 @@ fn is_sha256_hex(value: &str) -> bool {
         stdout_artifact_id: Option<&str>,
         stderr_artifact_id: Option<&str>,
     ) -> Result<()> {
-        let project_id: String = self.conn.query_row(
-            "SELECT project_id FROM command_executions WHERE execution_id=?1",
-            [execution_id],
-            |r| r.get(0),
-        ).optional().map_err(StorageError::Db)?
-        .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
-
-        for artifact_id in [stdout_artifact_id, stderr_artifact_id].into_iter().flatten() {
-            let artifact_project: String = self.conn.query_row(
-                "SELECT project_id FROM artifacts WHERE artifact_id=?1",
-                [artifact_id],
+        let project_id: String = self
+            .conn
+            .query_row(
+                "SELECT project_id FROM command_executions WHERE execution_id=?1",
+                [execution_id],
                 |r| r.get(0),
-            ).optional().map_err(StorageError::Db)?
-            .ok_or_else(|| StorageError::NotFound(format!("artifact {artifact_id}")))?;
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+
+        for artifact_id in [stdout_artifact_id, stderr_artifact_id]
+            .into_iter()
+            .flatten()
+        {
+            let artifact_project: String = self
+                .conn
+                .query_row(
+                    "SELECT project_id FROM artifacts WHERE artifact_id=?1",
+                    [artifact_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(StorageError::Db)?
+                .ok_or_else(|| StorageError::NotFound(format!("artifact {artifact_id}")))?;
             if artifact_project != project_id {
                 return Err(StorageError::Malformed {
                     column: "command_executions.artifact_id".to_string(),
@@ -6606,26 +7379,45 @@ fn is_sha256_hex(value: &str) -> bool {
     }
 
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
-        require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
-        let validation: Option<(String, Option<String>, String)> = self.conn.query_row(
-            "SELECT project_id, task_id, verdict FROM validation_runs WHERE validation_id = ?1",
-            [new.validation_id.as_str()],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-        ).optional().map_err(StorageError::Db)?;
+        require_vocabulary(
+            "certification_bindings.status",
+            &new.status,
+            CERTIFICATION_STATES,
+        )?;
+        let validation: Option<(String, Option<String>, String)> = self
+            .conn
+            .query_row(
+                "SELECT project_id, task_id, verdict FROM validation_runs WHERE validation_id = ?1",
+                [new.validation_id.as_str()],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
         let (validation_project, validation_task, validation_verdict) = match validation {
             Some(v) => v,
-            None => return Err(StorageError::NotFound(format!("validation run {}", new.validation_id))),
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "validation run {}",
+                    new.validation_id
+                )))
+            }
         };
         if validation_project != new.project_id {
             return Err(StorageError::Malformed {
                 column: "certification_bindings.project_id".to_string(),
-                detail: format!("validation {} belongs to project {validation_project}, not {}", new.validation_id, new.project_id),
+                detail: format!(
+                    "validation {} belongs to project {validation_project}, not {}",
+                    new.validation_id, new.project_id
+                ),
             });
         }
         if new.task_id != validation_task {
             return Err(StorageError::Malformed {
                 column: "certification_bindings.task_id".to_string(),
-                detail: format!("certification task scope does not match validation {} task scope", new.validation_id),
+                detail: format!(
+                    "certification task scope does not match validation {} task scope",
+                    new.validation_id
+                ),
             });
         }
         if new.status == "ASSERTED" && validation_verdict != "PASS" {
@@ -6651,8 +7443,16 @@ fn is_sha256_hex(value: &str) -> bool {
                 Some(_) => {}
             }
         }
-        let valid: i64 = self.conn.query_row(
-            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '
+        let hashes_ok: i64 = self.conn.query_row(
+            "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '$') = 'array' THEN 1 ELSE 0 END",
+            [new.artifact_hashes_json.as_str()],
+            |r| r.get(0),
+        ).map_err(StorageError::Db)?;
+        if hashes_ok != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "certification_bindings.artifact_hashes_json".to_string(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
@@ -6661,7 +7461,8 @@ fn is_sha256_hex(value: &str) -> bool {
     }
 }
 
-
+/// Durable recovery candidate for a non-terminal task attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoverableAttempt {
     pub attempt_id: String,
     pub task_id: String,
@@ -6707,18 +7508,27 @@ pub struct TraceLinkRecord {
 }
 
 const TRACE_LINK_TYPES: &[&str] = &[
-    "INTENT_REQUIREMENT","REQUIREMENT_ACCEPTANCE","REQUIREMENT_DECISION",
-    "DECISION_ARCHITECTURE","ARCHITECTURE_CONTRACT","CONTRACT_TASK",
-    "TASK_ATTEMPT","TASK_LEASE","ATTEMPT_CHECKPOINT","ATTEMPT_EXECUTION",
-    "LEASE_CHANGESET","CHANGESET_EXECUTION","EXECUTION_ENVIRONMENT",
-    "EXECUTION_EVIDENCE","EVIDENCE_REVIEW","REVIEW_VALIDATION",
-    "VALIDATION_ENVIRONMENT","VALIDATION_CERTIFICATION",
+    "INTENT_REQUIREMENT",
+    "REQUIREMENT_ACCEPTANCE",
+    "REQUIREMENT_DECISION",
+    "DECISION_ARCHITECTURE",
+    "ARCHITECTURE_CONTRACT",
+    "CONTRACT_TASK",
+    "TASK_ATTEMPT",
+    "TASK_LEASE",
+    "ATTEMPT_CHECKPOINT",
+    "ATTEMPT_EXECUTION",
+    "LEASE_CHANGESET",
+    "CHANGESET_EXECUTION",
+    "EXECUTION_ENVIRONMENT",
+    "EXECUTION_EVIDENCE",
+    "EVIDENCE_REVIEW",
+    "REVIEW_VALIDATION",
+    "VALIDATION_ENVIRONMENT",
+    "VALIDATION_CERTIFICATION",
 ];
 
-
-
 impl Storage {
-
     /// Transition a held resource reservation to RELEASED using the current lease fence.
     pub fn release_resource_reservation(
         &self,
@@ -6736,7 +7546,11 @@ impl Storage {
         ).optional().map_err(StorageError::Db)?;
         let (resource_type, resource_key, stored_version, current_version) = match row {
             Some(v) => v,
-            None => return Err(StorageError::NotFound(format!("held resource reservation {reservation_id}"))),
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "held resource reservation {reservation_id}"
+                )))
+            }
         };
         if stored_version != current_version || current_version != lease_version {
             return Err(StorageError::StaleFence {
@@ -6746,12 +7560,15 @@ impl Storage {
                 presented: lease_version,
             });
         }
-        let changed = self.conn.execute(
-            "UPDATE resource_reservations
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE resource_reservations
              SET state = 'RELEASED', released_at = ?1
              WHERE reservation_id = ?2 AND state = 'HELD' AND lease_version = ?3",
-            rusqlite::params![released_at, reservation_id, lease_version],
-        ).map_err(StorageError::Db)?;
+                rusqlite::params![released_at, reservation_id, lease_version],
+            )
+            .map_err(StorageError::Db)?;
         if changed != 1 {
             return Err(StorageError::Malformed {
                 column: "resource_reservations.state".to_string(),
@@ -6763,12 +7580,15 @@ impl Storage {
 
     /// Expire reservations whose durable deadline has passed. This is a recovery operation, not a lease-authorized mutation.
     pub fn expire_due_resource_reservations(&self, now: &str) -> Result<u64> {
-        let changed = self.conn.execute(
-            "UPDATE resource_reservations
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE resource_reservations
              SET state = 'EXPIRED'
-             WHERE state = 'HELD' AND expires_at <= ?1",
-            [now],
-        ).map_err(StorageError::Db)?;
+             WHERE state = 'HELD' AND CAST(expires_at AS INTEGER) <= CAST(?1 AS INTEGER)",
+                [now],
+            )
+            .map_err(StorageError::Db)?;
         Ok(changed as u64)
     }
 
@@ -6782,18 +7602,33 @@ impl Storage {
              WHERE ta.project_id = ?1 AND ta.state IN ('STARTED','RUNNING','CHECKPOINTED','UNKNOWN')
              ORDER BY ta.attempt_no ASC, ta.attempt_id ASC"
         ).map_err(StorageError::Db)?;
-        let rows = stmt.query_map([project_id], |r| Ok(RecoverableAttempt {
-            attempt_id:r.get(0)?, task_id:r.get(1)?, attempt_no:r.get(2)?,
-            state:r.get(3)?, lease_id:r.get(4)?, fence_token:r.get(5)?,
-            current_lease_version:r.get(6)?, lease_status:r.get(7)?
-        })).map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+        let rows = stmt
+            .query_map([project_id], |r| {
+                Ok(RecoverableAttempt {
+                    attempt_id: r.get(0)?,
+                    task_id: r.get(1)?,
+                    attempt_no: r.get(2)?,
+                    state: r.get(3)?,
+                    lease_id: r.get(4)?,
+                    fence_token: r.get(5)?,
+                    current_lease_version: r.get(6)?,
+                    lease_status: r.get(7)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 
     /// List nonterminal or cleanup-relevant executions and their newest physical process observation.
-    pub fn list_recoverable_executions(&self, project_id: &str) -> Result<Vec<RecoverableExecution>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT ce.execution_id, ce.project_id, ce.task_id, ce.attempt_id, ce.status,
+    pub fn list_recoverable_executions(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<RecoverableExecution>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT ce.execution_id, ce.project_id, ce.task_id, ce.attempt_id, ce.status,
                     pr.pid, pr.state
              FROM command_executions ce
              LEFT JOIN process_records pr
@@ -6819,13 +7654,24 @@ impl Storage {
                          )
                    )
                )
-             ORDER BY ce.execution_id ASC"
-        ).map_err(StorageError::Db)?;
-        let rows = stmt.query_map([project_id], |r| Ok(RecoverableExecution {
-            execution_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
-            attempt_id:r.get(3)?, status:r.get(4)?, pid:r.get(5)?, process_state:r.get(6)?
-        })).map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+             ORDER BY ce.execution_id ASC",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = stmt
+            .query_map([project_id], |r| {
+                Ok(RecoverableExecution {
+                    execution_id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    task_id: r.get(2)?,
+                    attempt_id: r.get(3)?,
+                    status: r.get(4)?,
+                    pid: r.get(5)?,
+                    process_state: r.get(6)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 
     /// Resolve the effective latest certification claim without mutating historical rows.
@@ -6834,8 +7680,10 @@ impl Storage {
         project_id: &str,
         task_id: Option<&str>,
     ) -> Result<Option<CertificationBindingRecord>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT b.certification_binding_id, b.project_id, b.task_id, b.validation_id,
                     b.workspace_revision_id, b.environment_snapshot_id, b.artifact_hashes_json,
                     b.validator_version, b.test_suite_version, b.status, b.supersedes_binding_id,
                     b.reason, b.created_at
@@ -6848,24 +7696,36 @@ impl Storage {
                )
              ORDER BY b.created_at DESC, b.certification_binding_id DESC
              LIMIT 1",
-        ).map_err(StorageError::Db)?;
-        stmt.query_row(
-            rusqlite::params![project_id, task_id],
-            |r| Ok(CertificationBindingRecord {
-                certification_binding_id:r.get(0)?, project_id:r.get(1)?, task_id:r.get(2)?,
-                validation_id:r.get(3)?, workspace_revision_id:r.get(4)?,
-                environment_snapshot_id:r.get(5)?, artifact_hashes_json:r.get(6)?,
-                validator_version:r.get(7)?, test_suite_version:r.get(8)?,
-                status:r.get(9)?, supersedes_binding_id:r.get(10)?,
-                reason:r.get(11)?, created_at:r.get(12)?
-            }),
-        ).optional().map_err(StorageError::Db)
+            )
+            .map_err(StorageError::Db)?;
+        stmt.query_row(rusqlite::params![project_id, task_id], |r| {
+            Ok(CertificationBindingRecord {
+                certification_binding_id: r.get(0)?,
+                project_id: r.get(1)?,
+                task_id: r.get(2)?,
+                validation_id: r.get(3)?,
+                workspace_revision_id: r.get(4)?,
+                environment_snapshot_id: r.get(5)?,
+                artifact_hashes_json: r.get(6)?,
+                validator_version: r.get(7)?,
+                test_suite_version: r.get(8)?,
+                status: r.get(9)?,
+                supersedes_binding_id: r.get(10)?,
+                reason: r.get(11)?,
+                created_at: r.get(12)?,
+            })
+        })
+        .optional()
+        .map_err(StorageError::Db)
     }
 
     pub fn insert_trace_link(&self, new: &NewTraceLink) -> Result<()> {
         require_vocabulary("trace_links.link_type", &new.link_type, TRACE_LINK_TYPES)?;
-        if new.source_type.trim().is_empty() || new.source_id.trim().is_empty()
-            || new.target_type.trim().is_empty() || new.target_id.trim().is_empty() {
+        if new.source_type.trim().is_empty()
+            || new.source_id.trim().is_empty()
+            || new.target_type.trim().is_empty()
+            || new.target_id.trim().is_empty()
+        {
             return Err(StorageError::Malformed {
                 column: "trace_links".to_string(),
                 detail: "source/target type and id must be non-empty".to_string(),
@@ -6888,35 +7748,21 @@ impl Storage {
              FROM trace_links WHERE project_id = ?1
              ORDER BY created_at ASC, trace_link_id ASC"
         ).map_err(StorageError::Db)?;
-        let rows = stmt.query_map([project_id], |r| Ok(TraceLinkRecord {
-            trace_link_id:r.get(0)?, project_id:r.get(1)?, link_type:r.get(2)?,
-            source_type:r.get(3)?, source_id:r.get(4)?, target_type:r.get(5)?,
-            target_id:r.get(6)?, created_at:r.get(7)?
-        })).map_err(StorageError::Db)?;
-        rows.collect::<std::result::Result<Vec<_>,_>>().map_err(StorageError::Db)
+        let rows = stmt
+            .query_map([project_id], |r| {
+                Ok(TraceLinkRecord {
+                    trace_link_id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    link_type: r.get(2)?,
+                    source_type: r.get(3)?,
+                    source_id: r.get(4)?,
+                    target_type: r.get(5)?,
+                    target_id: r.get(6)?,
+                    created_at: r.get(7)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 }
-) = 'object' THEN 1 ELSE 0 END",
-            [new.runtime_versions_json.as_str()],
-            |r| r.get(0),
-        ).map_err(StorageError::Db)?;
-        if json_ok != 1 {
-            return Err(StorageError::MalformedJson {
-                column: "environment_snapshots.runtime_versions_json".to_string(),
-            });
-        }
-        self.conn.execute(
-            "INSERT INTO environment_snapshots (environment_snapshot_id, project_id, workspace_id, task_id, execution_id, os_identity, runtime_versions_json, environment_policy_hash, source, captured_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-            rusqlite::params![new.environment_snapshot_id,new.project_id,new.workspace_id,new.task_id,new.execution_id,new.os_identity,new.runtime_versions_json,new.environment_policy_hash,new.source,new.captured_at],
-        ).map_err(StorageError::Db)?;
-        Ok(())
-    }
-
-
-}
-
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-
-/// Durable recovery candidate for a non-terminal task attempt.
-#[derive(Debug, Clone, PartialEq, Eq)]
