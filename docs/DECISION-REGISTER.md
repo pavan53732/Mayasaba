@@ -1226,3 +1226,24 @@ Compatibility impact: none. No code changes. This entry exists so that the absen
 
 Tests affected: none. `crates/storage/tests/orchestration_reliability.rs` exercises expiry and recovery directly at the storage layer, where they are correct, and those tests pass.
 
+### DEC-105 — GitHub Actions is permanently banned, and the ban is enforced
+Classification: REFINEMENT of DEC-036; supersedes nothing. HARD_LOCK.
+
+Decision: **no GitHub Actions workflow, and no file under `.github/` at all, may exist in this repository — permanently.** The repository lives on the user's own Windows PC, so there is nothing for a hosted runner to contribute and a great deal for it to break. GitHub is the source repository, history and code-review surface only: it stores and displays, it does not execute.
+
+This is not a restatement of DEC-036; it is the enforcement DEC-036 lacked. DEC-036 abandoned hosted CI and directed that the `.github/` tree be deleted, but nothing prevented a future contributor or agent from adding it back, and one did: a `verify.yml` workflow was added on 2026-10-06 and committed to `main`, re-creating exactly the tree DEC-036 had ordered removed. It was reverted in `21c7eea`. **A ban that nothing enforces is a preference, and a preference is what failed.**
+
+Enforcement: `tools/contracts/verify.mjs` now fails, by name, on any file present under `.github/`. The check deliberately covers the whole tree rather than only `workflows/`, because DEC-036's migration step was to delete the tree outright and because GitHub-side automation that is not a workflow — Dependabot, for instance — leaves the same boundary. The failure message names every offending path, states the ban, and says that removing the violation is the fix while editing the check to permit it is a decision that must be recorded first.
+
+Proof: the check is mutation-tested. `npm run verify:contracts:mutations` mutation `dec105-a` creates `.github/workflows/probe.yml` and requires the gate to fail naming that exact path. The mutation harness gained a `create` edit kind for this, and its `restore()` now deletes created files and prunes the empty directories, because a file it creates is untracked and `git checkout -- <file>` cannot remove it; leaving a probe workflow behind would be a real instance of the violation the mutation exists to demonstrate is caught.
+
+Reason: AGENTS.md §3 and DEC-003/DEC-004 make Mayasaba Windows-only and local-first, and DEC-036 makes verification a gate on the user's own machine. A hosted runner — including a Windows-hosted one, which is why `runs-on: windows-latest` is not an acceptable compromise — moves build and test execution off that machine. That is the boundary itself, not a detail of it. The abandoned hosted workflow also never closed the gap it was assumed to close: `.github/workflows/contracts.yml` ran on `ubuntu-latest` and executed only `node tools/contracts/verify.mjs`, so across its 87 recorded runs it never compiled a line of Rust.
+
+Compatibility impact: none on product behavior. No runtime code, MCF envelope, message, event, transition, schema or database is touched. Contributors gain a gate that fails loudly on a boundary violation instead of accepting it silently.
+
+Migration/reconciliation: `.github/` is absent and must remain absent. There is no migration because there is nothing to migrate — no database is distributed and nothing here is persisted.
+
+Tests affected: the gate's own mutation suite gains one mutation, `dec105-a`, which is the test of this decision. `npm run verify:local` is unaffected.
+
+Known limitations: (1) the check reads the working tree, so a `.github/` tree that exists only in some other branch is not reported by a run on this branch; the decision is enforced where it matters, at the commit that would introduce it, because the gate is wired to the pre-commit hook. (2) The check cannot distinguish a workflow from a harmless `.github/` file such as an issue template; it rejects both, deliberately, per DEC-036's "delete the tree" migration. Relaxing that is a new decision, not a bug fix.
+

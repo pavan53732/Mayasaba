@@ -539,6 +539,29 @@ const MUTATIONS = [
     ],
     expect: ["MAX_PENDING is 64 but bus-policies.json dispatch.max_pending is 1024"],
   },
+
+  // --- DEC-105: hosted CI is permanently banned, so the ban has to be able to fail.
+  {
+    id: "dec105-a",
+    what: ".github/workflows: a GitHub Actions workflow is added back to the repository",
+    check: GATE,
+    edits: [
+      {
+        create: true,
+        file: ".github/workflows/probe.yml",
+        content:
+          "name: probe\n" +
+          "on:\n" +
+          "  push:\n" +
+          "jobs:\n" +
+          "  noop:\n" +
+          "    runs-on: windows-latest\n" +
+          "    steps:\n" +
+          "      - run: echo not-permitted\n",
+      },
+    ],
+    expect: ["hosted CI artifact present: .github/workflows/probe.yml"],
+  },
 ];
 
 // -----------------------------------------------------------------------------------------------------------
@@ -632,11 +655,32 @@ if (atRisk.length) {
 
 const headBefore = git(["rev-parse", "HEAD"]).output.trim();
 const touched = new Set();
+const created = new Set();
 
 const restore = () => {
   const files = [...touched];
   if (files.length) git(["checkout", "--", ...files]);
   touched.clear();
+  // A file this harness created is untracked, so `git checkout -- <file>` cannot remove it, and the
+  // untracked-tolerant verification below would not report it either. Created files are therefore deleted
+  // here and their now-empty directories pruned. This matters more than tidiness: the mutation that proves
+  // hosted CI is banned creates a .github/workflows/ file, and leaving that behind would be a real instance
+  // of the violation the mutation exists to demonstrate is caught.
+  for (const file of created) {
+    const full = path.join(root, file);
+    fs.rmSync(full, { force: true });
+    let dir = path.dirname(full);
+    while (
+      dir !== root &&
+      dir.startsWith(root + path.sep) &&
+      fs.existsSync(dir) &&
+      fs.readdirSync(dir).length === 0
+    ) {
+      fs.rmdirSync(dir);
+      dir = path.dirname(dir);
+    }
+  }
+  created.clear();
   return git(["status", "--porcelain"])
     .output.split("\n")
     .filter((line) => line.trim() && !line.startsWith("??"))
@@ -683,6 +727,19 @@ const applyEdits = (mutation) => {
     return pending.get(file);
   };
   for (const edit of mutation.edits) {
+    if (edit.create === true) {
+      const full = path.join(root, edit.file);
+      if (fs.existsSync(full)) {
+        throw new Error(
+          `${mutation.id}: the create target ${edit.file} already exists. A create mutation must introduce a ` +
+            `file that is not there, so this is a harness defect rather than a check result.`
+        );
+      }
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, edit.content ?? "");
+      created.add(edit.file);
+      continue;
+    }
     const content = read(edit.file);
     if (edit.append !== undefined) {
       pending.set(edit.file, content + edit.append);
