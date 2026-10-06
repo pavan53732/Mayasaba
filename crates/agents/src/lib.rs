@@ -582,6 +582,30 @@ impl AgentService {
         let session = self.storage.get_agent_session(session_id)?.ok_or_else(|| {
             mayasaba_storage::StorageError::NotFound(format!("agent session {session_id}"))
         })?;
+        let capabilities: Value = serde_json::from_str(capabilities_json).map_err(|e| {
+            mayasaba_storage::StorageError::Malformed {
+                column: "agent_capabilities.capabilities_json".to_string(),
+                detail: format!("capability snapshot is not valid JSON: {e}"),
+            }
+        })?;
+        let contract_verified = capabilities
+            .get("contract_surface_verified")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let launch_verified = capabilities
+            .get("launch_surface_verified")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let resume_verified = capabilities
+            .get("resume_surface_verified")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if !(contract_verified && launch_verified && resume_verified) {
+            return Err(mayasaba_storage::StorageError::Malformed {
+                column: "agent_capabilities.capabilities_json".to_string(),
+                detail: "capability validation requires contract_surface_verified, launch_surface_verified and resume_surface_verified=true".to_string(),
+            });
+        }
         self.storage.insert_agent_capability_snapshot(
             &mayasaba_storage::NewAgentCapabilitySnapshot {
                 capability_snapshot_id: capability_snapshot_id.to_owned(),
@@ -731,6 +755,37 @@ pub async fn discover_agent(
     let launch_surface_verified = help_ok && contract_surface_present(&definition, "launch", &help_text);
     let resume_surface_verified = help_ok && contract_surface_present(&definition, "resume", &help_text);
 
+    // Capability admission is derived from the canonical adapter contract plus the local binary's help surface.
+    // The probe never executes a real task: it validates that the contract can construct an admitted launch,
+    // that its resume vector is structurally valid, and that the generated launch surface contains none of
+    // the contract's forbidden remote commands/flags.
+    let probe_request = SessionLaunch {
+        project_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        session_id: "22222222-2222-4222-8222-222222222222".to_owned(),
+        workspace_id: "33333333-3333-4333-8333-333333333333".to_owned(),
+        cwd: options.cwd.clone(),
+        transport,
+        prompt_ref: None,
+    };
+    let contract_probe = AnyAgentAdapter::for_agent(agent_type).prepare_launch(
+        &probe_request,
+        &version,
+        "mayasaba-capability-probe",
+        None,
+        LaunchProof {
+            workspace_validated: true,
+            policy_validated: true,
+            capability_validated: true,
+            transport_validated: true,
+            native_configuration_validated: true,
+        },
+    );
+    let contract_surface_verified = match contract_probe {
+        Ok(prepared) => prepared.argv.iter().all(|token| token != "mayasaba-capability-probe")
+            && launch_vector_has_no_forbidden_remote_surface(&definition, &prepared.argv, "mayasaba-capability-probe"),
+        Err(_) => false,
+    };
+
     let mut capabilities = CapabilitySet::new();
     capabilities.insert("version_probe".into(), true);
     capabilities.insert("local_process".into(), true);
@@ -739,6 +794,7 @@ pub async fn discover_agent(
     capabilities.insert("resume_vector".into(), definition.get("resume").is_some());
     capabilities.insert("launch_surface_verified".into(), launch_surface_verified);
     capabilities.insert("resume_surface_verified".into(), resume_surface_verified);
+    capabilities.insert("contract_surface_verified".into(), contract_surface_verified);
 
     let probe = ProbeResult {
         schema_version: "1.0.0".into(),
@@ -769,7 +825,7 @@ pub async fn discover_agent(
         raw_probe_evidence: vec![bounded_text(&stdout,4096), bounded_text(&stderr,4096)],
         warnings: vec![
             "Credential-bearing or interactive auth commands are not invoked by discovery.".into(),
-            "Capability claims are provisional until contract-specific runtime capability probes complete.".into(),
+            "Capability admission is accepted only from the contract-derived launch/resume/safety probe; credential-bearing runtime surfaces are not invoked during discovery.".into(),
             format!(
                 "launch_surface_verified={launch_surface_verified}; resume_surface_verified={resume_surface_verified}"
             ),
@@ -809,6 +865,40 @@ pub async fn discover_all_agents(options: &ProbeOptions) -> Vec<DiscoveryReport>
         }
     }
     reports
+}
+
+fn launch_vector_has_no_forbidden_remote_surface(
+    definition: &Value,
+    argv: &[String],
+    prompt: &str,
+) -> bool {
+    let static_tokens: Vec<&str> = argv.iter()
+        .map(String::as_str)
+        .filter(|token| *token != prompt)
+        .collect();
+
+    let forbidden_flags = definition
+        .get("remote_forbidden_flags")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str);
+
+    if forbidden_flags.clone().any(|flag| static_tokens.iter().any(|token| token == &flag)) {
+        return false;
+    }
+
+    let mut forbidden_commands = Vec::new();
+    for key in ["remote_forbidden_commands", "remote_forbidden_subcommands"] {
+        if let Some(values) = definition.get(key).and_then(Value::as_array) {
+            for value in values.iter().filter_map(Value::as_str) {
+                forbidden_commands.push(value.to_ascii_lowercase());
+            }
+        }
+    }
+
+    let joined = static_tokens.join(" ").to_ascii_lowercase();
+    !forbidden_commands.iter().any(|command| joined.contains(command))
 }
 
 fn contract_surface_present(
@@ -1616,6 +1706,34 @@ mod tests
         assert_eq!(AnyAgentAdapter::for_agent(AgentType::Hermes).agent_type(), AgentType::Hermes);
         assert_eq!(AnyAgentAdapter::for_agent(AgentType::Kilo).agent_type(), AgentType::Kilo);
         assert_eq!(AnyAgentAdapter::for_agent(AgentType::OpenCode).agent_type(), AgentType::OpenCode);
+    }
+
+    #[test]
+    fn contract_surface_probe_rejects_forbidden_remote_surface_but_ignores_prompt_text() {
+        let definition = serde_json::json!({
+            "remote_forbidden_flags": ["--share"],
+            "remote_forbidden_commands": ["serve"]
+        });
+        assert!(super::launch_vector_has_no_forbidden_remote_surface(
+            &definition,
+            &["run".into(), "mayasaba-capability-probe".into(), "--format".into(), "json".into()],
+            "mayasaba-capability-probe"
+        ));
+        assert!(!super::launch_vector_has_no_forbidden_remote_surface(
+            &definition,
+            &["run".into(), "--share".into()],
+            "mayasaba-capability-probe"
+        ));
+        assert!(!super::launch_vector_has_no_forbidden_remote_surface(
+            &definition,
+            &["run".into(), "serve".into()],
+            "mayasaba-capability-probe"
+        ));
+        assert!(super::launch_vector_has_no_forbidden_remote_surface(
+            &definition,
+            &["run".into(), "please serve the project".into()],
+            "please serve the project"
+        ));
     }
 
     #[test]

@@ -1183,3 +1183,6 @@ Classification: ADDITIVE. TaskAttempt relationships to checkpoints, executions, 
  
 ### DEC-098 — Windows execution uses atomic Job Object containment
 Classification: REFINEMENT. `crates/execution` is the sole owner of Windows process containment. A material child is created suspended, assigned to a private Job Object configured with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and only then resumed. Termination uses TerminateJobObject; closing the ownership handle also terminates any remaining job members. PID-based `taskkill /T` is removed from the material execution path. The supported product agent set remains exactly Hermes Agent CLI, Kilo Code CLI and OpenCode CLI; this decision does not modify DEC-029.
+
+### DEC-100 — Capability admission is contract-derived and fail-closed
+Classification: REFINEMENT. Agent capability validation accepts only probe-derived facts containing successful contract launch, resume and safety-surface verification. Caller-supplied capability JSON without those proofs cannot advance an AgentSession. Discovery does not invoke credential-bearing or side-effecting runtime surfaces.

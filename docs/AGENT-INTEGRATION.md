@@ -113,6 +113,8 @@ A task lease is not issued until READY.
 
 ## Capability negotiation
 
+Capability admission is controller-derived from the canonical transport contract plus local executable probes. A caller-supplied capability claim cannot advance a session to workspace validation unless the snapshot proves `contract_surface_verified`, `launch_surface_verified` and `resume_surface_verified`. Credential-bearing or side-effecting auth surfaces are not invoked during discovery.
+
 Capabilities are runtime-detected, including where applicable:
 
 - structured I/O
