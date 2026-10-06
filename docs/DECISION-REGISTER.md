@@ -413,7 +413,7 @@ Rejections are typed and machine-readable: `WORKSPACE_EMPTY`, `WORKSPACE_DOES_NO
 
 Not covered by this slice: indexing, recursive scanning, Git detection, workspace discovery, permissions dashboards, and task-scope generation.
 
-### DEC-049 intake attachments are context, not truth
+| DEC-107 | `ProjectContextAttachment` is canonically owned by `AttachmentService` in `crates/core`; `WorkspaceService` owns scope/locality validation, `EvidenceService` owns explicit capture/hash/provenance, and attachment storage remains a durable local reference under DEC-106 | HARD_LOCK |\n### DEC-049 intake attachments are context, not truth
 
 | Field | Value |
 |---|---|
