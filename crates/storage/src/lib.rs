@@ -6535,6 +6535,42 @@ fn is_sha256_hex(value: &str) -> bool {
         Ok(())
     }
 
+    /// Bind durable stdout/stderr artifact records to an existing command execution.
+    pub fn bind_execution_artifacts(
+        &self,
+        execution_id: &str,
+        stdout_artifact_id: Option<&str>,
+        stderr_artifact_id: Option<&str>,
+    ) -> Result<()> {
+        let project_id: String = self.conn.query_row(
+            "SELECT project_id FROM command_executions WHERE execution_id=?1",
+            [execution_id],
+            |r| r.get(0),
+        ).optional().map_err(StorageError::Db)?
+        .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+
+        for artifact_id in [stdout_artifact_id, stderr_artifact_id].into_iter().flatten() {
+            let artifact_project: String = self.conn.query_row(
+                "SELECT project_id FROM artifacts WHERE artifact_id=?1",
+                [artifact_id],
+                |r| r.get(0),
+            ).optional().map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("artifact {artifact_id}")))?;
+            if artifact_project != project_id {
+                return Err(StorageError::Malformed {
+                    column: "command_executions.artifact_id".to_string(),
+                    detail: format!("artifact {artifact_id} belongs to another project"),
+                });
+            }
+        }
+
+        self.conn.execute(
+            "UPDATE command_executions SET stdout_artifact_id=?1,stderr_artifact_id=?2 WHERE execution_id=?3",
+            rusqlite::params![stdout_artifact_id,stderr_artifact_id,execution_id],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
         let validation: Option<(String, Option<String>, String)> = self.conn.query_row(

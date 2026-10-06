@@ -285,3 +285,22 @@ fn artifact_evidence_and_validation_persistence_is_project_scoped() {
         source_json:"{}".into(), sha256:None, created_at:"22".into()
     }).is_err());
 }
+
+
+#[test]
+fn execution_artifacts_are_project_scoped() {
+    let storage = project_storage();
+    storage.insert_artifact(&NewArtifact {
+        artifact_id:"stdout_artifact".into(), project_id:"prj_exec".into(), kind:"LOG".into(),
+        path:Some(r"C:\logs\stdout.txt".into()), sha256:Some("a".repeat(64)),
+        size_bytes:Some(2), created_at:"30".into()
+    }).expect("artifact");
+    storage.insert_artifact(&NewArtifact {
+        artifact_id:"foreign_artifact".into(), project_id:"other_project".into(), kind:"LOG".into(),
+        path:Some(r"C:\logs\foreign.txt".into()), sha256:Some("b".repeat(64)),
+        size_bytes:Some(2), created_at:"30".into()
+    }).expect("foreign artifact");
+    storage.bind_execution_artifacts("exec_RUNNING", Some("stdout_artifact"), None)
+        .expect("binding");
+    assert!(storage.bind_execution_artifacts("exec_RUNNING", Some("foreign_artifact"), None).is_err());
+}
