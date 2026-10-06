@@ -953,6 +953,11 @@
       "service": "AgentService",
       "crate": "crates/agents"
     },
+    "AGENT_HEALTH_CHANGED": {
+      "kind": "service",
+      "service": "AgentService",
+      "crate": "crates/agents"
+    },
     "AGENT_HANDSHAKING": {
       "kind": "transition",
       "machines": [
