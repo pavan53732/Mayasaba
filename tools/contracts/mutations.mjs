@@ -686,18 +686,42 @@ const run = (cmd, args) => {
  * Returns them as repo-relative paths, because the harness runs every command from the repository root. Throws
  * rather than returning an empty list: a check that silently runs no tests would report success, which is the
  * one failure mode a check must not have.
+ *
+ * The script may name files or a glob, and a glob may be quoted so that a shell does not expand it. Both are
+ * resolved here instead of being handed to node, because handing a quoted glob straight through is how this
+ * check silently ran zero tests: `spawnSync` does not expand it, node matched nothing, and a run with no tests
+ * exits 0, so every frontend mutation reported "passed". The empty-list guard below did not catch it, because
+ * the list was not empty - it held one unusable entry.
  */
 function uiTestFiles() {
   const script = JSON.parse(
     fs.readFileSync(`${root}/apps/desktop/package.json`, "utf8"),
   ).scripts.test;
-  const files = script
-    .replace(/^node\s+--experimental-strip-types\s+--test\s+/, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((file) => `apps/desktop/${file}`);
-  if (files.length === 0 || !script.startsWith("node --experimental-strip-types --test ")) {
+  const prefix = "node --experimental-strip-types --test ";
+  if (!script.startsWith(prefix)) {
     throw new Error(`could not read the frontend test file list from apps/desktop/package.json: ${script}`);
+  }
+  const patterns = script
+    .slice(prefix.length)
+    .split(/\s+/)
+    .map((token) => token.replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+  const files = [];
+  for (const pattern of patterns) {
+    if (!/[*?]/.test(pattern)) {
+      files.push(`apps/desktop/${pattern}`);
+      continue;
+    }
+    for (const match of fs.globSync(pattern, { cwd: `${root}/apps/desktop` })) {
+      files.push(`apps/desktop/${match.replace(/\\/g, "/")}`);
+    }
+  }
+  const missing = files.filter((file) => !fs.existsSync(`${root}/${file}`));
+  if (files.length === 0 || missing.length) {
+    throw new Error(
+      `the frontend test script in apps/desktop/package.json resolved to no usable test file` +
+        `${missing.length ? ` (missing: ${missing.join(", ")})` : ""}: ${script}`,
+    );
   }
   return files;
 }
