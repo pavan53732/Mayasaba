@@ -7766,3 +7766,170 @@ impl Storage {
             .map_err(StorageError::Db)
     }
 }
+
+/// A `project_context_attachments` row to insert.
+///
+/// `content_hash` and `context_evidence_id` are deliberately absent. They are written only by the separate
+/// explicit capture and consume operations (DEC-106), so a caller of the attach path has no way to set them.
+/// That makes "attaching records a reference and nothing more" true by construction rather than by convention.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewProjectContextAttachment {
+    pub attachment_id: String,
+    pub project_id: String,
+    /// Immutable once written. A re-attachment is a new identity, never an update to this one.
+    pub source_path: String,
+    pub kind: String,
+    /// The workspace root the path was validated against, recorded so resolvability can be re-checked later
+    /// without trusting whatever the project's workspace root happens to be at that time.
+    pub authorized_scope: String,
+    pub provenance: String,
+    pub captured_at: String,
+}
+
+/// A `project_context_attachments` row as stored.
+///
+/// `content_hash` and `context_evidence_id` are nullable by design: they stay `None` until an explicit capture
+/// or consume, which is what lets those operations be added later without replacing the attachment's identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectContextAttachmentRecord {
+    pub attachment_id: String,
+    pub project_id: String,
+    pub source_path: String,
+    pub kind: String,
+    pub authorized_scope: String,
+    pub provenance: String,
+    pub lifecycle_state: String,
+    /// Set only by an explicit capture.
+    pub content_hash: Option<String>,
+    /// Set only by an explicit consume.
+    pub context_evidence_id: Option<String>,
+    pub captured_at: String,
+    pub updated_at: String,
+}
+
+const ATTACHMENT_KINDS: &[&str] = &["FILE", "DIRECTORY"];
+const ATTACHMENT_PROVENANCES: &[&str] = &["INITIAL_INTAKE_COMPOSER", "CHAT_COMPOSER"];
+
+fn attachment_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectContextAttachmentRecord> {
+    Ok(ProjectContextAttachmentRecord {
+        attachment_id: r.get(0)?,
+        project_id: r.get(1)?,
+        source_path: r.get(2)?,
+        kind: r.get(3)?,
+        authorized_scope: r.get(4)?,
+        provenance: r.get(5)?,
+        lifecycle_state: r.get(6)?,
+        content_hash: r.get(7)?,
+        context_evidence_id: r.get(8)?,
+        captured_at: r.get(9)?,
+        updated_at: r.get(10)?,
+    })
+}
+
+impl Storage {
+    /// Persist one attachment reference and its provenance.
+    ///
+    /// This writes a reference and nothing else. There is no content read, copy, hash or index on this path,
+    /// which is the DEC-106 rule expressed as an API rather than as a comment: capture and consume are separate
+    /// explicit operations, and neither is reachable from here.
+    pub fn insert_project_context_attachment(
+        &self,
+        new: &NewProjectContextAttachment,
+    ) -> Result<ProjectContextAttachmentRecord> {
+        require_vocabulary(
+            "project_context_attachments.kind",
+            &new.kind,
+            ATTACHMENT_KINDS,
+        )?;
+        require_vocabulary(
+            "project_context_attachments.provenance",
+            &new.provenance,
+            ATTACHMENT_PROVENANCES,
+        )?;
+        if new.attachment_id.trim().is_empty()
+            || new.source_path.trim().is_empty()
+            || new.authorized_scope.trim().is_empty()
+        {
+            return Err(StorageError::Malformed {
+                column: "project_context_attachments".to_string(),
+                detail: "attachment_id, source_path and authorized_scope must be non-empty"
+                    .to_string(),
+            });
+        }
+        if !project_exists(&self.conn, &new.project_id)? {
+            return Err(StorageError::UnknownProject {
+                project_id: new.project_id.clone(),
+            });
+        }
+        self.conn
+            .execute(
+                "INSERT INTO project_context_attachments
+                   (attachment_id, project_id, source_path, kind, authorized_scope, provenance,
+                    lifecycle_state, content_hash, context_evidence_id, captured_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'SELECTED', NULL, NULL, ?7, ?7)",
+                rusqlite::params![
+                    new.attachment_id,
+                    new.project_id,
+                    new.source_path,
+                    new.kind,
+                    new.authorized_scope,
+                    new.provenance,
+                    new.captured_at,
+                ],
+            )
+            .map_err(StorageError::Db)?;
+        self.get_project_context_attachment(&new.project_id, &new.attachment_id)
+    }
+
+    /// One stored attachment, scoped to its project.
+    ///
+    /// Project-scoped rather than looked up by attachment id alone, so a caller holding an id from one project
+    /// cannot read another project's attachment by presenting it.
+    pub fn get_project_context_attachment(
+        &self,
+        project_id: &str,
+        attachment_id: &str,
+    ) -> Result<ProjectContextAttachmentRecord> {
+        self.conn
+            .query_row(
+                "SELECT attachment_id, project_id, source_path, kind, authorized_scope, provenance,
+                        lifecycle_state, content_hash, context_evidence_id, captured_at, updated_at
+                 FROM project_context_attachments WHERE project_id = ?1 AND attachment_id = ?2",
+                rusqlite::params![project_id, attachment_id],
+                attachment_from_row,
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| {
+                StorageError::NotFound(format!(
+                    "attachment {attachment_id} in project {project_id}"
+                ))
+            })
+    }
+
+    /// A project's attachments, oldest first, so the list reads in the order the references were recorded.
+    ///
+    /// `rowid` is the tiebreaker because `captured_at` is not a total order: two attachments made in the same
+    /// clock tick share a stamp, and ordering those by `attachment_id` would order them by a hash - which is
+    /// to say arbitrarily. Insertion order is the order they were actually recorded, which is the order this
+    /// list claims to be in.
+    pub fn list_project_context_attachments(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectContextAttachmentRecord>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT attachment_id, project_id, source_path, kind, authorized_scope, provenance,
+                        lifecycle_state, content_hash, context_evidence_id, captured_at, updated_at
+                 FROM project_context_attachments WHERE project_id = ?1
+                 ORDER BY captured_at ASC, rowid ASC",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = stmt
+            .query_map([project_id], attachment_from_row)
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
+    }
+}

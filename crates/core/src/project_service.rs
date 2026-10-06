@@ -176,14 +176,14 @@ impl ProjectService {
         Ok(())
     }
 
-    /// Deterministic digest of an identity seed.
+    /// Deterministic digest of an identity seed, shared with the other core application services.
     ///
     /// Identity is *not* derived from request content. An earlier version seeded ids from
     /// `(local_path, created_at)`, which collided for two projects on the same path created in the same
     /// second - a genuine unsound-identity bug that the duplicate-path test caught. Content-derived ids also
     /// make a retry indistinguishable from a duplicate. Uniqueness is enforced by the PRIMARY KEY, so this
     /// only has to be collision-resistant, not secure.
-    fn digest(seed: &str) -> String {
+    pub(crate) fn digest(seed: &str) -> String {
         // FNV-1a, kept dependency-free for the slice. Replaced by the SHA-256 helper when ids become
         // externally referenced or security-relevant.
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;

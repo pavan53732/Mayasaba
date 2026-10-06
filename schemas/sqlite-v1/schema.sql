@@ -928,3 +928,38 @@ CREATE TABLE IF NOT EXISTS council_outcome_agent_links (
   FOREIGN KEY(agent_id) REFERENCES agents(agent_id),
   FOREIGN KEY(position_id) REFERENCES council_positions(position_id)
 );
+
+-- --- Project context attachments (DEC-049, DEC-106, DEC-107).
+-- An attachment is a durable local reference with captured provenance: attaching records *that the user selected
+-- this path at this time inside this authorized scope* and nothing more. No content is read, copied, hashed or
+-- indexed by an attach, so this table stores a reference and never a snapshot.
+--
+-- `content_hash` and `context_evidence_id` are nullable by design. Capture (hash plus an Artifact/Evidence
+-- record) and consume (an owning service accepting a material change) are separate explicit operations
+-- (DEC-106), and making their outputs nullable is what lets them be added later without replacing the
+-- attachment's identity.
+--
+-- Append-only: `source_path` is never rewritten, a row is never deleted, and provenance is never mutated, so a
+-- re-attachment is a new identity rather than an update. `authorized_scope` records the workspace root the path
+-- was validated against at attach time, so resolvability can be re-checked when read without trusting whatever
+-- the project's workspace root is today.
+CREATE TABLE IF NOT EXISTS project_context_attachments (
+  attachment_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  source_path TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('FILE','DIRECTORY')),
+  authorized_scope TEXT NOT NULL,
+  provenance TEXT NOT NULL CHECK(provenance IN ('INITIAL_INTAKE_COMPOSER','CHAT_COMPOSER')),
+  lifecycle_state TEXT NOT NULL DEFAULT 'SELECTED' CHECK(lifecycle_state IN ('SELECTED','PENDING','ACCEPTED','REJECTED')),
+  content_hash TEXT,
+  context_evidence_id TEXT,
+  captured_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(context_evidence_id) REFERENCES evidence(evidence_id)
+);
+
+-- The UI reads a project's attachments newest first, which is the only list query this table serves.
+CREATE INDEX IF NOT EXISTS idx_attachments_project ON project_context_attachments(project_id, captured_at);
+-- Resolvability is evaluated against the scope the row was attached under, so the check reads it by scope.
+CREATE INDEX IF NOT EXISTS idx_attachments_scope ON project_context_attachments(project_id, authorized_scope);

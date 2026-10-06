@@ -51,7 +51,7 @@ failures, diagnoses, repairs, reviews, validation_runs
 artifacts, evidence, evidence_links
 
 ### User interaction
-user_questions, user_answers, user_contributions
+user_questions, user_answers, user_contributions, project_context_attachments
 
 ## Council persistence invariants
 
@@ -75,6 +75,14 @@ user_questions, user_answers, user_contributions
 - a `REFUSED` verdict carries at least one refusal reason;
 - a re-evaluation supersedes via `supersedes_admission_id` rather than updating the prior row;
 - the latest admission for a (task, kind) pair is the one that governs.
+
+## Attachment persistence invariants
+
+- an attachment references its project and records the workspace root it was validated against;
+- `source_path` is immutable once written and a row is never deleted, so a re-attachment is a new identity rather than an update;
+- `content_hash` is written only by an explicit capture and `context_evidence_id` only by an explicit consume, which is why both are nullable;
+- resolvability is a check performed when read, never a stored state, so a deleted or moved source leaves the row in place with the failure recorded;
+- two attachments may reference the same `source_path` in one project: the table declares no uniqueness on it, because each selection is a separate recorded act (DEC-106 leaves this open deliberately).
 
 ## Event hash chain
 

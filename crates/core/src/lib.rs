@@ -5,6 +5,7 @@
 //! service owns (AGENTS.md section 6).
 
 pub mod agent_gateway;
+pub mod attachment_service;
 pub mod bus_runtime;
 pub mod context_service;
 pub mod diagnostics;
@@ -18,6 +19,10 @@ pub use project_service::{
     ProjectValidationError,
 };
 
+pub use attachment_service::{
+    AttachRequest, AttachmentCheck, AttachmentError, AttachmentProvenance, AttachmentResolution,
+    AttachmentService, ResolvabilityVerdict,
+};
 pub use context_service::ContextService;
 pub use recovery_service::{
     build_runtime_recovery_plan, RuntimeRecoveryAction, RuntimeRecoveryCandidate,

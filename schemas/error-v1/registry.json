@@ -236,6 +236,51 @@
       "meaning": "The candidate workspace path exists but could not be canonicalized or read, so its identity cannot be established.",
       "remediation": "Check the folder's permissions and that its drive is available, then select it again."
     },
+    "ATTACHMENT_NOT_IN_SCOPE": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_ATTACHMENT_NOT_IN_SCOPE",
+      "meaning": "The selected attachment path is outside the authorized workspace scope it was offered against, so it cannot be attached (DEC-048).",
+      "remediation": "Select a file or folder inside the project's authorized workspace. Attaching never widens scope."
+    },
+    "ATTACHMENT_KIND_UNSUPPORTED": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_ATTACHMENT_KIND_UNSUPPORTED",
+      "meaning": "Something exists at the selected attachment path but it is neither a regular file nor a directory, so no declared attachment kind describes it.",
+      "remediation": "Select a file or a folder."
+    },
+    "ATTACHMENT_SOURCE_MISSING": {
+      "category": "WORKSPACE",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "WARNING",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_ATTACHMENT_SOURCE_MISSING",
+      "meaning": "The attachment row persists but the local source path it references no longer exists. This is a recorded check outcome, not a deleted attachment: history is append-only and source_path is never rewritten (DEC-106).",
+      "remediation": "Re-attach the file or folder, which creates a new attachment identity. The original row remains as the record that it was once selected."
+    },
+    "ATTACHMENT_NOT_FOUND": {
+      "category": "IDENTITY",
+      "retryability": "NEVER",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_ATTACHMENT_NOT_FOUND",
+      "meaning": "The named attachment does not exist in this project, so there is nothing to resolve.",
+      "remediation": "Reload the project's attachment list. An attachment row is never deleted, so a missing identity means it was never recorded."
+    },
+    "ATTACHMENT_NOT_CAPTURED": {
+      "category": "CONTEXT",
+      "retryability": "AFTER_USER_ACTION",
+      "severity": "ERROR",
+      "mcf_code": null,
+      "tauri_code": "MAYASABA_ATTACHMENT_NOT_CAPTURED",
+      "meaning": "The attachment was cited as evidence without a prior capture. A bare path reference carries no content identity, so it cannot be evidence (DEC-102, DEC-106).",
+      "remediation": "Capture the attachment first: capture computes the content hash and produces the Artifact/Evidence record that evidence citation requires."
+    },
     "EMPTY_FIELD": {
       "category": "SCHEMA",
       "retryability": "AFTER_USER_ACTION",

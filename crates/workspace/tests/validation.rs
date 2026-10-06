@@ -60,6 +60,30 @@ fn an_existing_local_folder_is_authorized_and_canonicalized() {
 }
 
 #[test]
+fn a_canonicalized_workspace_root_is_still_local() {
+    // Regression test for the locality classifier. On Windows a canonical path is `\\?\C:\...`, so a check
+    // that treated every leading `\\` as a UNC share refused a canonical local folder as "not local". This is
+    // reachable: a previously canonicalized workspace root may be re-validated.
+    let dir = existing_dir("ws-verbatim");
+    let canonical = std::fs::canonicalize(&dir).expect("canonicalize");
+
+    let validated = validate_workspace_candidate(&canonical.to_string_lossy())
+        .expect("a canonical local folder is a valid workspace root");
+    assert!(!validated.canonical_path.is_empty());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_verbatim_unc_workspace_root_is_still_refused_as_remote() {
+    assert_eq!(
+        validate_workspace_candidate(r"\\?\UNC\server\share\folder").err(),
+        Some(WorkspaceRejection::NotLocal),
+        "the verbatim spelling of a UNC share is still a network location"
+    );
+}
+
+#[test]
 fn a_nonexistent_folder_is_rejected_and_is_never_authorized() {
     let missing = nonexistent_dir("nope");
     let result = validate_workspace_candidate(&missing.to_string_lossy());
