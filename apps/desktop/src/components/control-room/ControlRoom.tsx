@@ -223,12 +223,18 @@ export default function ControlRoom() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-full min-h-0 flex-col bg-surface-sunken">
+      <div className="flex h-full min-h-0 flex-col overflow-x-auto bg-surface-sunken">
         <Header project={project} recovery={recovery} loading={loading} onRefresh={() => void refresh()} />
 
         {/* The bento-grid composition DEC-032 requires: a fixed navigation column, a fluid center, and a
-            fixed context rail, all sharing one gap unit so the panels read as tiles rather than as a page. */}
-        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_300px] gap-bento p-bento">
+            fixed context rail, all sharing one gap unit so the panels read as tiles rather than as a page.
+
+            The shell carries a minimum width because the two fixed columns plus the gap and padding already
+            exceed a narrow window. Without it `minmax(0, 1fr)` resolves the center to 0px and the primary
+            content disappears with no indication - the same failure the section view refuses to render as an
+            empty panel. Below the minimum the shell scrolls horizontally instead, so the center stays
+            reachable rather than silently absent. */}
+        <div className="grid min-h-0 min-w-[960px] flex-1 grid-cols-[220px_minmax(0,1fr)_300px] gap-bento p-bento">
           <div className="min-h-0 overflow-hidden rounded-bento border border-border bg-surface-raised">
             <ScrollArea className="h-full">
               <PrimaryNav active={active} onSelect={setActive} />
