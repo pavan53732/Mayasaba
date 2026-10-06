@@ -873,6 +873,7 @@ pub struct LiveAgentSession<A: AgentAdapter> {
     process: mayasaba_execution::SpawnedProcess,
     event_sequence: u64,
     session_id: String,
+    native_session_id: Option<String>,
 }
 
 impl<A: AgentAdapter> LiveAgentSession<A> {
@@ -893,10 +894,30 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
             match self.adapter.normalize_event(&line, received_at, &raw_ref) {
                 Ok(event) => {
                     if let Some(native_session_id) = event.native_session_id.as_deref() {
+                        if native_session_id.trim().is_empty() {
+                            return Err(AgentRuntimeError::Adapter(adapter_error(
+                                AdapterErrorCategory::PROTOCOL,
+                                "ADAPTER_PROTOCOL_ERROR",
+                                Retryability::NEVER,
+                                "native event carried an empty native session id",
+                            )));
+                        }
+                        if let Some(expected) = self.native_session_id.as_deref() {
+                            if expected != native_session_id {
+                                return Err(AgentRuntimeError::Adapter(adapter_error(
+                                    AdapterErrorCategory::PROTOCOL,
+                                    "ADAPTER_PROTOCOL_ERROR",
+                                    Retryability::NEVER,
+                                    format!("native session id changed mid-session: expected {expected}, observed {native_session_id}"),
+                                )));
+                            }
+                        } else {
+                            self.native_session_id = Some(native_session_id.to_owned());
+                        }
                         storage.bind_agent_process(
                             &self.session_id,
                             i64::from(self.process.pid),
-                            Some(native_session_id),
+                            self.native_session_id.as_deref(),
                         )?;
                     }
                     return Ok(Some(event));
@@ -913,6 +934,40 @@ impl<A: AgentAdapter> LiveAgentSession<A> {
 
     pub async fn stderr_line(&mut self) -> Result<Option<String>, AgentRuntimeError> {
         Ok(self.process.next_stderr_line().await?)
+    }
+
+    /// Reconcile runtime health against the supervised OS process, not just the durable health flag.
+    pub async fn health_check(
+        &mut self,
+        storage: &mut mayasaba_storage::Storage,
+        checked_at: &str,
+    ) -> Result<HealthStatus, AgentRuntimeError> {
+        match self.process.try_wait().await {
+            Ok(None) => {
+                storage.set_agent_health(&self.session_id, "HEALTHY", checked_at)?;
+                Ok(HealthStatus {
+                    state: HealthState::HEALTHY,
+                    checked_at: checked_at.to_owned(),
+                    detail: None,
+                })
+            }
+            Ok(Some(status)) => {
+                storage.set_agent_health(&self.session_id, "UNHEALTHY", checked_at)?;
+                Ok(HealthStatus {
+                    state: HealthState::UNHEALTHY,
+                    checked_at: checked_at.to_owned(),
+                    detail: Some(format!("supervised process exited with {:?}", status.code())),
+                })
+            }
+            Err(error) => {
+                storage.set_agent_health(&self.session_id, "UNKNOWN", checked_at)?;
+                Ok(HealthStatus {
+                    state: HealthState::UNKNOWN,
+                    checked_at: checked_at.to_owned(),
+                    detail: Some(format!("process liveness could not be observed: {error}")),
+                })
+            }
+        }
     }
 
     pub async fn wait(
@@ -1020,7 +1075,7 @@ pub async fn launch_live_session(
     if let Err(error) = storage.activate_agent_process(
         &request.session_id,
         i64::from(process.pid),
-        None,
+        native_session_id,
         started_at,
     ) {
         let _ = process.terminate().await;
@@ -1032,6 +1087,7 @@ pub async fn launch_live_session(
         process,
         event_sequence: 0,
         session_id: request.session_id.clone(),
+        native_session_id: native_session_id.map(ToOwned::to_owned),
     })
 }
 

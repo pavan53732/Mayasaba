@@ -240,3 +240,22 @@ fn child_agent_slot_budget_is_atomic_and_reuses_free_slots() {
         .expect("reuse first free slot");
     assert_eq!(reused, "task:task_exec:child:1");
 }
+
+
+#[test]
+fn native_session_identity_cannot_be_rewritten_after_binding() {
+    let storage = project_storage();
+    storage.bind_agent_process("sess_exec", 4242, Some("native-1"))
+        .expect("initial bind");
+    storage.bind_agent_process("sess_exec", 4242, Some("native-1"))
+        .expect("same identity is idempotent");
+    assert!(storage.bind_agent_process("sess_exec", 4242, Some("native-2")).is_err());
+    assert!(storage.bind_agent_process("sess_exec", 4243, Some("native-1")).is_err());
+
+    let row: (i64, String) = storage.conn().query_row(
+        "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id='sess_exec'",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    ).expect("identity");
+    assert_eq!(row, (4242, "native-1".to_owned()));
+}

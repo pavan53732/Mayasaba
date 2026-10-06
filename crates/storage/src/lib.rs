@@ -4682,13 +4682,42 @@ impl Storage {
                 detail: "process_id must be positive".to_string(),
             });
         }
-        let changed = self.conn.execute(
+        if native_session_id.is_some_and(|v| v.trim().is_empty()) {
+            return Err(StorageError::Malformed {
+                column: "agent_sessions.native_session_id".to_string(),
+                detail: "native_session_id must be non-empty when supplied".to_string(),
+            });
+        }
+
+        let row: Option<(Option<i64>, Option<String>)> = self.conn.query_row(
+            "SELECT process_id,native_session_id FROM agent_sessions WHERE session_id=?1",
+            [session_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).optional().map_err(StorageError::Db)?;
+        let (existing_process, existing_native) = row
+            .ok_or_else(|| StorageError::NotFound(format!("agent session {session_id}")))?;
+
+        if let Some(existing) = existing_process {
+            if existing != process_id {
+                return Err(StorageError::Malformed {
+                    column: "agent_sessions.process_id".to_string(),
+                    detail: format!("process identity conflict for session {session_id}: existing={existing}, presented={process_id}"),
+                });
+            }
+        }
+        if let (Some(existing), Some(presented)) = (existing_native.as_deref(), native_session_id) {
+            if existing != presented {
+                return Err(StorageError::Malformed {
+                    column: "agent_sessions.native_session_id".to_string(),
+                    detail: format!("native session identity conflict for session {session_id}: existing={existing}, presented={presented}"),
+                });
+            }
+        }
+
+        self.conn.execute(
             "UPDATE agent_sessions SET process_id=?1,native_session_id=COALESCE(?2,native_session_id) WHERE session_id=?3",
             rusqlite::params![process_id,native_session_id,session_id],
         ).map_err(StorageError::Db)?;
-        if changed != 1 {
-            return Err(StorageError::NotFound(format!("agent session {session_id}")));
-        }
         Ok(())
     }
 

@@ -290,6 +290,11 @@ impl SpawnedProcess {
             .map_err(ExecutionError::Termination)
     }
 
+    /// Poll the owned child without consuming its terminal wait handle.
+    pub async fn try_wait(&mut self) -> Result<Option<std::process::ExitStatus>, ExecutionError> {
+        self.child.try_wait().map_err(ExecutionError::Spawn)
+    }
+
     /// Read one stdout line without waiting for the process to exit. This is the primitive used by the agent
     /// gateway to stream structured JSONL events during long-running sessions.
     pub async fn next_stdout_line(&mut self) -> Result<Option<String>, ExecutionError> {
