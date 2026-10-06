@@ -1186,3 +1186,6 @@ Classification: REFINEMENT. `crates/execution` is the sole owner of Windows proc
 
 ### DEC-100 — Capability admission is contract-derived and fail-closed
 Classification: REFINEMENT. Agent capability validation accepts only probe-derived facts containing successful contract launch, resume and safety-surface verification. Caller-supplied capability JSON without those proofs cannot advance an AgentSession. Discovery does not invoke credential-bearing or side-effecting runtime surfaces.
+
+### DEC-099 — Agent health changes are canonical service events
+Classification: REFINEMENT. `AGENT_HEALTH_CHANGED` is a canonical MCF service event emitted by AgentService and projected to the Tauri `AGENT_HEALTH_CHANGED` UI event. Health records independently observed runtime health for an existing AgentSession; it does not create a new state machine or authority.

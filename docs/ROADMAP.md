@@ -79,9 +79,7 @@ and any schema or table change.
 
 **Status: in progress.** The contract-driven adapter kernel, closed three-agent identity set, launch-proof boundary,
 Windows executable discovery, version probing, persisted installation/capability facts, agent-session CAS lifecycle,
-live supervised process launch and incremental native-event normalization are implemented. Remaining M3 work is
-contract-specific capability verification, native handshake/session-id reconciliation, health monitoring and durable
-MCF transport delivery.
+live supervised process launch and incremental native-event normalization are implemented. Remaining M3 work is durable MCF transport delivery. Contract-derived capability admission, native session-id reconciliation and supervised-process health monitoring are implemented.
 - Hermes Agent CLI adapter
 - Kilo Code CLI adapter
 - OpenCode CLI adapter
