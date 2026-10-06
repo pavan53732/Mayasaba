@@ -140,7 +140,11 @@
         "BLOCKED->FAILED",
         "RETRY_PENDING->REPAIR_PENDING",
         "REPAIR_PENDING->LEASE_EXPIRED",
-        "REASSIGNED->INVALIDATED"
+        "REASSIGNED->INVALIDATED",
+        "LEASED->LEASE_EXPIRED",
+        "ACCEPTED->LEASE_EXPIRED",
+        "IN_PROGRESS->LEASE_EXPIRED",
+        "RECOVERY_PENDING->READY"
       ],
       "unreviewed_branches": []
     },
