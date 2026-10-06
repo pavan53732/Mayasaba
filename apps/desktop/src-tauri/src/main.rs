@@ -17,12 +17,16 @@ mod bus_shell;
 
 use std::sync::Mutex;
 
+use mayasaba_core::attachment_service::{
+    AttachRequest, AttachmentError, AttachmentProvenance, AttachmentResolution, AttachmentService,
+};
 use mayasaba_core::bus_runtime::{CoreClock, CoreIdSource};
 use mayasaba_core::diagnostics::DiagnosticsService;
 use mayasaba_core::project_service::{
     CreateProjectRequest, ProjectService, ProjectValidationError,
 };
 use mayasaba_core::recovery_service::{RecoveryService, ReplayRefusal};
+use mayasaba_storage::StorageError;
 use serde::Serialize;
 use tauri::State;
 
@@ -461,6 +465,196 @@ async fn replay_dead_letter(
     })
     .await
 }
+/// One durable attachment reference, as the Control Room must display it.
+///
+/// A projection of stored state, never UI-side draft state. `content_hash` and `context_evidence_id` are sent
+/// as `null` rather than omitted, so "not captured yet" stays distinguishable from "this build does not report
+/// hashes" (DEC-106). `source_path` is the canonical path recorded at attach time and is never rewritten, so it
+/// may name something that no longer exists; resolvability is what reports that, separately.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AttachmentView {
+    attachment_id: String,
+    project_id: String,
+    source_path: String,
+    kind: String,
+    authorized_scope: String,
+    provenance: String,
+    lifecycle_state: String,
+    content_hash: Option<String>,
+    context_evidence_id: Option<String>,
+    captured_at: String,
+}
+
+impl From<mayasaba_storage::ProjectContextAttachmentRecord> for AttachmentView {
+    fn from(record: mayasaba_storage::ProjectContextAttachmentRecord) -> Self {
+        AttachmentView {
+            attachment_id: record.attachment_id,
+            project_id: record.project_id,
+            source_path: record.source_path,
+            kind: record.kind,
+            authorized_scope: record.authorized_scope,
+            provenance: record.provenance,
+            lifecycle_state: record.lifecycle_state,
+            content_hash: record.content_hash,
+            context_evidence_id: record.context_evidence_id,
+            captured_at: record.captured_at,
+        }
+    }
+}
+
+/// One named check inside a resolvability evaluation.
+///
+/// The status vocabulary is the admission schema's own - `PASS`, `FAIL`, `NOT_APPLICABLE` - rather than a
+/// second set of check outcomes (DEC-106). `NOT_APPLICABLE` means the check was not reached because an earlier
+/// one already decided the verdict.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AttachmentCheckView {
+    check: &'static str,
+    status: &'static str,
+    code: Option<&'static str>,
+    detail: Option<String>,
+}
+
+/// An attachment together with the resolvability evaluation performed when it was read.
+///
+/// Resolvability is never stored, so this is a fresh answer rather than a persisted verdict: the same row can
+/// be `RESOLVED` now and `UNRESOLVED` once the file is moved, without the attachment itself changing.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AttachmentResolutionView {
+    attachment: AttachmentView,
+    verdict: &'static str,
+    checks: Vec<AttachmentCheckView>,
+}
+
+impl From<AttachmentResolution> for AttachmentResolutionView {
+    fn from(resolution: AttachmentResolution) -> Self {
+        AttachmentResolutionView {
+            attachment: resolution.attachment.into(),
+            verdict: resolution.verdict.as_str(),
+            checks: resolution
+                .checks
+                .into_iter()
+                .map(|check| AttachmentCheckView {
+                    check: check.check,
+                    status: check.status,
+                    code: check.code,
+                    detail: check.detail,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Map an attachment rejection onto the registry code that names it.
+///
+/// The workspace arm delegates to `AttachmentRejection::code()` rather than re-listing its codes, so the
+/// locality and scope vocabulary keeps one source of truth (DEC-055); a second list here could disagree with
+/// it. The remaining arms are codes this layer is the only producer of.
+///
+/// `NotFound` from the store means the attachment row, because `AttachmentService::attach` converts the one
+/// `NotFound` that could have meant a missing *project* into `UnknownProject` before it reaches here. That is
+/// what keeps `ATTACHMENT_NOT_FOUND` and `PROJECT_MISMATCH` from being two names for one condition.
+impl From<AttachmentError> for CommandError {
+    fn from(error: AttachmentError) -> Self {
+        let code = match &error {
+            AttachmentError::EmptyField(_) => "EMPTY_FIELD",
+            AttachmentError::UnknownProject { .. } => "PROJECT_MISMATCH",
+            AttachmentError::Workspace(rejection) => rejection.code(),
+            AttachmentError::Storage(StorageError::NotFound(_)) => "ATTACHMENT_NOT_FOUND",
+            AttachmentError::Storage(_) => "STORAGE_FAILURE",
+        };
+        CommandError {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+/// Record a local file or folder as supporting context for a project.
+///
+/// There is no `authorized_scope` argument: the service reads the scope from the project's own stored
+/// workspace root, so a caller cannot choose the boundary its path is checked against (DEC-048). Attaching
+/// reads no content - no hash, no copy, no index - and capture is a separate explicit operation this command
+/// neither performs nor implies (DEC-106).
+#[tauri::command(rename_all = "snake_case")]
+fn attach_project_context_attachment(
+    service: State<'_, Mutex<AttachmentService>>,
+    project_id: String,
+    source_path: String,
+    provenance: String,
+) -> Result<AttachmentResolutionView, CommandError> {
+    // The contract declares `provenance` as a closed two-value enum, so a third value is a schema violation
+    // rather than a domain rejection. It is refused here because the wire type is a string: serde cannot
+    // enforce an enum on a command argument.
+    let provenance = match provenance.as_str() {
+        "INITIAL_INTAKE_COMPOSER" => AttachmentProvenance::InitialIntakeComposer,
+        "CHAT_COMPOSER" => AttachmentProvenance::ChatComposer,
+        other => {
+            return Err(CommandError {
+                code: "SCHEMA_INVALID",
+                message: format!(
+                    "provenance {other:?} is not one of INITIAL_INTAKE_COMPOSER, CHAT_COMPOSER"
+                ),
+            })
+        }
+    };
+
+    let mut service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "AttachmentService lock was poisoned by a prior panic".to_string(),
+    })?;
+
+    let resolution = service
+        .attach(&AttachRequest {
+            project_id,
+            source_path,
+            provenance,
+        })
+        .map_err(CommandError::from)?;
+
+    Ok(resolution.into())
+}
+
+/// Read-only. Lists a project's attachments, oldest first, each re-evaluated on read.
+#[tauri::command(rename_all = "snake_case")]
+fn list_project_context_attachments(
+    service: State<'_, Mutex<AttachmentService>>,
+    project_id: String,
+) -> Result<Vec<AttachmentResolutionView>, CommandError> {
+    let service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "AttachmentService lock was poisoned by a prior panic".to_string(),
+    })?;
+
+    let resolutions = service
+        .list_resolutions(&project_id)
+        .map_err(CommandError::from)?;
+
+    Ok(resolutions.into_iter().map(Into::into).collect())
+}
+
+/// Read-only. Re-checks one stored reference and never rewrites it.
+#[tauri::command(rename_all = "snake_case")]
+fn resolve_project_context_attachment(
+    service: State<'_, Mutex<AttachmentService>>,
+    project_id: String,
+    attachment_id: String,
+) -> Result<AttachmentResolutionView, CommandError> {
+    let service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "AttachmentService lock was poisoned by a prior panic".to_string(),
+    })?;
+
+    let resolution = service
+        .resolve(&project_id, &attachment_id)
+        .map_err(CommandError::from)?;
+
+    Ok(resolution.into())
+}
+
 fn main() {
     // The service owns its store and is registered as managed state. It is created eagerly so a failure to
     // open the durable store surfaces at startup rather than on the first command.
@@ -485,6 +679,12 @@ fn main() {
             .expect("Mayasaba could not open its durable bus store; see AGENTS.md section 20"),
     ));
 
+    // AttachmentService owns the attachment entity and its lifecycle (DEC-107), so it holds its own connection
+    // to the same store rather than reaching through ProjectService - the same reason the bus does (DEC-072).
+    // Opened eagerly so an unreachable store surfaces at startup instead of on the first attach.
+    let attachment_service = AttachmentService::open(&database_path())
+        .expect("Mayasaba could not open its durable attachment store; see AGENTS.md section 20");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
@@ -492,6 +692,7 @@ fn main() {
         // as an Arc<Mutex<..>> because a Tauri State borrow is not 'static and cannot move into the
         // spawn_blocking task a handler will use.
         .manage(bus_state)
+        .manage(Mutex::new(attachment_service))
         .invoke_handler(tauri::generate_handler![
             create_project,
             list_projects,
@@ -499,7 +700,10 @@ fn main() {
             validate_workspace,
             replay_dead_letter,
             get_communication_health,
-            get_event_cursor
+            get_event_cursor,
+            attach_project_context_attachment,
+            list_project_context_attachments,
+            resolve_project_context_attachment
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
@@ -538,6 +742,9 @@ mod wire_shape_tests {
         "replay_dead_letter",
         "get_communication_health",
         "get_event_cursor",
+        "attach_project_context_attachment",
+        "list_project_context_attachments",
+        "resolve_project_context_attachment",
     ];
 
     /// The JSON Schema keywords this validator implements. A validated type that uses anything else is a test
@@ -928,6 +1135,90 @@ mod wire_shape_tests {
                 context_refreshed: false,
                 deduplicated: true,
             },
+        );
+    }
+
+    /// An attachment that resolves. The nullable fields are sent as null rather than omitted, so the
+    /// "not captured yet" case is part of the checked shape rather than an assumption.
+    ///
+    /// `source_path` is spelled the way Rust's `canonicalize` actually returns a Windows path, verbatim prefix
+    /// included. That is the form the store holds, and a shape test that used a friendlier spelling would not
+    /// be testing the bytes the wire really carries.
+    fn resolved_attachment() -> AttachmentResolutionView {
+        AttachmentResolutionView {
+            attachment: AttachmentView {
+                attachment_id: "att_9c1f4a7b2e5d8031".to_string(),
+                project_id: "prj_2f1c9a4b6e0d3857".to_string(),
+                source_path: "\\\\?\\C:\\work\\proj\\src\\main.rs".to_string(),
+                kind: "FILE".to_string(),
+                authorized_scope: "\\\\?\\C:\\work\\proj".to_string(),
+                provenance: "CHAT_COMPOSER".to_string(),
+                lifecycle_state: "SELECTED".to_string(),
+                content_hash: None,
+                context_evidence_id: None,
+                captured_at: "1700000000".to_string(),
+            },
+            verdict: "RESOLVED",
+            checks: ["EXISTS", "LOCALITY", "KIND", "SCOPE"]
+                .into_iter()
+                .map(|check| AttachmentCheckView {
+                    check,
+                    status: "PASS",
+                    code: None,
+                    detail: None,
+                })
+                .collect(),
+        }
+    }
+
+    /// The unresolved case, which is the case the vocabulary exists for: the row stays in place and the
+    /// outcome is reported against it. The checks after the failing one are NOT_APPLICABLE, not PASS, because
+    /// the validator stopped and never evaluated them.
+    fn unresolved_attachment() -> AttachmentResolutionView {
+        let mut resolution = resolved_attachment();
+        resolution.verdict = "UNRESOLVED";
+        resolution.checks = ["EXISTS", "LOCALITY", "KIND", "SCOPE"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, check)| AttachmentCheckView {
+                check,
+                status: if index == 0 { "FAIL" } else { "NOT_APPLICABLE" },
+                code: if index == 0 {
+                    Some("ATTACHMENT_SOURCE_MISSING")
+                } else {
+                    None
+                },
+                detail: if index == 0 {
+                    Some("nothing exists at the selected attachment path".to_string())
+                } else {
+                    None
+                },
+            })
+            .collect();
+        resolution
+    }
+
+    #[test]
+    fn attach_project_context_attachment_response_conforms() {
+        conforms(
+            "attach_project_context_attachmentResponse",
+            &resolved_attachment(),
+        );
+    }
+
+    #[test]
+    fn list_project_context_attachments_response_conforms() {
+        conforms(
+            "list_project_context_attachmentsResponse",
+            &vec![resolved_attachment(), unresolved_attachment()],
+        );
+    }
+
+    #[test]
+    fn resolve_project_context_attachment_response_conforms() {
+        conforms(
+            "resolve_project_context_attachmentResponse",
+            &unresolved_attachment(),
         );
     }
 

@@ -201,6 +201,18 @@
       "request": "create_trace_linkRequest",
       "response": "create_trace_linkResponse",
       "cancellable": false
+    },
+    "attach_project_context_attachment": {
+      "owner": "AttachmentService",
+      "request": "attach_project_context_attachmentRequest",
+      "response": "attach_project_context_attachmentResponse",
+      "cancellable": false,
+      "atomicity": "one durable write: the attachment row is inserted and read back. Attaching reads no content, so there is no hash to compute and no capture or consume step to include (DEC-106).",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project the reference belongs to. An attachment is project-scoped, so it is never addressed by attachment id alone."},
+        {"name":"source_path","type":"string","required":true,"description":"The local file or folder the user selected. Locality, existence, kind and containment in the project's authorized workspace are validated before anything is persisted; the canonical form is what is stored, and it is never rewritten."},
+        {"name":"provenance","type":"string","required":true,"description":"Which composer offered the reference: INITIAL_INTAKE_COMPOSER or CHAT_COMPOSER. Recorded once and never mutated."}
+      ]
     }
   },
   "queries": {
@@ -357,6 +369,23 @@
       "owner": "PolicyService",
       "request": "get_action_admissibilityRequest",
       "response": "get_action_admissibilityResponse"
+    },
+    "list_project_context_attachments": {
+      "owner": "AttachmentService",
+      "request": "list_project_context_attachmentsRequest",
+      "response": "list_project_context_attachmentsResponse",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project whose attachments are listed. Each entry carries a resolvability evaluation performed when it is read, so the list cannot present a stale verdict as current state."}
+      ]
+    },
+    "resolve_project_context_attachment": {
+      "owner": "AttachmentService",
+      "request": "resolve_project_context_attachmentRequest",
+      "response": "resolve_project_context_attachmentResponse",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project the attachment belongs to."},
+        {"name":"attachment_id","type":"string","required":true,"description":"The attachment to re-check. Resolvability is evaluated on read and never stored, so this reports whether the reference resolves now rather than what it resolved to before."}
+      ]
     }
   },
   "events": {

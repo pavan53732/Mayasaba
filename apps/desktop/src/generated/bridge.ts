@@ -37,7 +37,8 @@ export const COMMANDS = [
   "validate_configuration",
   "start_simulation",
   "stop_simulation",
-  "create_trace_link"
+  "create_trace_link",
+  "attach_project_context_attachment"
 ] as const;
 export const QUERIES = [
   "get_project",
@@ -66,7 +67,9 @@ export const QUERIES = [
   "get_configuration",
   "get_simulation_status",
   "get_event_cursor",
-  "get_action_admissibility"
+  "get_action_admissibility",
+  "list_project_context_attachments",
+  "resolve_project_context_attachment"
 ] as const;
 export const EVENTS = [
   "PROJECT_UPDATED",
@@ -139,6 +142,7 @@ export const COMMAND_OWNERS = {
   "start_simulation": "SimulationService",
   "stop_simulation": "SimulationService",
   "create_trace_link": "DiagnosticsService",
+  "attach_project_context_attachment": "AttachmentService",
 } as const;
 
 /** Owning application service per query, from payloads.json. */
@@ -170,4 +174,6 @@ export const QUERY_OWNERS = {
   "get_simulation_status": "SimulationService",
   "get_event_cursor": "DiagnosticsService",
   "get_action_admissibility": "PolicyService",
+  "list_project_context_attachments": "AttachmentService",
+  "resolve_project_context_attachment": "AttachmentService",
 } as const;

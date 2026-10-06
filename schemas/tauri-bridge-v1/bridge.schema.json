@@ -38,7 +38,8 @@
         "validate_configuration",
         "start_simulation",
         "stop_simulation",
-        "create_trace_link"
+        "create_trace_link",
+        "attach_project_context_attachment"
       ]
     },
     "query": {
@@ -70,7 +71,9 @@
         "get_configuration",
         "get_simulation_status",
         "get_event_cursor",
-        "get_action_admissibility"
+        "get_action_admissibility",
+        "list_project_context_attachments",
+        "resolve_project_context_attachment"
       ]
     },
     "channel": {

@@ -466,14 +466,13 @@ fn attaching_to_an_unknown_project_is_refused_before_validation() {
         AttachmentProvenance::ChatComposer,
     ));
 
-    // The missing project surfaces as `NotFound` rather than `UnknownProject`, and the order is the reason:
-    // the service reads the project to obtain the scope it must validate against, so the read fails before the
-    // insert that would have reported `UnknownProject`. Either way nothing is persisted, which is the property
-    // that matters; the command layer maps both onto one registered code.
+    // The missing project is its own variant, not the store's `NotFound`. `NotFound` also means "no such
+    // attachment" on `resolve`, so passing it through would give one code two meanings no caller could tell
+    // apart; the command layer maps this one to PROJECT_MISMATCH and that one to ATTACHMENT_NOT_FOUND.
     assert!(
         matches!(
             result,
-            Err(AttachmentError::Storage(StorageError::NotFound(_)))
+            Err(AttachmentError::UnknownProject { ref project_id }) if project_id == "prj_missing"
         ),
         "an attachment must belong to a real project, got {result:?}"
     );

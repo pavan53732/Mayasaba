@@ -161,7 +161,20 @@ impl AttachmentService {
 
         // The project's stored workspace root is the scope. It is read here rather than accepted from the
         // caller so a request cannot widen the boundary it is validated against.
-        let project = self.storage.get_project(&req.project_id)?;
+        //
+        // A missing project is reported as its own variant rather than left as the store's `NotFound`. The only
+        // row that read can fail to find is the project itself, and `NotFound` also means "no such attachment"
+        // on the other two operations - so passing it through would give one code two meanings that no caller
+        // could tell apart (DEC-055).
+        let project = self
+            .storage
+            .get_project(&req.project_id)
+            .map_err(|e| match e {
+                StorageError::NotFound(_) => AttachmentError::UnknownProject {
+                    project_id: req.project_id.clone(),
+                },
+                other => AttachmentError::Storage(other),
+            })?;
 
         // Locality, existence, kind and scope are WorkspaceService's authority (DEC-107). A refusal is
         // returned as its own typed rejection; this service does not reinterpret it.
@@ -190,6 +203,10 @@ impl AttachmentService {
     ///
     /// The evaluation is performed per row on read, so the list the Control Room renders cannot present a
     /// stale resolvability verdict as though it were current state.
+    ///
+    /// This reads rows and does not require the project to exist: an unknown project id yields an empty list
+    /// rather than an error, because the question "which attachment rows name this project?" has the truthful
+    /// answer "none". `attach` does require the project, because it writes an FK-constrained row.
     pub fn list_resolutions(
         &self,
         project_id: &str,
@@ -300,6 +317,10 @@ fn epoch_seconds() -> String {
 pub enum AttachmentError {
     /// A required request field was blank, refused before persistence.
     EmptyField(&'static str),
+    /// The named project does not exist. An attachment cannot outlive its project.
+    UnknownProject {
+        project_id: String,
+    },
     /// The path was refused by WorkspaceService's locality/scope validator.
     Workspace(AttachmentRejection),
     Storage(StorageError),
@@ -321,6 +342,9 @@ impl std::fmt::Display for AttachmentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AttachmentError::EmptyField(name) => write!(f, "{name} must not be empty"),
+            AttachmentError::UnknownProject { project_id } => {
+                write!(f, "project {project_id} does not exist")
+            }
             AttachmentError::Workspace(e) => write!(f, "{e}"),
             AttachmentError::Storage(e) => write!(f, "{e}"),
         }

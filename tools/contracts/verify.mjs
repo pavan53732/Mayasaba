@@ -1280,6 +1280,7 @@ const mappingSites=[
   ["crates/bus/src/error.rs",/pub\s+fn\s+code\s*\(\s*&self\s*\)\s*->\s*&'static\s+str\s*\{/],
   ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<ProjectValidationError>\s+for\s+CommandError\s*\{/],
   ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<(?:[A-Za-z_][A-Za-z0-9_]*::)*BusError>\s+for\s+CommandError\s*\{/],
+  ["apps/desktop/src-tauri/src/main.rs",/impl\s+From<AttachmentError>\s+for\s+CommandError\s*\{/],
 ];
 // A delegating mapping produces the codes of the mapping it delegates to, so its body holds no literals for the
 // scan above to read. That makes the presence check alone weak: replacing the call with a hardcoded string would
@@ -1287,6 +1288,7 @@ const mappingSites=[
 // must still make, keyed by the site's own regex source so the two cannot drift apart.
 const delegatingSites=new Map([
   ["impl\\s+From<(?:[A-Za-z_][A-Za-z0-9_]*::)*BusError>\\s+for\\s+CommandError\\s*\\{","code()"],
+  ["impl\\s+From<AttachmentError>\\s+for\\s+CommandError\\s*\\{","code()"],
 ]);
 for(const [file,openRe] of mappingSites){
   const src=scannedText.get(file);

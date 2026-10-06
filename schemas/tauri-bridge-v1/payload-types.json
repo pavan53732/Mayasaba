@@ -264,6 +264,99 @@
         "code":{"type":["string","null"],"description":"A machine-readable rejection code (WORKSPACE_*); null on AUTHORIZED."},
         "message":{"type":["string","null"],"description":"A human-readable rejection message; null on AUTHORIZED."}
       }
+    },
+    "AttachmentView":{
+      "title":"One durable attachment reference as stored",
+      "description":"A projection of the stored row, never UI-side draft state. content_hash and context_evidence_id are null until an explicit capture and an explicit consume respectively, and they are sent as null rather than omitted so a caller can tell 'not captured' from 'this build does not report hashes' (DEC-106). source_path is the canonical path recorded at attach time and is never rewritten, so it may name something that no longer exists; that is what the separate resolvability evaluation reports.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["attachment_id","project_id","source_path","kind","authorized_scope","provenance","lifecycle_state","content_hash","context_evidence_id","captured_at"],
+      "properties":{
+        "attachment_id":{"type":"string","minLength":1},
+        "project_id":{"type":"string","minLength":1},
+        "source_path":{"type":"string","minLength":1,"description":"Immutable once written. A re-attachment is a new identity, never an update to this one."},
+        "kind":{"enum":["FILE","DIRECTORY"],"description":"Established by inspecting the path at attach time, not supplied by the caller. For a directory this means the scope, not a snapshot, and enumeration is never durable."},
+        "authorized_scope":{"type":"string","minLength":1,"description":"The workspace root the path was validated against, recorded so resolvability is re-checked against the boundary the reference was actually admitted under."},
+        "provenance":{"enum":["INITIAL_INTAKE_COMPOSER","CHAT_COMPOSER"]},
+        "lifecycle_state":{"enum":["SELECTED","PENDING","ACCEPTED","REJECTED"]},
+        "content_hash":{"type":["string","null"],"description":"Set only by an explicit capture; null on every attachment that has not been captured."},
+        "context_evidence_id":{"type":["string","null"],"description":"Set only by an explicit consume; null on every attachment no owning service has accepted a change from."},
+        "captured_at":{"type":"string","description":"When the reference was recorded."}
+      }
+    },
+    "AttachmentCheckView":{
+      "title":"One named check inside a resolvability evaluation",
+      "description":"Reuses the Admission check shape: a named check with a status from the same closed vocabulary, plus the registered error code when it failed. NOT_APPLICABLE means the validator stopped before reaching this check, which is why an unevaluated check is never reported as PASS (DEC-106).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["check","status","code","detail"],
+      "properties":{
+        "check":{"enum":["EXISTS","LOCALITY","KIND","SCOPE"]},
+        "status":{"enum":["PASS","FAIL","NOT_APPLICABLE"]},
+        "code":{"type":["string","null"],"description":"The registered error code when the check failed; null when it passed or was not reached."},
+        "detail":{"type":["string","null"]}
+      }
+    },
+    "AttachmentResolutionView":{
+      "title":"An attachment together with the resolvability evaluation performed when it was read",
+      "description":"Resolvability is a check performed when read and never a stored state, so this is a fresh answer rather than a persisted verdict, and verdict is RESOLVED only when every check passed. A modified source still resolves, because content identity is not implied by an attachment; a deleted or moved source leaves the row in place and fails EXISTS with ATTACHMENT_SOURCE_MISSING (DEC-106).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["attachment","verdict","checks"],
+      "properties":{
+        "attachment":{"$ref":"#/types/AttachmentView"},
+        "verdict":{"enum":["RESOLVED","UNRESOLVED"]},
+        "checks":{"type":"array","items":{"$ref":"#/types/AttachmentCheckView"}}
+      }
+    },
+    "attach_project_context_attachmentRequest":{
+      "title":"Record a local file or folder as supporting context for a project",
+      "description":"Attaching records a reference and its provenance and nothing else: no read, copy, hash or index (DEC-106). There is no authorized_scope field, because the scope is read from the project's own stored workspace root by the service; a caller-supplied scope would let a caller choose the boundary its own path is checked against (DEC-048).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","source_path","provenance"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "source_path":{"type":"string","minLength":1,"description":"The local file or folder the user selected. Locality, existence, kind and containment in the authorized workspace are validated before anything is persisted."},
+        "provenance":{"enum":["INITIAL_INTAKE_COMPOSER","CHAT_COMPOSER"],"description":"Which composer offered the reference. Recorded once and never mutated."}
+      }
+    },
+    "attach_project_context_attachmentResponse":{
+      "title":"The authoritative state that exists after the reference was recorded",
+      "description":"The stored row plus its resolvability, so a caller renders what was committed rather than the draft it submitted.",
+      "$ref":"#/types/AttachmentResolutionView"
+    },
+    "list_project_context_attachmentsRequest":{
+      "title":"List one project's attachment references",
+      "description":"Read-only. Names the project whose attachments are read.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1}
+      }
+    },
+    "list_project_context_attachmentsResponse":{
+      "title":"Every attachment of one project, oldest first, each with a fresh resolvability evaluation",
+      "description":"A distinct declared type rather than a second name for one resolution, because a list and a single resolution genuinely differ in shape. The evaluation is performed per row on read, so the list cannot present a stale verdict as current state.",
+      "type":"array",
+      "items":{"$ref":"#/types/AttachmentResolutionView"}
+    },
+    "resolve_project_context_attachmentRequest":{
+      "title":"Re-check whether one stored attachment reference still resolves",
+      "description":"Read-only. Performs the check when read rather than returning a stored verdict (DEC-106).",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","attachment_id"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "attachment_id":{"type":"string","minLength":1}
+      }
+    },
+    "resolve_project_context_attachmentResponse":{
+      "title":"The attachment and its current resolvability",
+      "description":"The same shape attach and list return, so one attachment has one description across all three operations.",
+      "$ref":"#/types/AttachmentResolutionView"
     }
   },
   "$defs":{
