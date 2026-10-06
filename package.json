@@ -6,6 +6,7 @@
     "verify:contracts:mutations":"node tools/contracts/mutations.mjs",
     "verify:local":"node tools/verify/local.mjs",
     "verify:rust":"node tools/verify/local.mjs --only=rust",
+    "verify:integrity":"node tools/verify/integrity.mjs",
     "codegen:bridge":"node tools/codegen/generate-bridge.mjs",
     "codegen:protocol":"node tools/codegen/generate-protocol.mjs",
     "codegen":"npm run codegen:bridge && npm run codegen:protocol",

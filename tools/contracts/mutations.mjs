@@ -57,6 +57,11 @@ const CORE = "core";
 // it is `npm.cmd` on Windows, and `spawnSync` without a shell cannot resolve it - the same reason the gate
 // check calls node directly.
 const UI = "ui";
+// The historical integrity audit. It is the only check here that reads Git history rather than the tree, and the
+// only one that can see text a later edit destroyed without leaving a structural trace, so the rule it holds
+// cannot be proven by any other check. Like the frontend tests, it is invoked as `node` on a script rather than
+// through npm, which is `npm.cmd` on Windows.
+const INTEGRITY = "integrity";
 
 const MAIN = "apps/desktop/src-tauri/src/main.rs";
 const BRIDGE_TS = "apps/desktop/src/intake/bridge.ts";
@@ -71,6 +76,7 @@ const GENERATED_TS = "apps/desktop/src/generated/bridge.ts";
 const PAYLOAD_TYPES = "schemas/tauri-bridge-v1/payload-types.json";
 const TRACEABILITY = "docs/TRACEABILITY.md";
 const DECISION_REGISTER = "docs/DECISION-REGISTER.md";
+const DATA_MODEL = "docs/DATA-MODEL.md";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -703,6 +709,39 @@ const MUTATIONS = [
     ],
     expect: [],
   },
+  // --- The historical integrity audit. Two properties matter and they pull in opposite directions: it has to see
+  // text that a later edit destroyed, and it must not see two different lines that merely share a prefix. The
+  // first mutation proves the first. The control proves the second, and it is the case that actually produced a
+  // false positive: `CouncilRound` and `CouncilRoundRole` are two separate types in DATA-MODEL.md, and the first
+  // is a prefix of the second. A prefix match is not corruption; only a prefix match whose continuation is gone
+  // is, which is why the audit requires the longer line to be absent from the current text.
+  {
+    id: "integrity-a",
+    what: "a document line truncated mid-word, so text that every revision contains is missing from the tree",
+    check: INTEGRITY,
+    edits: [
+      {
+        file: TRACEABILITY,
+        find: "It is a durable local reference with\nprovenance (DEC-106)",
+        replace: "It is a durable local referen\nprovenance (DEC-106)",
+      },
+    ],
+    expect: ["is a word-severed prefix of an earlier revision"],
+  },
+  {
+    id: "control-integrity-prefix",
+    what: "a line that is a mid-word prefix of a longer line still present in full, so a prefix match alone is not corruption",
+    check: INTEGRITY,
+    control: true,
+    edits: [
+      {
+        file: DATA_MODEL,
+        append:
+          "\nCouncilSession and CouncilRound are persisted in SQLite with participants, positions, questions and\n",
+      },
+    ],
+    expect: [],
+  },
   {
     id: "control-trace-prose",
     what: "TRACEABILITY.md: prose is not scanned, so a decision or a path named outside a table is ignored",
@@ -791,6 +830,11 @@ const CHECKS = {
     name: "the frontend bridge tests",
     command: "npm --prefix apps/desktop test",
     run: () => run("node", ["--experimental-strip-types", "--test", ...uiTestFiles()]),
+  },
+  [INTEGRITY]: {
+    name: "the historical integrity audit",
+    command: "npm run verify:integrity",
+    run: () => run("node", ["tools/verify/integrity.mjs"]),
   },
   [RUST]: {
     name: "the wire-shape conformance test",
