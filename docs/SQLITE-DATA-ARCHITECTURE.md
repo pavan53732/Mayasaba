@@ -36,7 +36,7 @@ events, event_cursors, context_snapshots
 requirements, requirement_acceptance, decisions, architecture_artifacts, contracts
 
 ### Tasks
-tasks, task_dependencies, task_leases, handoffs, barriers
+tasks, task_dependencies, task_leases, task_scopes, handoffs, barriers
 
 ### Workspace
 workspaces, workspace_checkpoints, workspace_changes, admissions
