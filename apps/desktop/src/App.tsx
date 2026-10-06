@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 
-import { createProject, listProjects, pickFolder, getRecoveryStatus, validateWorkspace } from "./intake/bridge";
+import {
+  attachProjectContextAttachment,
+  createProject,
+  getRecoveryStatus,
+  listProjectContextAttachments,
+  listProjects,
+  pickAttachmentFiles,
+  pickAttachmentFolder,
+  pickFolder,
+  validateWorkspace,
+} from "./intake/bridge";
+import {
+  emptyTray,
+  isDurable,
+  presentationOf,
+  queuedPaths,
+  trayReducer,
+  type AttachmentEntry,
+  type AttachmentResolution,
+  type AttachmentTray,
+} from "./attachments/state";
+import { canSendMessage, chatReducer, initialChatState } from "./chat/state";
 import {
   EMPTY_DRAFT,
   initialState,
@@ -30,6 +51,9 @@ export default function App() {
   const [state, dispatch] = useReducer(intakeReducer, initialState);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, emptyWorkspace);
+  // The intake surface's attachment tray. Selections are queued here while the user is still composing,
+  // because an attachment is project-scoped and there is no project id to attach to yet (DEC-106, DEC-107).
+  const [intakeTray, dispatchTray] = useReducer(trayReducer, emptyTray("INITIAL_INTAKE_COMPOSER"));
   const [projects, setProjects] = useState<ProjectView[]>([]);
   const [loading, setLoading] = useState(true);
   const [recovery, setRecovery] = useState<RecoveryReport | null>(null);
@@ -85,6 +109,22 @@ export default function App() {
     }
   }, []);
 
+  // Picking an attachment produces candidates and nothing else. Nothing is read, hashed or recorded until the
+  // service answers, and while the user is still composing there is no project to record against at all.
+  const onAddAttachmentFiles = useCallback(async () => {
+    const picked = await pickAttachmentFiles();
+    for (const path of picked) dispatchTray({ type: "selected", path });
+  }, []);
+
+  const onAddAttachmentFolder = useCallback(async () => {
+    const picked = await pickAttachmentFolder();
+    if (picked !== null) dispatchTray({ type: "selected", path: picked });
+  }, []);
+
+  const onDiscardAttachment = useCallback((requestedPath: string) => {
+    dispatchTray({ type: "discarded", requestedPath });
+  }, []);
+
   const onSubmit = useCallback(async () => {
     dispatch({ type: "submit" });
     // The one place the UI's draft vocabulary becomes the wire request: `Draft` is camelCase interaction state
@@ -97,6 +137,31 @@ export default function App() {
     });
 
     if (isProjectView(result)) {
+      // An attachment is project-scoped, so nothing could be recorded until the project existed. The queued
+      // selections are attached now, in the order they were picked, and each answer replaces its own entry.
+      //
+      // A refusal is kept on the entry rather than swallowed. The project was created but that selection was
+      // not attached, and the user has to be able to see which one, and why, instead of a tray that quietly
+      // looks shorter than what they picked.
+      for (const path of queuedPaths(intakeTray)) {
+        dispatchTray({ type: "attaching", requestedPath: path });
+        const attached = await attachProjectContextAttachment(
+          result.project_id,
+          path,
+          "INITIAL_INTAKE_COMPOSER",
+        );
+        if (isResolution(attached)) {
+          dispatchTray({ type: "attached", requestedPath: path, resolution: attached });
+        } else {
+          dispatchTray({
+            type: "refused",
+            requestedPath: path,
+            code: attached.code,
+            message: attached.message,
+          });
+        }
+      }
+
       // Only the returned projection crosses into state. The draft is not sent along.
       dispatch({ type: "accepted", project: result });
       // Re-read rather than trusting the local value: the list and the panel come from one authority, so a
@@ -105,15 +170,28 @@ export default function App() {
       return;
     }
     dispatch({ type: "rejected", error: result });
-  }, [draft, authorized, workspace, refresh]);
+  }, [draft, authorized, workspace, intakeTray, refresh]);
 
   // Create requires an authorized workspace. A candidate or an invalid path cannot be submitted, so a
   // string the UI merely holds can never become a project workspace root.
+  //
+  // The attachment tray is deliberately absent from this expression. Attaching is optional at intake too, and
+  // a dependency on the tray here would make a selection a prerequisite for creating a project - the same
+  // mistake DEC-106 forbids one surface over.
   const canSubmit = useMemo(
     () =>
       !pending && authorized && draft.initialBrief.trim() !== "",
     [pending, authorized, draft],
   );
+
+  const onStartAnother = useCallback(() => {
+    setDraft(EMPTY_DRAFT);
+    dispatchWorkspace({ type: "edit", requestedPath: "" });
+    dispatch({ type: "edit", draft: EMPTY_DRAFT });
+    // A tray describes one project's context. Without this the composer for the second project would render the
+    // first project's references, and a stored row must never be displayed against the wrong project.
+    dispatchTray({ type: "cleared" });
+  }, []);
 
   return (
     <main style={{ fontFamily: "system-ui", padding: 32, maxWidth: 760, margin: "0 auto" }}>
@@ -124,7 +202,9 @@ export default function App() {
 
       {created ? (
         <>
-          <ProjectPanel project={created} onStartAnother={() => { setDraft(EMPTY_DRAFT); dispatchWorkspace({ type: "edit", requestedPath: "" }); dispatch({ type: "edit", draft: EMPTY_DRAFT }); }} />
+          <ProjectPanel project={created} onStartAnother={onStartAnother} />
+          <UnattachedSelections tray={intakeTray} />
+          <OngoingChatComposer project={created} />
           <ProjectList projects={projects.filter((p) => p.project_id !== created.project_id)} loading={loading} />
         </>
       ) : (
@@ -138,6 +218,10 @@ export default function App() {
           canSubmit={canSubmit}
           onSubmit={onSubmit}
           error={error}
+          tray={intakeTray}
+          onAddFiles={onAddAttachmentFiles}
+          onAddFolder={onAddAttachmentFolder}
+          onDiscard={onDiscardAttachment}
         />
       )}
       {recovery && !recovery.clean ? <RecoveryBanner report={recovery} /> : null}
@@ -156,8 +240,13 @@ function Composer(props: {
   canSubmit: boolean;
   onSubmit: () => void;
   error: CommandError | null;
+  tray: AttachmentTray;
+  onAddFiles: () => void;
+  onAddFolder: () => void;
+  onDiscard: (requestedPath: string) => void;
 }) {
   const { draft, onChange, workspace, onBrowse, onEditWorkspace, pending, canSubmit, onSubmit, error } = props;
+  const { tray, onAddFiles, onAddFolder, onDiscard } = props;
   const selecting = workspace.kind === "selecting";
   const authorized = isAuthorized(workspace);
 
@@ -208,6 +297,20 @@ function Composer(props: {
         This becomes <strong>ProjectBrief version 1</strong> — the canonical record of your project intent.
         It stays a local draft until the project is created.
       </p>
+
+      <AttachmentTrayView
+        tray={tray}
+        busy={pending}
+        onAddFiles={onAddFiles}
+        onAddFolder={onAddFolder}
+        onDiscard={onDiscard}
+        note={
+          <>
+            Optional supporting context. Files are <strong>referenced in place</strong> — nothing is uploaded,
+            copied or read, and nothing is required here to create the project.
+          </>
+        }
+      />
 
       <button onClick={onSubmit} disabled={!canSubmit} style={button}>
         {pending ? "Creating…" : "Create project"}
@@ -370,6 +473,275 @@ function ProjectList({ projects, loading }: { projects: ProjectView[]; loading: 
   );
 }
 
+/**
+ * One tray, rendered identically on both surfaces.
+ *
+ * Every label, state and path comes from `presentationOf`, which reads Rust's answer. This component computes
+ * no attachment state of its own, so it has no way to render a selection as attached, or a reference as
+ * captured, before the controller said so.
+ */
+function AttachmentTrayView(props: {
+  tray: AttachmentTray;
+  busy: boolean;
+  onAddFiles: () => void;
+  onAddFolder: () => void;
+  onDiscard: (requestedPath: string) => void;
+  note: React.ReactNode;
+}) {
+  const { tray, busy, onAddFiles, onAddFolder, onDiscard, note } = props;
+  return (
+    <section aria-label="Attachments" style={trayBox}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+        <strong style={{ fontSize: 14 }}>Supporting context</strong>
+        <span style={hint}>Optional — never required</span>
+      </div>
+      <p style={{ ...hint, margin: "4px 0 10px" }}>{note}</p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" onClick={onAddFiles} disabled={busy} style={secondaryButton}>
+          Attach files…
+        </button>
+        <button type="button" onClick={onAddFolder} disabled={busy} style={secondaryButton}>
+          Attach a folder…
+        </button>
+      </div>
+
+      {tray.entries.length === 0 ? (
+        <p style={{ ...hint, margin: "10px 0 0" }}>Nothing attached. This is a normal state.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
+          {tray.entries.map((entry, index) => (
+            <AttachmentRow
+              key={`${presentationOf(entry).path}#${index}`}
+              entry={entry}
+              busy={busy}
+              onDiscard={onDiscard}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** One entry. The label states what is recorded; it never states what the file is used for. */
+function AttachmentRow(props: {
+  entry: AttachmentEntry;
+  busy: boolean;
+  onDiscard: (requestedPath: string) => void;
+}) {
+  const { entry, busy, onDiscard } = props;
+  const shown = presentationOf(entry);
+  const failed = shown.checks.find((check) => check.status === "FAIL");
+
+  return (
+    <li style={trayRow}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <code style={{ fontSize: 12, wordBreak: "break-all" }}>{shown.path}</code>
+        <span style={{ ...hint, whiteSpace: "nowrap" }}>{shown.label}</span>
+      </div>
+
+      {shown.durable ? (
+        <div style={{ ...hint, marginTop: 4 }}>
+          Recorded <strong>{shown.recordedState}</strong>
+          {" · "}
+          {shown.provenance === "INITIAL_INTAKE_COMPOSER" ? "from intake" : "from chat"}
+          {" · "}
+          {shown.captured ? "contents captured" : "contents not read"}
+          {shown.consumed ? " · accepted by an owning service" : ""}
+        </div>
+      ) : null}
+
+      {shown.verdict === "UNRESOLVED" ? (
+        <div style={{ ...hint, marginTop: 4, color: "#b45309" }}>
+          The source no longer resolves as recorded{failed?.code ? ` (${failed.code})` : ""}. The reference is
+          kept — nothing is deleted.
+        </div>
+      ) : null}
+
+      {entry.kind === "refused" ? (
+        <div style={{ ...hint, marginTop: 4, color: "#b91c1c" }}>
+          <strong>{entry.code}</strong> — {entry.message}
+        </div>
+      ) : null}
+
+      {entry.kind === "candidate" ? (
+        <button type="button" onClick={() => onDiscard(entry.requestedPath)} disabled={busy} style={linkButton}>
+          Remove from this list
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * The intake selections that were never recorded, shown after the project exists.
+ *
+ * Recorded ones are deliberately not repeated here: they are part of the project's attachment set and appear
+ * in the composer below, read back from Rust. This section exists so that a refusal cannot vanish when the
+ * intake composer is replaced by the project view.
+ */
+function UnattachedSelections({ tray }: { tray: AttachmentTray }) {
+  const unrecorded = tray.entries.filter((entry) => !isDurable(entry));
+  if (unrecorded.length === 0) return null;
+
+  return (
+    <section role="alert" style={{ ...notice, borderColor: "#b45309", marginTop: 16 }}>
+      <strong>Some selections were not attached</strong>
+      <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+        The project was created, but these selections are not stored as context. Nothing was uploaded or copied.
+      </p>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+        {unrecorded.map((entry, index) => {
+          const shown = presentationOf(entry);
+          return (
+            <li key={`${shown.path}#${index}`}>
+              <code>{shown.path}</code> —{" "}
+              {entry.kind === "refused" ? `${entry.code}: ${entry.message}` : shown.label}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * The Ongoing Chat Composer: the second surface, available after project creation.
+ *
+ * INTERNAL-APPLICATION-ARCHITECTURE.md:309 — free-text input becomes a `UserContribution` with an advisory
+ * classification, and the owning service decides whether project truth changes. It is never a second
+ * project-creation path.
+ *
+ * The attachment half is wired to the three operations the contract declares: the tray is seeded from the
+ * project's stored attachments, and attaching here records immediately, because the project already exists.
+ * The message half is presentation state.
+ *
+ * No operation records a `UserContribution` yet. DEC-030 records the requirement — "A new Tauri command is
+ * required for classified free-text input" — and `payloads.json` declares no such command, so this component
+ * does not invent one (AGENTS.md section 8), and it has no `sent` state to render. What is real is the
+ * enablement rule: `canSendMessage` takes the message text and nothing else, so the send control is available
+ * with nothing attached, which is DEC-106's requirement stated on the surface itself rather than only in a
+ * test.
+ */
+function OngoingChatComposer({ project }: { project: ProjectView }) {
+  const [state, dispatch] = useReducer(chatReducer, "CHAT_COMPOSER", initialChatState);
+  const [gapReported, setGapReported] = useState(false);
+  const [loadingAttachments, setLoadingAttachments] = useState(true);
+
+  // Seed the tray from what Rust stores, so a restart shows the project's real context rather than whatever a
+  // previous session happened to hold.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoadingAttachments(true);
+      const stored = await listProjectContextAttachments(project.project_id);
+      if (cancelled) return;
+      dispatch({
+        type: "attachment",
+        action: { type: "rehydrated", resolutions: Array.isArray(stored) ? stored : [] },
+      });
+      setLoadingAttachments(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.project_id]);
+
+  const attachOne = useCallback(
+    async (path: string) => {
+      dispatch({ type: "attachment", action: { type: "attaching", requestedPath: path } });
+      const attached = await attachProjectContextAttachment(
+        project.project_id,
+        path,
+        "CHAT_COMPOSER",
+      );
+      if (isResolution(attached)) {
+        dispatch({
+          type: "attachment",
+          action: { type: "attached", requestedPath: path, resolution: attached },
+        });
+      } else {
+        dispatch({
+          type: "attachment",
+          action: { type: "refused", requestedPath: path, code: attached.code, message: attached.message },
+        });
+      }
+    },
+    [project.project_id],
+  );
+
+  const onAddFiles = useCallback(async () => {
+    for (const path of await pickAttachmentFiles()) await attachOne(path);
+  }, [attachOne]);
+
+  const onAddFolder = useCallback(async () => {
+    const picked = await pickAttachmentFolder();
+    if (picked !== null) await attachOne(picked);
+  }, [attachOne]);
+
+  const canSend = canSendMessage(state);
+
+  return (
+    <section
+      aria-label="Ongoing Chat Composer"
+      style={{ marginTop: 24, border: "1px solid #e5e7eb", borderRadius: 8, padding: 20 }}
+    >
+      <h2 style={{ margin: "0 0 4px" }}>Add to this project</h2>
+      <p style={{ ...hint, marginTop: 0 }}>
+        Free text is recorded as a <strong>UserContribution</strong> with an advisory classification. Only the
+        owning service decides whether it changes project truth; a message never mutates state on its own.
+      </p>
+
+      <label style={field}>
+        Message
+        <textarea
+          value={state.text}
+          rows={4}
+          onChange={(event) => dispatch({ type: "edit", text: event.target.value })}
+          style={{ ...input, height: "auto", resize: "vertical" }}
+        />
+      </label>
+
+      <AttachmentTrayView
+        tray={state.tray}
+        busy={loadingAttachments}
+        onAddFiles={onAddFiles}
+        onAddFolder={onAddFolder}
+        onDiscard={(requestedPath) =>
+          dispatch({ type: "attachment", action: { type: "discarded", requestedPath } })
+        }
+        note={
+          <>
+            Optional. These are the project's recorded references — from intake and from chat — each
+            <strong> referenced in place</strong>. Nothing here is uploaded, copied, indexed or analysed.
+          </>
+        }
+      />
+
+      <button onClick={() => setGapReported(true)} disabled={!canSend} style={button}>
+        Send
+      </button>
+      <p style={hint}>
+        Attachments are not a prerequisite for sending. This control is enabled by the message text alone, so it
+        is available with nothing attached and with references that no longer resolve.
+      </p>
+
+      {gapReported ? (
+        <div role="alert" style={{ ...notice, borderColor: "#b45309", color: "#92400e" }}>
+          <strong>Nothing was recorded.</strong>
+          <div style={{ marginTop: 4 }}>
+            Recording a chat message needs an operation the contract does not declare yet. DEC-030 states that a
+            new Tauri command is required for classified free-text input, and no such command exists in{" "}
+            <code>schemas/tauri-bridge-v1/payloads.json</code>. This composer does not invent one. Attaching
+            files is fully wired; recording the message is not.
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 const Term = ({ children }: { children: React.ReactNode }) => (
   <dt style={{ color: "#6b7280" }}>{children}</dt>
 );
@@ -379,6 +751,16 @@ const Value = ({ children }: { children: React.ReactNode }) => (
 
 function isProjectView(value: ProjectView | CommandError): value is ProjectView {
   return typeof (value as ProjectView).project_id === "string";
+}
+
+/**
+ * True when the service answered with a stored attachment rather than a refusal.
+ *
+ * A `CommandError` always carries a string `code` and a resolution never does, so this distinguishes the two
+ * by the shape the contract gives each, not by which fields happen to be present.
+ */
+function isResolution(value: AttachmentResolution | CommandError): value is AttachmentResolution {
+  return typeof (value as CommandError).code !== "string";
 }
 
 const field: React.CSSProperties = { display: "block", marginBottom: 14, fontSize: 14, fontWeight: 500 };
@@ -434,4 +816,37 @@ const browseButton: React.CSSProperties = {
   fontSize: 14,
   cursor: "pointer",
   whiteSpace: "nowrap",
+};
+const trayBox: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 6,
+  padding: "12px 14px",
+  marginBottom: 16,
+  background: "#f9fafb",
+};
+const trayRow: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 6,
+  padding: "8px 10px",
+  marginBottom: 6,
+  background: "#fff",
+};
+const secondaryButton: React.CSSProperties = {
+  padding: "7px 12px",
+  borderRadius: 6,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 13,
+  cursor: "pointer",
+};
+const linkButton: React.CSSProperties = {
+  marginTop: 6,
+  padding: 0,
+  border: "none",
+  background: "none",
+  color: "#6b7280",
+  fontSize: 12,
+  textDecoration: "underline",
+  cursor: "pointer",
 };

@@ -193,6 +193,42 @@ runtime build/test/evidence orchestration and end-to-end project execution remai
 - MSI generation
 - installation validation
 
+## Cross-cutting — Attachment references (DEC-049, DEC-106, DEC-107)
+
+Attachments belong to no single milestone, and that is why the requirement was orphaned: `DATA-MODEL.md`
+documented `ProjectContextAttachment` and DEC-106 settled its storage model, while no milestone listed the work,
+so nothing tracked it. It is recorded here as a cross-cutting capability instead of being assigned to a milestone
+that would own only part of it.
+
+An attachment is a durable local reference with captured provenance: the user selected this path, at this time,
+inside this authorized scope, and nothing more. It is supporting context and evidence, never project truth
+(DEC-049). Attaching is one of three operations that are deliberately not collapsed (DEC-106) — attach records
+the reference, capture computes a content hash and produces evidence (DEC-102), consume is an owning service
+accepting a material change. Attachment is optional on both surfaces and is never a prerequisite for creating a
+project or for submitting a normal user message.
+
+- canonical `project_context_attachments` table with a CHECK-closed kind, provenance and lifecycle vocabulary
+- `AttachmentService` owns the entity, its association and its lifecycle; `WorkspaceService` owns locality and
+  authorized-scope validation; `EvidenceService` owns capture, hashing and evidence provenance (DEC-107)
+- path validation: locality, existence, kind and component-wise containment, with the scope read from the
+  project's stored workspace root rather than accepted from the caller (DEC-048)
+- read-time resolvability, reusing the `Admission` shape of per-check status plus one verdict
+- `attach_project_context_attachment`, `list_project_context_attachments` and
+  `resolve_project_context_attachment` on the bridge, with shape-tested wire types
+- the Initial Intake Composer and the Ongoing Chat Composer both attach, with one shared presentation state
+- **capture** (hash plus Artifact/Evidence) and **consume** (explicit acceptance) — declared by DEC-106,
+  deliberately deferred, and not implied by attaching
+
+**Status: the attach path and both surfaces are implemented; capture and consume are not.** The table, the
+service, the three bridge operations and the shared tray presentation are in place and tested on both the Rust
+and the TypeScript sides, and the intake and chat composers both attach. Three things are deliberately not done
+and are recorded rather than implied: nothing sets `content_hash` or `context_evidence_id`, because `capture`
+and `consume` have no operation and attaching must not perform them; a directory is attached as a scope and
+never enumerated, so nothing durable describes its contents; and the chat composer records **no message**,
+because DEC-030 requires a new Tauri command for classified free-text input and `payloads.json` declares none —
+the composer states that gap instead of inventing the API. Whether two attachments may reference one
+`source_path` in a single project remains deliberately open (DEC-106).
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

@@ -8,6 +8,7 @@
 // The transport is injectable so tests can drive the UI without a Tauri runtime. The default resolves
 // `@tauri-apps/api` lazily, so importing this module in a plain Node test does not require Tauri.
 
+import type { AttachmentProvenance, AttachmentResolution } from "../attachments/state";
 import type { CommandError, ProjectView, RecoveryReport } from "./state";
 
 export type Transport = (command: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -250,4 +251,111 @@ export async function replayDeadLetter(
   } catch (thrown) {
     return asCommandError(thrown);
   }
+}
+
+// -----------------------------------------------------------------------------------------------------------
+// Attachments (DEC-106, DEC-107).
+//
+// Three operations, because attaching, capturing and consuming are three operations and are deliberately not
+// collapsed. The contract declares attach and the two reads; it declares no capture and no consume, which is
+// why nothing here can make an attachment captured or accepted. `content_hash` and `context_evidence_id` stay
+// null until those operations exist, and the UI renders the nulls rather than inferring the states.
+//
+// There is no argument for the authorized scope. The service reads it from the project, so the boundary a path
+// is checked against is not something this side can choose (DEC-048).
+// -----------------------------------------------------------------------------------------------------------
+
+/**
+ * Record a local file or folder as supporting context for a project.
+ *
+ * Attaching reads no content: no hash, no copy, no index. The returned resolution is the authoritative record
+ * plus a resolvability evaluation performed when it was read, so a caller renders what was committed rather
+ * than the selection it submitted.
+ *
+ * Rejections are returned, not thrown, because a refused path is an expected outcome of picking one.
+ */
+export async function attachProjectContextAttachment(
+  projectId: string,
+  sourcePath: string,
+  provenance: AttachmentProvenance,
+): Promise<AttachmentResolution | CommandError> {
+  try {
+    return (await transport("attach_project_context_attachment", {
+      project_id: projectId,
+      source_path: sourcePath,
+      provenance,
+    })) as AttachmentResolution;
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Every attachment of a project, oldest first, each re-evaluated on read. Read-only.
+ *
+ * This is the rehydration path for both composers: what is displayed comes from what Rust stores, so a restart
+ * cannot show a selection the service never recorded.
+ */
+export async function listProjectContextAttachments(
+  projectId: string,
+): Promise<AttachmentResolution[] | CommandError> {
+  try {
+    return (await transport("list_project_context_attachments", {
+      project_id: projectId,
+    })) as AttachmentResolution[];
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Re-check one stored reference. Read-only: it never rewrites the row.
+ *
+ * Resolvability is an observation, so the same attachment can answer RESOLVED now and UNRESOLVED later without
+ * having changed.
+ */
+export async function resolveProjectContextAttachment(
+  projectId: string,
+  attachmentId: string,
+): Promise<AttachmentResolution | CommandError> {
+  try {
+    return (await transport("resolve_project_context_attachment", {
+      project_id: projectId,
+      attachment_id: attachmentId,
+    })) as AttachmentResolution;
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Open the native Windows file picker for attachment candidates.
+ *
+ * Returns an empty array when the user cancels. Multi-select, because attaching several files is one gesture;
+ * each selection becomes its own candidate and its own durable reference.
+ */
+export async function pickAttachmentFiles(): Promise<string[]> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    directory: false,
+    multiple: true,
+    title: "Select files to attach as context",
+  });
+  if (selected === null) return [];
+  return Array.isArray(selected) ? selected : [selected];
+}
+
+/**
+ * Open the native Windows folder picker for a directory attachment.
+ *
+ * A directory is attached as a scope, not as a snapshot: enumeration is never durable (DEC-106).
+ */
+export async function pickAttachmentFolder(): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: "Select a folder to attach as context",
+  });
+  return typeof selected === "string" ? selected : null;
 }

@@ -14,10 +14,13 @@ import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
 import {
+  attachProjectContextAttachment,
   getCommunicationHealth,
   getEventCursor,
+  listProjectContextAttachments,
   replayDeadLetter,
   resetTransport,
+  resolveProjectContextAttachment,
   setTransport,
   type CommunicationHealth,
   type EventCursor,
@@ -179,5 +182,78 @@ describe("a refusal is returned, never rendered as success", () => {
     assert.equal(result.replayed_message_id, undefined);
     assert.equal(result.context_refreshed, undefined);
     assert.equal(result.deduplicated, undefined);
+  });
+});
+
+describe("attachment operations send the declared wire names", () => {
+  test("attach sends project_id, source_path and provenance", async () => {
+    const calls = recording({ attachment: {}, verdict: "RESOLVED", checks: [] });
+    await attachProjectContextAttachment(
+      "prj_a",
+      "C:\\work\\proj\\src\\main.rs",
+      "CHAT_COMPOSER",
+    );
+
+    const call = calls[0]!;
+    assert.equal(call.command, "attach_project_context_attachment");
+    assert.deepEqual(Object.keys(call.args), ["project_id", "source_path", "provenance"]);
+    assert.equal(call.args.project_id, "prj_a");
+    assert.equal(call.args.source_path, "C:\\work\\proj\\src\\main.rs");
+    assert.equal(call.args.provenance, "CHAT_COMPOSER");
+    // The path is sent exactly as the user's selection, not pre-normalized here. Canonicalization is the
+    // service's, and a second normalization on this side would be a second answer to what the path is.
+    assert.notEqual(call.args.source_path, "\\\\?\\C:\\work\\proj\\src\\main.rs");
+  });
+
+  test("attach sends no scope argument, so this side cannot choose the boundary", async () => {
+    // DEC-048. The scope is read from the project by the service; a wire field for it would let the caller pick
+    // the boundary its own path is validated against.
+    const calls = recording({ attachment: {}, verdict: "RESOLVED", checks: [] });
+    await attachProjectContextAttachment("prj_a", "C:\\work\\proj", "INITIAL_INTAKE_COMPOSER");
+
+    assert.deepEqual(Object.keys(calls[0]!.args), ["project_id", "source_path", "provenance"]);
+  });
+
+  test("list sends project_id alone", async () => {
+    const calls = recording([]);
+    await listProjectContextAttachments("prj_a");
+
+    const call = calls[0]!;
+    assert.equal(call.command, "list_project_context_attachments");
+    assert.deepEqual(Object.keys(call.args), ["project_id"]);
+  });
+
+  test("resolve sends project_id and attachment_id", async () => {
+    const calls = recording({ attachment: {}, verdict: "UNRESOLVED", checks: [] });
+    await resolveProjectContextAttachment("prj_a", "att_1");
+
+    const call = calls[0]!;
+    assert.equal(call.command, "resolve_project_context_attachment");
+    assert.deepEqual(Object.keys(call.args), ["project_id", "attachment_id"]);
+    assert.equal(call.args.attachment_id, "att_1");
+  });
+
+  test("an attachment refusal keeps its registered code", async () => {
+    // A path outside the authorized workspace is refused by WorkspaceService, and the code is what the tray
+    // renders. Collapsing it into a generic failure would erase the difference between "outside your workspace"
+    // and "the file is gone".
+    rejecting({ code: "ATTACHMENT_NOT_IN_SCOPE", message: "outside the authorized workspace" });
+
+    const result = (await attachProjectContextAttachment("prj_a", "D:\\elsewhere", "CHAT_COMPOSER")) as {
+      code: string;
+    };
+    assert.equal(result.code, "ATTACHMENT_NOT_IN_SCOPE");
+  });
+
+  test("a missing attachment is not rendered as a stored one", async () => {
+    rejecting({ code: "ATTACHMENT_NOT_FOUND", message: "no such attachment" });
+
+    const result = (await resolveProjectContextAttachment("prj_a", "att_absent")) as unknown as Record<
+      string,
+      unknown
+    >;
+    assert.equal(result.code, "ATTACHMENT_NOT_FOUND");
+    assert.equal(result.attachment, undefined);
+    assert.equal(result.verdict, undefined);
   });
 });
