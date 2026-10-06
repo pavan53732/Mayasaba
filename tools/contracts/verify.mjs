@@ -1839,6 +1839,70 @@ const serviceDrift=declaredServices.filter(s=>!manifestServices.includes(s)).map
   .concat(manifestServices.filter(s=>!declaredServices.includes(s)).map(s=>`${s} is in workspace.manifest.json application_services but not in service-contracts-v1/registry.json`));
 if(serviceDrift.length) fail(`Service registry and workspace manifest disagree on ${serviceDrift.length} service(s):\n  - ${serviceDrift.join("\n  - ")}`);
 
+// The registry states this rule about itself, under `operation_rules.ownership`: "Each operation has exactly one
+// owner service." Nothing checked it. Operations were resolved out of the registry in one direction only - a
+// recovery action had to name an operation the registry declares - so an operation the bridge exposes and
+// `payloads.json` records an owner for could belong to no service at all, and the recovery subsystem could not
+// name it. Three did: get_event_cursor and request_event_resync, both recorded as DiagnosticsService, and
+// create_trace_link, recorded as RequirementService.
+//
+// The check reads the bridge's own operation enums rather than `payloads.json`'s `owner` field, because that
+// field is the same claim written a second time. The question here is whether the registry carries the
+// operation at all, which is what a recovery action is resolved against.
+//
+// The two directions are different failures with different meanings. An operation in no service is one the
+// recovery subsystem cannot name; an operation in two services is one whose owner is ambiguous, and the
+// registry's own rule forbids it. Both are checked, and the allow-list is read in both directions too: a
+// justification that outlives its gap is how a check stops meaning anything.
+const unownedBridgeAllowListPath="tools/contracts/unowned-bridge-operations.json";
+const bridgeOperations=[...bridge.properties.command.enum,...bridge.properties.query.enum];
+if(bridgeOperations.length===0) fail("schemas/tauri-bridge-v1/bridge.schema.json declares no operations, so every operation appears to have an owner and this check would pass vacuously.");
+const registryOperationOwners=new Map();
+for(const [service,operations] of Object.entries(serviceRegistry.services ?? {})){
+  for(const operation of Array.isArray(operations) ? operations : []){
+    const owners=registryOperationOwners.get(operation) ?? [];
+    owners.push(service);
+    registryOperationOwners.set(operation,owners);
+  }
+}
+const multiplyOwned=[...registryOperationOwners].filter(([,owners])=>owners.length>1);
+if(multiplyOwned.length) fail(
+  `${multiplyOwned.length} operation(s) are listed under more than one service, and schemas/service-contracts-v1/registry.json states its own rule under operation_rules.ownership: "Each operation has exactly one owner service."\n  - `+
+  multiplyOwned.map(([operation,owners])=>`${operation} is under ${owners.join(" and ")}`).join("\n  - ")+
+  `\nAn operation with two owners has none, because a caller cannot tell which service is responsible for it. Remove it from every service but one.`
+);
+const unownedBridgeOperations=bridgeOperations.filter(operation=>!registryOperationOwners.has(operation));
+let unownedBridgeAllowList=null;
+try {
+  unownedBridgeAllowList=JSON.parse(fs.readFileSync(path.join(root,unownedBridgeAllowListPath),"utf8"));
+} catch(error){
+  fail(`${unownedBridgeAllowListPath} could not be read or parsed (${error.message}), so the ${unownedBridgeOperations.length} declared bridge operation(s) that belong to no service cannot be told apart from the ones deliberately left unowned. This check fails closed rather than reporting that every operation has an owner.`);
+}
+if(!Array.isArray(unownedBridgeAllowList.unowned)){
+  fail(`${unownedBridgeAllowListPath} has no \`unowned\` array, so it justifies nothing and this check cannot tell a justified gap from an unjustified one.`);
+}
+const allowedUnowned=new Map();
+for(const entry of unownedBridgeAllowList.unowned){
+  if(typeof entry?.operation!=="string"||entry.operation.trim()===""||typeof entry?.reason!=="string"||entry.reason.trim()===""||typeof entry?.future_owner!=="string"||entry.future_owner.trim()===""){
+    fail(`${unownedBridgeAllowListPath} has an entry that is not {operation, reason, future_owner} with a non-empty reason and future_owner: ${JSON.stringify(entry)}. An entry with no reason is an exemption, and this file does not grant exemptions.`);
+  }
+  if(allowedUnowned.has(entry.operation)) fail(`${unownedBridgeAllowListPath} lists ${entry.operation} more than once, so which justification applies is ambiguous.`);
+  allowedUnowned.set(entry.operation,entry);
+}
+const unownedBridgeProblems=[];
+for(const [operation,entry] of allowedUnowned){
+  if(!unownedBridgeOperations.includes(operation)) unownedBridgeProblems.push(`${unownedBridgeAllowListPath} justifies ${operation} as belonging to no service, but schemas/service-contracts-v1/registry.json now lists it under ${(registryOperationOwners.get(operation) ?? ["no service"]).join(" and ")}, so the justification has outlived its gap: "${entry.reason.slice(0,96)}${entry.reason.length>96?"...":""}"`);
+}
+for(const operation of unownedBridgeOperations){
+  if(!allowedUnowned.has(operation)) unownedBridgeProblems.push(`${operation} is a declared bridge operation that belongs to no service in schemas/service-contracts-v1/registry.json, and ${unownedBridgeAllowListPath} does not justify it. Add it to the service that owns it, or add it to that file with a reason and the owner that will take it.`);
+}
+if(unownedBridgeProblems.length) fail(
+  `${unownedBridgeProblems.length} bridge operation ownership problem(s):\n  - ${unownedBridgeProblems.join("\n  - ")}\n`+
+  `schemas/service-contracts-v1/registry.json states the rule itself, under operation_rules.ownership: "Each operation has exactly one owner service." `+
+  `An operation that belongs to no service cannot be named as a recovery action, because every recovery action is resolved against that registry.`
+);
+console.log(`Bridge operation ownership: ${bridgeOperations.length} declared operation(s) each resolve to a service; ${unownedBridgeOperations.length} belong to none, and ${unownedBridgeOperations.length===0?"there are none to justify":`every one is justified in ${unownedBridgeAllowListPath} (${unownedBridgeOperations.map((o)=>`${o} -> ${allowedUnowned.get(o).future_owner}`).join("; ")})`}`);
+
 if(conformanceProblems.length) fail(conformanceProblems.length+" registry/schema conformance problem(s):\n  - "+conformanceProblems.join("\n  - "));
 
 // Canonical schema sources are an allowlist, not a description. Without this, a future agent could create

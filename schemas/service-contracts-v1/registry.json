@@ -31,7 +31,7 @@
     "RecoveryService":["replay_event","replay_dead_letter","start_recovery","get_recovery_status","resolve_recovery"],
     "ConfigurationService":["get_configuration","update_configuration","validate_configuration"],
     "SimulationService":["start_simulation","stop_simulation","get_simulation_status"],
-    "DiagnosticsService":["get_logs","get_communication_health","get_doctor_report"]
+    "DiagnosticsService":["get_logs","get_communication_health","get_doctor_report","get_event_cursor","request_event_resync"]
   },
   "types":{
     "GenericRequest":{"required":["request_id"],"properties":{"request_id":{"type":"string","format":"uuid"},"project_id":{"type":["string","null"],"format":"uuid"},"payload":{"type":"object"}}},

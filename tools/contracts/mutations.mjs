@@ -1667,6 +1667,147 @@ const MUTATIONS = [
     ],
     expect: [],
   },
+  // Bridge operation ownership. The registry states the rule itself under operation_rules.ownership - "Each
+  // operation has exactly one owner service" - and the gate resolved registry operations in one direction only,
+  // so these cover an operation losing its service, an operation arriving with no service at all, an operation
+  // acquiring a second service, and a justification that outlives the gap it was written for.
+  {
+    id: "opowner-a",
+    what: "service registry: get_logs is dropped from DiagnosticsService, so a declared bridge operation belongs to no service",
+    check: GATE,
+    edits: [
+      {
+        file: "schemas/service-contracts-v1/registry.json",
+        find: '"DiagnosticsService":["get_logs","get_communication_health","get_doctor_report","get_event_cursor","request_event_resync"]',
+        replace: '"DiagnosticsService":["get_communication_health","get_doctor_report","get_event_cursor","request_event_resync"]',
+      },
+    ],
+    expect: [
+      "bridge operation ownership problem(s)",
+      "get_logs is a declared bridge operation that belongs to no service in schemas/service-contracts-v1/registry.json",
+      "does not justify it",
+    ],
+  },
+  {
+    id: "opowner-b",
+    what: "bridge.schema.json, workspace.manifest.json and payloads.json: a command is declared in all three places WITH an owner but with no service behind it, which is the real defect - the gate already fails a command with no owner at all, so this one has to get past that first",
+    check: GATE,
+    edits: [
+      {
+        file: "schemas/tauri-bridge-v1/bridge.schema.json",
+        find: '        "replay_dead_letter",',
+        replace: '        "bogus_command",\n        "replay_dead_letter",',
+      },
+      {
+        file: MANIFEST,
+        find: '      "replay_dead_letter": "RecoveryService",',
+        replace: '      "bogus_command": "RecoveryService",\n      "replay_dead_letter": "RecoveryService",',
+      },
+      {
+        file: "schemas/tauri-bridge-v1/payloads.json",
+        find: '    "replay_dead_letter": {',
+        replace:
+          '    "bogus_command": {\n' +
+          '      "owner": "RecoveryService",\n' +
+          '      "request": "replay_dead_letterRequest",\n' +
+          '      "response": "replay_dead_letterResponse",\n' +
+          '      "cancellable": false,\n' +
+          '      "request_fields": [\n' +
+          '        {\n' +
+          '          "name": "message_id",\n' +
+          '          "type": "string",\n' +
+          '          "required": true,\n' +
+          '          "description": "The terminal message to replay. Declared here only so this operation satisfies every check that runs before the ownership check, which is what makes the mutation reach it."\n' +
+          '        }\n' +
+          '      ]\n' +
+          '    },\n' +
+          '    "replay_dead_letter": {',
+      },
+    ],
+    expect: [
+      "bridge operation ownership problem(s)",
+      "bogus_command is a declared bridge operation that belongs to no service in schemas/service-contracts-v1/registry.json",
+      "does not justify it",
+    ],
+  },
+  {
+    id: "opowner-c",
+    what: "service registry: get_logs is listed under ProjectService as well as DiagnosticsService, so it has two owners and therefore none",
+    check: GATE,
+    edits: [
+      {
+        file: "schemas/service-contracts-v1/registry.json",
+        find: '"ProjectService":["create_project",',
+        replace: '"ProjectService":["get_logs","create_project",',
+      },
+    ],
+    expect: [
+      "listed under more than one service",
+      'operation_rules.ownership: "Each operation has exactly one owner service."',
+      "get_logs is under ProjectService and DiagnosticsService",
+    ],
+  },
+  {
+    id: "opowner-d",
+    what: "service registry: create_trace_link is given a service, so the justification that it has none has outlived its gap",
+    check: GATE,
+    edits: [
+      {
+        file: "schemas/service-contracts-v1/registry.json",
+        find: '"RequirementService":["list_requirements","upsert_requirement"]',
+        replace: '"RequirementService":["list_requirements","upsert_requirement","create_trace_link"]',
+      },
+    ],
+    expect: [
+      "bridge operation ownership problem(s)",
+      "justifies create_trace_link as belonging to no service, but schemas/service-contracts-v1/registry.json now lists it under RequirementService",
+      "the justification has outlived its gap",
+    ],
+  },
+  {
+    id: "opowner-e",
+    what: "unowned-bridge-operations.json: the file cannot be parsed, so the justified remainder cannot be established",
+    check: GATE,
+    edits: [
+      {
+        file: "tools/contracts/unowned-bridge-operations.json",
+        find: '"schema_version": 1,',
+        replace: '"schema_version": 1,,',
+      },
+    ],
+    expect: [
+      "could not be read or parsed",
+      "This check fails closed rather than reporting that every operation has an owner",
+    ],
+  },
+  {
+    id: "control-opowner-order",
+    what: "service registry: the two operations added to DiagnosticsService are listed in the other order, which changes no ownership",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: "schemas/service-contracts-v1/registry.json",
+        find: '"get_event_cursor","request_event_resync"]',
+        replace: '"request_event_resync","get_event_cursor"]',
+      },
+    ],
+    expect: [],
+  },
+  {
+    id: "control-opowner-allowlist-whitespace",
+    what: "unowned-bridge-operations.json: the rule string is re-indented, a whitespace change that justifies exactly the same gap",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: "tools/contracts/unowned-bridge-operations.json",
+        find: '"rule": "Every operation',
+        replace: '"rule":  "Every operation',
+      },
+    ],
+    expect: [],
+  },
 ];
 
 // -----------------------------------------------------------------------------------------------------------
