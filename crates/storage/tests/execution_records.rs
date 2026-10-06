@@ -259,3 +259,29 @@ fn native_session_identity_cannot_be_rewritten_after_binding() {
     ).expect("identity");
     assert_eq!(row, (4242, "native-1".to_owned()));
 }
+
+ 
+#[test]
+fn artifact_evidence_and_validation_persistence_is_project_scoped() {
+    let storage = project_storage();
+    storage.insert_artifact(&NewArtifact {
+        artifact_id:"artifact_1".into(), project_id:"prj_exec".into(), kind:"FILE".into(),
+        path:Some(r"C:\work\exec\out.txt".into()), sha256:Some("a".repeat(64)),
+        size_bytes:Some(7), created_at:"20".into()
+    }).expect("artifact");
+    storage.insert_evidence(&NewEvidence {
+        evidence_id:"evidence_1".into(), project_id:"prj_exec".into(), kind:"FILE_HASH".into(),
+        source_json:r#"{"artifact_id":"artifact_1"}"#.into(), sha256:Some("a".repeat(64)), created_at:"20".into()
+    }).expect("evidence");
+    storage.link_evidence_artifact("evidence_1","artifact_1").expect("link");
+    storage.insert_validation_run(&NewValidationRun {
+        validation_id:"validation_1".into(), project_id:"prj_exec".into(), task_id:Some("task_exec".into()),
+        scope_json:r#"{"task_id":"task_exec","workspace_id":"ws_exec"}"#.into(),
+        checks_json:r#"[{"check_id":"FILE_HASH","predicate":{},"status":"PASS","evidence_refs":["evidence_1"]}]"#.into(),
+        verdict:"PASS".into(), created_at:"21".into()
+    }).expect("validation");
+    assert!(storage.insert_evidence(&NewEvidence {
+        evidence_id:"evidence_other".into(), project_id:"missing_project".into(), kind:"FILE_HASH".into(),
+        source_json:"{}".into(), sha256:None, created_at:"22".into()
+    }).is_err());
+}

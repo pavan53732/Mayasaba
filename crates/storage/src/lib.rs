@@ -6330,6 +6330,211 @@ impl Storage {
         Ok(())
     }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewBuild {
+    pub build_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub status: String,
+    pub command_execution_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTestRun {
+    pub test_run_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub status: String,
+    pub command_execution_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewValidationRun {
+    pub validation_id: String,
+    pub project_id: String,
+    pub task_id: Option<String>,
+    pub scope_json: String,
+    pub checks_json: String,
+    pub verdict: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewArtifact {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub kind: String,
+    pub path: Option<String>,
+    pub sha256: Option<String>,
+    pub size_bytes: Option<i64>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactRecord {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub kind: String,
+    pub path: Option<String>,
+    pub sha256: Option<String>,
+    pub size_bytes: Option<i64>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewEvidence {
+    pub evidence_id: String,
+    pub project_id: String,
+    pub kind: String,
+    pub source_json: String,
+    pub sha256: Option<String>,
+    pub created_at: String,
+}
+
+const BUILD_STATUSES: &[&str] = &["REQUESTED","RUNNING","PASSED","FAILED","BLOCKED"];
+const TEST_RUN_STATUSES: &[&str] = &["REQUESTED","RUNNING","PASSED","FAILED","BLOCKED"];
+const VALIDATION_VERDICTS: &[&str] = &["PASS","FAIL","BLOCKED"];
+const ARTIFACT_KINDS: &[&str] = &["FILE","DIRECTORY","DIFF","BUILD_OUTPUT","TEST_OUTPUT","LOG","BUNDLE"];
+const EVIDENCE_KINDS: &[&str] = &["COMMAND_RESULT","TEST_RESULT","BUILD_RESULT","RUNTIME_RESULT","REVIEW","FILE_HASH","DIFF","SCREENSHOT","LOG","PROBE_RESULT"];
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+
+    pub fn insert_build(&self, new: &NewBuild) -> Result<()> {
+        require_vocabulary("builds.status", &new.status, BUILD_STATUSES)?;
+        if let Some(task_id) = new.task_id.as_deref() { self.ensure_task_project(task_id, &new.project_id)?; }
+        if let Some(execution_id) = new.command_execution_id.as_deref() {
+            let project_id: String = self.conn.query_row(
+                "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
+                |r| r.get(0)
+            ).optional().map_err(StorageError::Db)?
+             .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+            if project_id != new.project_id {
+                return Err(StorageError::Malformed {
+                    column:"builds.command_execution_id".to_string(),
+                    detail:"build command execution belongs to another project".to_string()
+                });
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO builds(build_id,project_id,task_id,status,command_execution_id,created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![new.build_id,new.project_id,new.task_id,new.status,new.command_execution_id,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_test_run(&self, new: &NewTestRun) -> Result<()> {
+        require_vocabulary("test_runs.status", &new.status, TEST_RUN_STATUSES)?;
+        if let Some(task_id) = new.task_id.as_deref() { self.ensure_task_project(task_id, &new.project_id)?; }
+        if let Some(execution_id) = new.command_execution_id.as_deref() {
+            let project_id: String = self.conn.query_row(
+                "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
+                |r| r.get(0)
+            ).optional().map_err(StorageError::Db)?
+             .ok_or_else(|| StorageError::NotFound(format!("command execution {execution_id}")))?;
+            if project_id != new.project_id {
+                return Err(StorageError::Malformed {
+                    column:"test_runs.command_execution_id".to_string(),
+                    detail:"test command execution belongs to another project".to_string()
+                });
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO test_runs(test_run_id,project_id,task_id,status,command_execution_id,created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![new.test_run_id,new.project_id,new.task_id,new.status,new.command_execution_id,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_validation_run(&self, new: &NewValidationRun) -> Result<()> {
+        require_vocabulary("validation_runs.verdict", &new.verdict, VALIDATION_VERDICTS)?;
+        let scope: serde_json::Value = serde_json::from_str(&new.scope_json).map_err(|e| StorageError::Malformed {
+            column:"validation_runs.scope_json".to_string(), detail:format!("must be valid JSON: {e}")
+        })?;
+        if !scope.is_object() {
+            return Err(StorageError::Malformed { column:"validation_runs.scope_json".to_string(), detail:"scope_json must be a JSON object".to_string() });
+        }
+        let checks: serde_json::Value = serde_json::from_str(&new.checks_json).map_err(|e| StorageError::Malformed {
+            column:"validation_runs.checks_json".to_string(), detail:format!("must be valid JSON: {e}")
+        })?;
+        if !checks.is_array() {
+            return Err(StorageError::Malformed { column:"validation_runs.checks_json".to_string(), detail:"checks_json must be a JSON array".to_string() });
+        }
+        if let Some(task_id)=new.task_id.as_deref() {
+            self.ensure_task_project(task_id,&new.project_id)?;
+            if scope.get("task_id").and_then(serde_json::Value::as_str) != Some(task_id) {
+                return Err(StorageError::Malformed { column:"validation_runs.scope_json".to_string(), detail:"scope.task_id must match validation task_id".to_string() });
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO validation_runs(validation_id,project_id,task_id,scope_json,checks_json,verdict,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![new.validation_id,new.project_id,new.task_id,new.scope_json,new.checks_json,new.verdict,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn insert_artifact(&self, new: &NewArtifact) -> Result<ArtifactRecord> {
+        require_vocabulary("artifacts.kind",&new.kind,ARTIFACT_KINDS)?;
+        if new.artifact_id.trim().is_empty() || new.project_id.trim().is_empty() {
+            return Err(StorageError::Malformed { column:"artifacts".to_string(), detail:"artifact_id and project_id must be non-empty".to_string() });
+        }
+        if let Some(hash)=new.sha256.as_deref() {
+            if !is_sha256_hex(hash) {
+                return Err(StorageError::Malformed { column:"artifacts.sha256".to_string(), detail:"sha256 must be exactly 64 hexadecimal characters".to_string() });
+            }
+        }
+        if new.size_bytes.is_some_and(|n| n<0) {
+            return Err(StorageError::Malformed { column:"artifacts.size_bytes".to_string(), detail:"size_bytes cannot be negative".to_string() });
+        }
+        self.ensure_project(&new.project_id)?;
+        self.conn.execute(
+            "INSERT INTO artifacts(artifact_id,project_id,kind,path,sha256,size_bytes,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![new.artifact_id,new.project_id,new.kind,new.path,new.sha256,new.size_bytes,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(ArtifactRecord {
+            artifact_id:new.artifact_id.clone(), project_id:new.project_id.clone(), kind:new.kind.clone(),
+            path:new.path.clone(), sha256:new.sha256.clone(), size_bytes:new.size_bytes, created_at:new.created_at.clone()
+        })
+    }
+
+    pub fn insert_evidence(&self, new: &NewEvidence) -> Result<()> {
+        require_vocabulary("evidence.kind",&new.kind,EVIDENCE_KINDS)?;
+        let source: serde_json::Value = serde_json::from_str(&new.source_json).map_err(|e| StorageError::Malformed {
+            column:"evidence.source_json".to_string(), detail:format!("must be valid JSON: {e}")
+        })?;
+        if !source.is_object() {
+            return Err(StorageError::Malformed { column:"evidence.source_json".to_string(), detail:"source_json must be a JSON object".to_string() });
+        }
+        if let Some(hash)=new.sha256.as_deref() {
+            if !is_sha256_hex(hash) {
+                return Err(StorageError::Malformed { column:"evidence.sha256".to_string(), detail:"sha256 must be exactly 64 hexadecimal characters".to_string() });
+            }
+        }
+        self.ensure_project(&new.project_id)?;
+        self.conn.execute(
+            "INSERT INTO evidence(evidence_id,project_id,kind,source_json,sha256,created_at) VALUES(?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![new.evidence_id,new.project_id,new.kind,new.source_json,new.sha256,new.created_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    pub fn link_evidence_artifact(&self,evidence_id:&str,artifact_id:&str)->Result<()> {
+        let pair: Option<(String,String)> = self.conn.query_row(
+            "SELECT e.project_id,a.project_id FROM evidence e JOIN artifacts a ON a.artifact_id=?2 WHERE e.evidence_id=?1",
+            rusqlite::params![evidence_id,artifact_id], |r| Ok((r.get(0)?,r.get(1)?))
+        ).optional().map_err(StorageError::Db)?;
+        let (ep,ap)=pair.ok_or_else(||StorageError::NotFound(format!("evidence/artifact {evidence_id}/{artifact_id}")))?;
+        if ep!=ap {
+            return Err(StorageError::Malformed { column:"evidence_links".to_string(), detail:"evidence and artifact must belong to the same project".to_string() });
+        }
+        self.conn.execute("INSERT INTO evidence_links(evidence_id,artifact_id) VALUES(?1,?2)",rusqlite::params![evidence_id,artifact_id]).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
     pub fn insert_certification_binding(&self, new: &NewCertificationBinding) -> Result<()> {
         require_vocabulary("certification_bindings.status", &new.status, CERTIFICATION_STATES)?;
         let validation: Option<(String, Option<String>, String)> = self.conn.query_row(

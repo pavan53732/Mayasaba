@@ -5,3 +5,5 @@ edition.workspace = true
 
 [dependencies]
 mayasaba-storage = { path = "../storage" }
+sha2.workspace = true
+serde_json.workspace = true
