@@ -413,7 +413,7 @@ Rejections are typed and machine-readable: `WORKSPACE_EMPTY`, `WORKSPACE_DOES_NO
 
 Not covered by this slice: indexing, recursive scanning, Git detection, workspace discovery, permissions dashboards, and task-scope generation.
 
-| DEC-107 | `ProjectContextAttachment` is canonically owned by `AttachmentService` in `crates/core`; `WorkspaceService` owns scope/locality validation, `EvidenceService` owns explicit capture/hash/provenance, and attachment storage remains a durable local reference under DEC-106 | HARD_LOCK |\n### DEC-049 intake attachments are context, not truth
+### DEC-049 intake attachments are context, not truth
 
 | Field | Value |
 |---|---|
@@ -1246,6 +1246,19 @@ Migration/reconciliation: `.github/` is absent and must remain absent. There is 
 Tests affected: the gate's own mutation suite gains one mutation, `dec105-a`, which is the test of this decision. `npm run verify:local` is unaffected.
 
 Known limitations: (1) the check reads the working tree, so a `.github/workflows/` tree that exists only in some other branch is not reported by a run on this branch; the decision is enforced where it matters, at the commit that would introduce it, because the gate is wired to the pre-commit hook. (2) Because the scope is `workflows/`, GitHub-side automation that is not a workflow is permitted — `.github/dependabot.yml`, for instance, which opens pull requests from GitHub's side and so arguably crosses the same boundary. It is currently allowed because the decision names workflows. Widening the check to cover it is a new decision, not a bug fix.
+
+### DEC-107 — `ProjectContextAttachment` is owned by `AttachmentService` in `crates/core`
+Classification: REFINEMENT of DEC-106 and DEC-049. HARD_LOCK.
+
+Ownership: `crates/core::AttachmentService` is the canonical owner of the durable `ProjectContextAttachment` entity and its lifecycle/association semantics. `WorkspaceService` remains the authority for path existence, locality and authorized-workspace scope validation under DEC-048. `EvidenceService` remains the authority for explicit capture, content hashing and evidence/artifact provenance under DEC-102. This split gives the attachment entity one owner without transferring the other concerns or creating a competing source of truth.
+
+The attachment remains a durable local reference under DEC-106. Attach is separate from capture and consume; attachment is optional in both the Initial Intake Composer and Ongoing Chat Composer and is never required for an ordinary chat message.
+
+Compatibility impact: additive. No runtime behavior is changed by the ownership assignment itself.
+
+Migration/reconciliation: none. The attachment entity remains not yet durable until its implementation slice is built.
+
+Tests affected: ownership registration and contract cross-checks must cover `AttachmentService` before the attachment commands/schema are introduced.
 
 ### DEC-106 — Attachment storage is a durable local reference with provenance; ingestion is a separate explicit operation
 Classification: REFINEMENT of DEC-049; supersedes nothing. HARD_LOCK for the storage model and the optionality rule. **Ownership is deliberately left OPEN by this record** — see "Open item" below.
