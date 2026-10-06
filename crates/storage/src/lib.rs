@@ -4287,6 +4287,32 @@ const LEASE_STATES: &[&str] = &[
 const ADMISSION_KINDS: &[&str] = &["WORKSPACE_ADMISSION", "INTEGRATION_ADMISSION"];
 const ADMISSION_CHECK_STATUSES: &[&str] = &["PASS", "FAIL", "NOT_APPLICABLE"];
 const ADMISSION_VERDICTS: &[&str] = &["ADMITTED", "REFUSED", "BLOCKED"];
+/// The closed conflict-class vocabulary for workspace integration (DEC-110), owned by
+/// `schemas/workspace-v1/integration-conflict-classes.json` and restated here so a refusal reason can be checked
+/// where it is written rather than only in a schema nothing evaluates. The contract gate compares this list to
+/// that file, so the two cannot drift.
+///
+/// `NO_CONFLICT` is the value that says nothing was found. It is a class because a classification has to be
+/// total, and it is never a refusal reason.
+const INTEGRATION_CONFLICT_CLASSES: &[&str] = &[
+    "NO_CONFLICT",
+    "PATH_OVERLAP",
+    "PROTECTED_PATH",
+    "SCHEMA_OR_CONTRACT_FILE_CONFLICT",
+    "DEPENDENCY_MANIFEST_CONFLICT",
+    "STALE_BASE",
+    "POST_MERGE_VALIDATION_FAILURE",
+];
+/// The subset of `INTEGRATION_CONFLICT_CLASSES` a `REFUSED` admission may cite: every class except the one that
+/// says there is no conflict.
+const REFUSAL_REASON_CLASSES: &[&str] = &[
+    "PATH_OVERLAP",
+    "PROTECTED_PATH",
+    "SCHEMA_OR_CONTRACT_FILE_CONFLICT",
+    "DEPENDENCY_MANIFEST_CONFLICT",
+    "STALE_BASE",
+    "POST_MERGE_VALIDATION_FAILURE",
+];
 
 const AGENT_SESSION_STATES: &[&str] = &[
     "DISCOVERED",
@@ -5304,6 +5330,40 @@ impl Storage {
                 return Err(StorageError::Malformed {
                     column: "admissions.refusal_reasons_json".to_string(),
                     detail: "REFUSED admission requires at least one refusal reason".to_string(),
+                });
+            }
+            // Every reason is a class from the closed vocabulary rather than free text. The class is computed by
+            // the controller from facts it observed, and an unconstrained string would let a class be asserted
+            // instead of derived and could not be compared across admissions (DEC-110).
+            for reason in reasons {
+                let Some(class) = reason.as_str() else {
+                    return Err(StorageError::Malformed {
+                        column: "admissions.refusal_reasons_json".to_string(),
+                        detail: "each refusal reason must be a string naming a conflict class"
+                            .to_string(),
+                    });
+                };
+                if !REFUSAL_REASON_CLASSES.contains(&class) {
+                    return Err(StorageError::Malformed {
+                        column: "admissions.refusal_reasons_json".to_string(),
+                        detail: format!(
+                            "`{class}` is not a conflict class; a refusal may cite only {}",
+                            REFUSAL_REASON_CLASSES.join(", ")
+                        ),
+                    });
+                }
+            }
+            // A post-merge attribution names a failure of an integration that already happened, so only the
+            // record of that integration may cite it.
+            if new.kind != "INTEGRATION_ADMISSION"
+                && reasons
+                    .iter()
+                    .any(|reason| reason.as_str() == Some("POST_MERGE_VALIDATION_FAILURE"))
+            {
+                return Err(StorageError::Malformed {
+                    column: "admissions.refusal_reasons_json".to_string(),
+                    detail: "POST_MERGE_VALIDATION_FAILURE can only be cited by an INTEGRATION_ADMISSION"
+                        .to_string(),
                 });
             }
         }

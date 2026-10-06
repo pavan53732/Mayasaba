@@ -316,6 +316,34 @@ captures a failure, so the gap was three missing bindings rather than a missing 
 contract gate gained a failure-class section, and 13 mutations prove each rule fires, including a prose-only
 control that must stay green.
 
+## Cross-cutting — Integration conflict classes (DEC-110)
+
+Recorded here rather than under a milestone because no milestone owned the question of what a conflict *is*. Two
+canonical documents already said a conflict becomes an explicit integration failure and is persisted as a
+`REFUSED` admission carrying its reasons; neither said which conflicts the controller can detect, and the reasons
+field was an array of free strings that nothing inspected.
+
+- `schemas/workspace-v1/integration-conflict-classes.json` owns the closed vocabulary: `NO_CONFLICT`,
+  `PATH_OVERLAP`, `PROTECTED_PATH`, `SCHEMA_OR_CONTRACT_FILE_CONFLICT`, `DEPENDENCY_MANIFEST_CONFLICT`,
+  `STALE_BASE`, `POST_MERGE_VALIDATION_FAILURE`
+- each class names the observed facts it is computed from, so a class the controller cannot compute is not a
+  member — an agent cannot assert a classification the controller would have to derive
+- `NO_CONFLICT` is a member because a classification has to be total, and it is never a refusal reason: a refusal
+  citing it would say both that there is a conflict and that there is none
+- `TEXT_CONFLICT` is deliberately absent, and its absence is recorded with its reason rather than left to be
+  noticed: `changed_paths` holds whole path strings, no table stores a diff, and no crate performs a merge, so a
+  textual conflict is unobservable here. The gate fails if the class is added or the reason is removed
+- the vocabulary is declared three times — owner file, admission schema, `crates/storage` constants — because each
+  is read by something different; the gate compares all three, including order, so the three cannot drift
+- `POST_MERGE_VALIDATION_FAILURE` describes an integration that already happened, so only an
+  `INTEGRATION_ADMISSION` may cite it
+- **computing a class from observed facts** — `insert_admission` validates a classification it is always handed
+  by a test, because no controller code derives one — is the remaining work
+
+**Status: the vocabulary is closed, enforced in three places and gate-bound; nothing derives a class yet.** Two
+storage tests assert the error detail rather than only that an error occurred, and 10 mutations prove each gate
+rule fires, including a prose-only control that must stay green.
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

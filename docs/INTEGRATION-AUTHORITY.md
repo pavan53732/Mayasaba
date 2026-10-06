@@ -24,6 +24,10 @@ Parallel integration is allowed only when dependency analysis and workspace isol
 ## Conflict handling
 Conflicts become explicit integration failures. They may require a repair task, handoff, or user decision. They are never silently overwritten. A refused integration is persisted as a `REFUSED` admission record carrying its reasons, so the failure is auditable and the changeset is not silently dropped.
 
+The reasons are not free text. `schemas/workspace-v1/integration-conflict-classes.json` owns a closed vocabulary of conflict classes, and a refusal may cite only a class the controller can compute from facts it already records: `PATH_OVERLAP`, `PROTECTED_PATH`, `SCHEMA_OR_CONTRACT_FILE_CONFLICT`, `DEPENDENCY_MANIFEST_CONFLICT`, `STALE_BASE` and `POST_MERGE_VALIDATION_FAILURE`. Each class names those facts, and the contract gate fails if the vocabulary, the admission schema and the constants in `crates/storage` stop agreeing.
+
+`NO_CONFLICT` is a member of the vocabulary because a classification has to be total — the controller must be able to say it looked and found nothing — and it is never a refusal reason, because a refusal citing it would say both that there is a conflict and that there is none. `TEXT_CONFLICT` is deliberately absent, and its absence is recorded with its reason rather than left to be noticed: nothing in this repository observes hunks or line ranges, so a textual conflict is a class the controller cannot compute and could therefore only be asserted.
+
 ## Checkpoints and rollback
 Risky integration gets a recoverable checkpoint. Rollback returns to a known validated checkpoint and never erases historical events.
 

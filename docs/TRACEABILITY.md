@@ -150,6 +150,12 @@ the rows at the end are what does not exist, recorded rather than implied.
 | An unclassifiable failure is recorded as `UNKNOWN` and is never a success | DEC-109 | `schemas/validation-v1/failure-class-policies.json` fallback; `tools/contracts/verify.mjs` fails if `is_success` is not `false`, or if `UNKNOWN` becomes a member of the class enum | VALIDATED |
 | Repair budgets are positive whole numbers, satisfiable, and still forbid test deletion and acceptance weakening | DEC-109 | `schemas/validation-v1/repair-policies.json`; `tools/contracts/verify.mjs` | VALIDATED |
 | A recovery loop that dispatches the mapped action | DEC-109 | - | NOT_ADDRESSED |
+| A refusal reason is a conflict class from one closed vocabulary | DEC-110 | `schemas/workspace-v1/integration-conflict-classes.json`; `crates/storage/src/lib.rs` rejects a reason that is not one of them | VALIDATED |
+| The conflict vocabulary, the admission schema and the enforced constants agree | DEC-110 | `tools/contracts/verify.mjs` compares all three, including order | VALIDATED |
+| `NO_CONFLICT` is a class and can never be a refusal reason | DEC-110 | `tools/contracts/verify.mjs` and `insert_admission` both reject it | VALIDATED |
+| `TEXT_CONFLICT` is excluded, with the reason recorded and enforced | DEC-110 | `schemas/workspace-v1/integration-conflict-classes.json` `excluded`; `tools/contracts/verify.mjs` fails if the reason is removed or the class is added | VALIDATED |
+| A post-merge attribution may only be cited by an `INTEGRATION_ADMISSION` | DEC-110 | `crates/storage/tests/orchestration_reliability.rs`; `insert_admission` rejects it on a `WORKSPACE_ADMISSION` | VALIDATED |
+| Code that computes a conflict class from observed facts | DEC-110 | - | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
@@ -178,6 +184,16 @@ has never been shown to fail is an assertion, not a check. What is not addressed
 says what the controller would do about a failure of each class, and nothing dispatches it, which is why that row
 is `NOT_ADDRESSED` rather than `IMPLEMENTED`. The repair-budget row is `VALIDATED` for shape and satisfiability
 only; the numbers themselves stay owned by `repair-policies.json` and no check restates them.
+
+The conflict-class rows are `VALIDATED` in two different ways, and the difference is deliberate. The rows about
+what the vocabulary contains and how it is declared are `VALIDATED` against the contract gate, which compares the
+owner file, the admission schema and the Rust constants and fails on any disagreement. The row about a refusal
+reason being a class is `VALIDATED` against `crates/storage` instead, because that is where a refusal is actually
+written: a schema nothing evaluates cannot stop a free-text reason, and the test asserts the error detail rather
+than only that an error occurred, since the re-evaluation rule would otherwise also reject the write and the test
+would pass while proving nothing. The `NOT_ADDRESSED` row is the honest half of the gap: nothing computes a
+conflict class yet, so `insert_admission` validates a classification it is always handed by a test. The vocabulary
+is closed and enforced, and it is not yet derived.
 
 ## Persistence implementation
 

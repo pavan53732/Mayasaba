@@ -49,7 +49,9 @@ Checks include:
 
 Eligibility is decided, not merely evaluated: the same record shape is persisted with kind `INTEGRATION_ADMISSION` before a changeset is integrated, naming the base checkpoint, the changed paths, the epoch and the context digest the decision was made under. Integration proceeds only from an `ADMITTED` record. Because the record pins the epoch and context digest, an admission taken under a context that has since gone stale is detectably stale rather than silently reused.
 
-The schema is self-enforcing, so the two failure modes that matter most cannot be represented: an `ADMITTED` verdict cannot coexist with a `FAIL` check, and a `REFUSED` verdict must carry at least one refusal reason.
+The schema declares the two failure modes that matter most, and `insert_admission` enforces them rather than leaving them to a validator that never runs: an `ADMITTED` verdict cannot coexist with a `FAIL` check, and a `REFUSED` verdict must carry at least one refusal reason.
+
+The reasons are classes from the closed vocabulary in `schemas/workspace-v1/integration-conflict-classes.json`, not free text, and `insert_admission` rejects a reason that is not one of them. That is what makes two refusals comparable and what stops a class being asserted rather than derived from observed facts. `NO_CONFLICT` is a member of that vocabulary and is never a valid reason, because a refusal citing it would contradict itself. `POST_MERGE_VALIDATION_FAILURE` describes an integration that already happened, so only an `INTEGRATION_ADMISSION` may cite it.
 
 ## Merge
 Controller performs or authorizes merge. Conflicts create explicit integration failure state.

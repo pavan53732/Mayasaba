@@ -140,7 +140,14 @@
     "refusal_reasons": {
       "type": "array",
       "items": {
-        "type": "string"
+        "enum": [
+          "PATH_OVERLAP",
+          "PROTECTED_PATH",
+          "SCHEMA_OR_CONTRACT_FILE_CONFLICT",
+          "DEPENDENCY_MANIFEST_CONFLICT",
+          "STALE_BASE",
+          "POST_MERGE_VALIDATION_FAILURE"
+        ]
       }
     },
     "supersedes_admission_id": {
@@ -205,6 +212,27 @@
         "properties": {
           "refusal_reasons": {
             "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "refusal_reasons": {
+            "contains": {
+              "const": "POST_MERGE_VALIDATION_FAILURE"
+            }
+          }
+        },
+        "required": [
+          "refusal_reasons"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "INTEGRATION_ADMISSION"
           }
         }
       }

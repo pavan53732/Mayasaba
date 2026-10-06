@@ -1781,6 +1781,68 @@ else {
 }
 if(failureProblems.length) fail(failureProblems.length+" failure-class problem(s) (DEC-109):\n  - "+failureProblems.join("\n  - ")+"\nThe failure class vocabulary has one owner (schemas/mcf-v2/error.schema.json), the per-code classification has one owner (schemas/error-v1/registry.json), and the recovery actions are operations schemas/service-contracts-v1/registry.json already declares. Fix the file that drifted, not this check.");
 
+// --- Integration conflict classes (DEC-110).
+// The admission record is the only place integration admissibility is written down, and its `refusal_reasons`
+// was an array of free strings that nothing inspected: `insert_admission` required at least one reason and never
+// looked at what it said. A refusal therefore could not be compared with any other refusal, and no file said
+// which conflicts the controller is able to detect at all - so every subsystem was free to invent a class, and a
+// class an agent can assert is not a controller-computed classification. This section binds the three
+// declarations of that vocabulary - the owner file, the admission schema and the Rust constants - to each other.
+//
+// TEXT_CONFLICT is deliberately absent and the absence is recorded rather than left to be noticed. A textual
+// merge conflict is the outcome of attempting a merge, and nothing here observes hunks or line ranges: paths are
+// stored as whole strings, no table holds a diff, and no crate performs a merge. The class becomes admissible the
+// moment hunk-level data is recorded; until then, admitting it would create a class the controller cannot
+// compute.
+const conflictClasses=read("schemas/workspace-v1/integration-conflict-classes.json");
+const admissionSchema=read("schemas/workspace-v1/admission.schema.json");
+const conflictProblems=[];
+if(conflictClasses.authority!=="schemas/workspace-v1/integration-conflict-classes.json") conflictProblems.push(`schemas/workspace-v1/integration-conflict-classes.json declares authority ${JSON.stringify(conflictClasses.authority)}, which is not its own path`);
+const classMap=conflictClasses.classes;
+const CONFLICT_STAGES=["NONE","PRE_MERGE","POST_MERGE"];
+const refusalClasses=[];
+const noConflictClasses=[];
+if(!classMap||typeof classMap!=="object"||Array.isArray(classMap)) conflictProblems.push("schemas/workspace-v1/integration-conflict-classes.json declares no `classes` map");
+else for(const [name,entry] of Object.entries(classMap)){
+  if(!CONFLICT_STAGES.includes(entry?.stage)) conflictProblems.push(`${name} declares stage ${JSON.stringify(entry?.stage)}, which is not one of ${CONFLICT_STAGES.join(", ")}`);
+  if(typeof entry?.meaning!=="string"||entry.meaning.trim()==="") conflictProblems.push(`${name} states no meaning, so the class is a name nothing can act on`);
+  if(!Array.isArray(entry?.observable_from)||entry.observable_from.length===0) conflictProblems.push(`${name} names no observable fact, so the class could be asserted rather than computed`);
+  else if(entry.observable_from.some(f=>typeof f!=="string"||f.trim()==="")) conflictProblems.push(`${name} names an empty observable fact`);
+  if(entry?.stage==="NONE") noConflictClasses.push(name);
+  else refusalClasses.push(name);
+}
+if(refusalClasses.length===0) conflictProblems.push("schemas/workspace-v1/integration-conflict-classes.json declares no refusal class at all, so the check below would compare two empty lists and pass");
+if(noConflictClasses.length!==1||noConflictClasses[0]!=="NO_CONFLICT") conflictProblems.push(`exactly one class must declare stage NONE and it must be NO_CONFLICT, because a refusal citing it would say both that there is a conflict and that there is none; found ${noConflictClasses.length?noConflictClasses.join(", "):"none"}`);
+if(classMap&&Object.prototype.hasOwnProperty.call(classMap,"TEXT_CONFLICT")) conflictProblems.push("TEXT_CONFLICT is declared as a conflict class, but nothing in this repository observes hunks or line ranges, so the controller cannot compute it and the class could only be asserted");
+const excludedConflicts=conflictClasses.excluded;
+if(typeof excludedConflicts?.TEXT_CONFLICT?.reason!=="string"||excludedConflicts.TEXT_CONFLICT.reason.trim()==="") conflictProblems.push("schemas/workspace-v1/integration-conflict-classes.json does not record why TEXT_CONFLICT is absent; an exclusion with no stated reason is indistinguishable from an oversight");
+const refusalEnum=admissionSchema.properties?.refusal_reasons?.items?.enum;
+if(!Array.isArray(refusalEnum)||refusalEnum.length===0) conflictProblems.push("schemas/workspace-v1/admission.schema.json types refusal_reasons items as free strings, so a refusal can cite a class nothing can compute");
+else {
+  const missing=refusalClasses.filter(c=>!refusalEnum.includes(c));
+  const extra=refusalEnum.filter(c=>!refusalClasses.includes(c));
+  if(missing.length) conflictProblems.push(`schemas/workspace-v1/admission.schema.json cannot record refusal class(es): ${missing.join(", ")}`);
+  if(extra.length) conflictProblems.push(`schemas/workspace-v1/admission.schema.json admits refusal class(es) the vocabulary does not declare: ${extra.join(", ")}`);
+  if(refusalEnum.includes("NO_CONFLICT")) conflictProblems.push("schemas/workspace-v1/admission.schema.json admits NO_CONFLICT as a refusal reason, which contradicts its own stage");
+}
+// The Rust constants are read back out of the source rather than assumed to match. Read as text, not through
+// `read`: that helper parses JSON, and this is Rust. A missing constant is reported rather than skipped, because
+// a regex that stops matching would otherwise make every class look declared.
+const storageSource=fs.readFileSync(path.join(root,"crates/storage/src/lib.rs"),"utf8");
+const rustStrArray=(name)=>{
+  const m=new RegExp(`const ${name}: &\\[&str\\] = &\\[([\\s\\S]*?)\\]`).exec(storageSource);
+  return m?[...m[1].matchAll(/"([A-Z_]+)"/g)].map(x=>x[1]):null;
+};
+const ownedClasses=classMap&&typeof classMap==="object"&&!Array.isArray(classMap)?Object.keys(classMap):[];
+const rustClasses=rustStrArray("INTEGRATION_CONFLICT_CLASSES");
+const rustRefusal=rustStrArray("REFUSAL_REASON_CLASSES");
+if(rustClasses===null) conflictProblems.push("crates/storage/src/lib.rs declares no `const INTEGRATION_CONFLICT_CLASSES: &[&str] = &[...]` for the gate to read, so the vocabulary it enforces cannot be compared with the file that owns it");
+else if(rustClasses.join(",")!==ownedClasses.join(",")) conflictProblems.push(`crates/storage/src/lib.rs INTEGRATION_CONFLICT_CLASSES is [${rustClasses.join(", ")}] but schemas/workspace-v1/integration-conflict-classes.json declares [${ownedClasses.join(", ")}]; the enforced vocabulary and the owned one must agree, in the same order`);
+if(rustRefusal===null) conflictProblems.push("crates/storage/src/lib.rs declares no `const REFUSAL_REASON_CLASSES: &[&str] = &[...]` for the gate to read, so the reasons a refusal may cite are unchecked");
+else if(rustRefusal.join(",")!==refusalClasses.join(",")) conflictProblems.push(`crates/storage/src/lib.rs REFUSAL_REASON_CLASSES is [${rustRefusal.join(", ")}] but the vocabulary's non-NO_CONFLICT classes are [${refusalClasses.join(", ")}]`);
+if(rustRefusal!==null&&rustRefusal.includes("NO_CONFLICT")) conflictProblems.push("crates/storage/src/lib.rs admits NO_CONFLICT as a refusal reason, which contradicts the class that says there is no conflict");
+if(conflictProblems.length) fail(conflictProblems.length+" integration conflict problem(s) (DEC-110):\n  - "+conflictProblems.join("\n  - ")+"\nThe conflict-class vocabulary has one owner (schemas/workspace-v1/integration-conflict-classes.json); the admission schema and crates/storage restate it, and a class the controller cannot compute from observed facts does not belong in it.");
+
 // --- Council decision-quality contracts (DEC-052) against each other and against the DDL.
 // Three vocabularies describe the same closed sets after this decision: the JSON Schemas under
 // schemas/council-v1/, the SQLite CHECK constraints on the six new tables, and the mode plan in
@@ -2045,6 +2107,8 @@ const coverageVerified=new Set([
   "schemas/validation-v1/failure.schema.json",
   "schemas/validation-v1/failure-class-policies.json",
   "schemas/validation-v1/repair-policies.json",
+  "schemas/workspace-v1/integration-conflict-classes.json",
+  "schemas/workspace-v1/admission.schema.json",
   "schemas/council-v1/mode-selection.schema.json",
   "schemas/council-v1/council-policies.json",
   "schemas/council-v1/decision-outcome.schema.json",

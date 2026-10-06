@@ -883,7 +883,10 @@ fn lease_cannot_bypass_workspace_admission_or_task_scope() {
         .expect("scope");
     assert_eq!(scope_ok, 1);
 
-    storage.conn().execute("UPDATE admissions SET verdict='REFUSED', refusal_reasons_json='[\"manual block\"]' WHERE admission_id='admit_1'", [])
+    // Written directly rather than through `insert_admission`, because this test is about what a refusal *does*
+    // to lease admission and not about how the refusal was produced. The reason is a declared conflict class so
+    // the fixture agrees with the vocabulary DEC-110 closes.
+    storage.conn().execute("UPDATE admissions SET verdict='REFUSED', refusal_reasons_json='[\"PATH_OVERLAP\"]' WHERE admission_id='admit_1'", [])
         .expect("refuse admission");
     let base = NewTaskLease {
         lease_id: "lease_bypass".into(),
@@ -1009,5 +1012,152 @@ fn new_resource_reservations_cannot_start_terminal() {
             })
             .is_err(),
         "new resource admission must always enter HELD"
+    );
+}
+
+/// A `REFUSED` admission citing `reasons_json`, superseding the seeded workspace admission where asked.
+///
+/// Superseding is what keeps the assertions below honest. Re-evaluating one project/task/workspace/kind requires
+/// naming the current effective admission, so without it a rejection could come from the re-evaluation rule
+/// rather than from the reason vocabulary and the test would pass while proving nothing about the vocabulary.
+fn refused_admission(
+    admission_id: &str,
+    kind: &str,
+    reasons_json: &str,
+    supersedes: Option<&str>,
+) -> mayasaba_storage::NewAdmission {
+    mayasaba_storage::NewAdmission {
+        admission_id: admission_id.into(),
+        project_id: "prj_reliability".into(),
+        task_id: "task_1".into(),
+        workspace_id: "ws_1".into(),
+        lease_id: None,
+        agent_id: None,
+        session_id: None,
+        kind: kind.into(),
+        epoch: 0,
+        context_digest: Some(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        ),
+        base_checkpoint_ref: None,
+        changed_paths_json: "[]".into(),
+        checks_json: r#"[{"check_id":"BASELINE_CLEAN","status":"FAIL"}]"#.into(),
+        verdict: "REFUSED".into(),
+        refusal_reasons_json: Some(reasons_json.into()),
+        supersedes_admission_id: supersedes.map(str::to_string),
+        created_at: "2".into(),
+    }
+}
+
+/// The detail of the rejection storage produced, so a test can prove *which* rule fired rather than only that
+/// something did.
+fn refusal_detail(storage: &mut Storage, admission: &mayasaba_storage::NewAdmission) -> String {
+    match storage.insert_admission(admission) {
+        Ok(_) => panic!("expected the admission to be rejected"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed-admission rejection, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_refusal_reason_must_name_a_conflict_class_the_controller_can_compute() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+
+    // Free text was accepted before DEC-110: the string was stored and never inspected, so a refusal could not be
+    // compared with any other refusal and a class could be asserted rather than derived.
+    let free_text = refusal_detail(
+        &mut storage,
+        &refused_admission(
+            "admit_text",
+            "WORKSPACE_ADMISSION",
+            r#"["manual block"]"#,
+            Some("admit_1"),
+        ),
+    );
+    assert!(
+        free_text.contains("is not a conflict class"),
+        "free text must be rejected as a class, got: {free_text}"
+    );
+
+    // NO_CONFLICT is a class, but it says nothing was found, so a refusal citing it would contradict itself.
+    let no_conflict = refusal_detail(
+        &mut storage,
+        &refused_admission(
+            "admit_none",
+            "WORKSPACE_ADMISSION",
+            r#"["NO_CONFLICT"]"#,
+            Some("admit_1"),
+        ),
+    );
+    assert!(
+        no_conflict.contains("is not a conflict class"),
+        "NO_CONFLICT must not be citable as a refusal reason, got: {no_conflict}"
+    );
+
+    let not_a_string = refusal_detail(
+        &mut storage,
+        &refused_admission(
+            "admit_number",
+            "WORKSPACE_ADMISSION",
+            r#"[7]"#,
+            Some("admit_1"),
+        ),
+    );
+    assert!(
+        not_a_string.contains("must be a string naming a conflict class"),
+        "a reason that is not a string names no class, got: {not_a_string}"
+    );
+
+    // Every declared class is accepted, each on its own database so that supersession cannot be what decides the
+    // outcome. A vocabulary that rejected an undeclared class but also rejected declared ones would satisfy the
+    // assertions above and be useless.
+    for class in [
+        "PATH_OVERLAP",
+        "PROTECTED_PATH",
+        "SCHEMA_OR_CONTRACT_FILE_CONFLICT",
+        "DEPENDENCY_MANIFEST_CONFLICT",
+        "STALE_BASE",
+        "POST_MERGE_VALIDATION_FAILURE",
+    ] {
+        let mut fresh = project_storage();
+        seed_task_lease_workspace(&mut fresh);
+        // A post-merge attribution describes an integration that already happened, so it is cited by the record
+        // of that integration rather than by a workspace admission.
+        let integration = class == "POST_MERGE_VALIDATION_FAILURE";
+        let kind = if integration {
+            "INTEGRATION_ADMISSION"
+        } else {
+            "WORKSPACE_ADMISSION"
+        };
+        let supersedes = if integration { None } else { Some("admit_1") };
+        fresh
+            .insert_admission(&refused_admission(
+                "admit_class",
+                kind,
+                &format!(r#"["{class}"]"#),
+                supersedes,
+            ))
+            .unwrap_or_else(|error| panic!("{class} is a declared conflict class: {error:?}"));
+    }
+}
+
+#[test]
+fn a_post_merge_attribution_belongs_only_to_an_integration_record() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+
+    let detail = refusal_detail(
+        &mut storage,
+        &refused_admission(
+            "admit_post_merge",
+            "WORKSPACE_ADMISSION",
+            r#"["POST_MERGE_VALIDATION_FAILURE"]"#,
+            Some("admit_1"),
+        ),
+    );
+    assert!(
+        detail.contains("can only be cited by an INTEGRATION_ADMISSION"),
+        "a workspace admission must not attribute a post-merge failure, got: {detail}"
     );
 }

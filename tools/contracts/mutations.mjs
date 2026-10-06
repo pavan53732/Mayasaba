@@ -83,6 +83,9 @@ const FAILURE_SCHEMA = "schemas/validation-v1/failure.schema.json";
 const FAILURE_CLASS_POLICIES = "schemas/validation-v1/failure-class-policies.json";
 const RECOVERY_SCHEMA = "schemas/recovery-v1/recovery.schema.json";
 const REPAIR_POLICIES = "schemas/validation-v1/repair-policies.json";
+const CONFLICT_CLASSES = "schemas/workspace-v1/integration-conflict-classes.json";
+const ADMISSION_SCHEMA = "schemas/workspace-v1/admission.schema.json";
+const STORAGE_LIB = "crates/storage/src/lib.rs";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -955,6 +958,131 @@ const MUTATIONS = [
         file: FAILURE_CLASS_POLICIES,
         find: '"rule":"This file owns one thing',
         replace: '"rule":"This file owns exactly one thing',
+      },
+    ],
+    expect: [],
+  },
+
+  // --- DEC-110: the integration conflict-class vocabulary, declared in three places that must agree.
+  // These reintroduce the divergences that were possible before the checks existed: a class the owner file
+  // declares and the enforced vocabulary does not, a class that says there is no conflict being citable as one,
+  // the two lists drifting apart in order, a refusal reason reverting to free text, and a class admitted that the
+  // controller has no way to compute.
+  {
+    id: "dec110-a",
+    what: "integration-conflict-classes.json: the owner file renames a class the enforced vocabulary still has",
+    check: GATE,
+    edits: [{ file: CONFLICT_CLASSES, find: '"PATH_OVERLAP": {', replace: '"PATH_OVERLAP_RENAMED": {' }],
+    expect: [
+      "crates/storage/src/lib.rs INTEGRATION_CONFLICT_CLASSES is [",
+      "the enforced vocabulary and the owned one must agree, in the same order",
+    ],
+  },
+  {
+    id: "dec110-b",
+    what: "crates/storage: NO_CONFLICT becomes citable as a refusal reason",
+    check: GATE,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: 'const REFUSAL_REASON_CLASSES: &[&str] = &[\n    "PATH_OVERLAP",',
+        replace: 'const REFUSAL_REASON_CLASSES: &[&str] = &[\n    "NO_CONFLICT",\n    "PATH_OVERLAP",',
+      },
+    ],
+    expect: ["crates/storage/src/lib.rs admits NO_CONFLICT as a refusal reason"],
+  },
+  {
+    id: "dec110-c",
+    what: "crates/storage: the enforced vocabulary lists the same classes in a different order",
+    check: GATE,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: 'const INTEGRATION_CONFLICT_CLASSES: &[&str] = &[\n    "NO_CONFLICT",\n    "PATH_OVERLAP",',
+        replace: 'const INTEGRATION_CONFLICT_CLASSES: &[&str] = &[\n    "PATH_OVERLAP",\n    "NO_CONFLICT",',
+      },
+    ],
+    expect: ["the enforced vocabulary and the owned one must agree, in the same order"],
+  },
+  {
+    id: "dec110-d",
+    what: "admission.schema.json: NO_CONFLICT becomes an admissible refusal reason",
+    check: GATE,
+    edits: [
+      {
+        file: ADMISSION_SCHEMA,
+        find: '          "PATH_OVERLAP",\n          "PROTECTED_PATH",',
+        replace: '          "NO_CONFLICT",\n          "PATH_OVERLAP",\n          "PROTECTED_PATH",',
+      },
+    ],
+    expect: ["admits NO_CONFLICT as a refusal reason, which contradicts its own stage"],
+  },
+  {
+    id: "dec110-e",
+    what: "admission.schema.json: refusal reasons go back to being free strings",
+    check: GATE,
+    edits: [
+      {
+        file: ADMISSION_SCHEMA,
+        find: '        "enum": [\n          "PATH_OVERLAP",\n          "PROTECTED_PATH",\n          "SCHEMA_OR_CONTRACT_FILE_CONFLICT",\n          "DEPENDENCY_MANIFEST_CONFLICT",\n          "STALE_BASE",\n          "POST_MERGE_VALIDATION_FAILURE"\n        ]',
+        replace: '        "type": "string"',
+      },
+    ],
+    expect: ["types refusal_reasons items as free strings, so a refusal can cite a class nothing can compute"],
+  },
+  {
+    id: "dec110-f",
+    what: "integration-conflict-classes.json: TEXT_CONFLICT is admitted as a class nothing observes",
+    check: GATE,
+    edits: [
+      {
+        file: CONFLICT_CLASSES,
+        find: '"classes": {',
+        replace:
+          '"classes": {"TEXT_CONFLICT": {"stage": "PRE_MERGE", "observable_from": ["changed_paths"], "meaning": "invented"},',
+      },
+    ],
+    expect: [
+      "TEXT_CONFLICT is declared as a conflict class, but nothing in this repository observes hunks or line ranges",
+    ],
+  },
+  {
+    id: "dec110-g",
+    what: "integration-conflict-classes.json: the recorded reason for excluding TEXT_CONFLICT is deleted",
+    check: GATE,
+    edits: [{ file: CONFLICT_CLASSES, find: '"excluded": {', replace: '"excludedUnused": {' }],
+    expect: ["does not record why TEXT_CONFLICT is absent; an exclusion with no stated reason is indistinguishable from an oversight"],
+  },
+  {
+    id: "dec110-h",
+    what: "integration-conflict-classes.json: a class names no observable fact, so it could only be asserted",
+    check: GATE,
+    edits: [
+      {
+        file: CONFLICT_CLASSES,
+        find: '"observable_from": ["changed_paths", "PROTECTED_PATHS_DETERMINED", "PROTECTED_PATH_CLEAN"]',
+        replace: '"observable_from": []',
+      },
+    ],
+    expect: ["PROTECTED_PATH names no observable fact, so the class could be asserted rather than computed"],
+  },
+  {
+    id: "dec110-i",
+    what: "integration-conflict-classes.json: a second class claims stage NONE",
+    check: GATE,
+    edits: [{ file: CONFLICT_CLASSES, find: '"stage": "POST_MERGE",', replace: '"stage": "NONE",' }],
+    expect: ["exactly one class must declare stage NONE and it must be NO_CONFLICT"],
+  },
+  {
+    id: "control-dec110-prose",
+    what: "integration-conflict-classes.json: a class's meaning is reworded, which is prose and not a contract",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: CONFLICT_CLASSES,
+        find: '"meaning": "Two or more candidates in one integration touch the same path.',
+        replace: '"meaning": "Reworded by a mutation control. Two or more candidates in one integration touch the same path.',
       },
     ],
     expect: [],
