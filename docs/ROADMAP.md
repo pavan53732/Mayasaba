@@ -259,7 +259,7 @@ text and it was labelled for routing — and the composer names the unchanged ep
 advisory label cannot be read as a change to project truth. Nothing yet reads a contribution back for display in
 a timeline, because no operation lists them.
 
-## Cross-cutting — Trace-link operation ownership (open)
+## Cross-cutting — Trace-link operation ownership (open decision, not locked)
 
 `create_trace_link` is declared in two files and owned by no service in
 `schemas/service-contracts-v1/registry.json`. The two declarations now agree, and the ownership cross-check in
@@ -267,6 +267,88 @@ a timeline, because no operation lists them.
 trace links. No traceability service exists; `RequirementService` is the manifest's value and `DiagnosticsService`
 was `payloads.json`'s. Until a decision names the owner, the agreed value is a consequence of the manifest being
 authoritative rather than of a decision, and the generated UI owner map is only as right as that value.
+
+**This is a proposal, not a decision, and no owner value has been changed.** It is recorded here rather than in
+`docs/DECISION-REGISTER.md` because that register holds locked decisions only — its own header calls it "a
+human-readable register of currently locked design decisions" — and its status vocabulary has no `PROPOSED` value
+to use.
+
+### What the code and the documents actually say
+
+- **Persistence.** `crates/storage` owns `trace_links`: `insert_trace_link` validates `link_type` against
+  `TRACE_LINK_TYPES` and appends, and `list_trace_links` reads back. Nothing else in Rust touches the table; the
+  only caller is `crates/storage/tests/orchestration_reliability.rs`. `trace_link_versions` and `trace_coverage`
+  are created by `schemas/sqlite-v1/schema.sql` and have **no Rust code at all** — no writer, no reader, no test.
+- **Ownership today.** `workspace.manifest.json` declares
+  `tauri_bridge.commands.create_trace_link = "RequirementService"`, and
+  `schemas/tauri-bridge-v1/payloads.json` copies that value. `create_trace_link` appears in no service's
+  operation list in `schemas/service-contracts-v1/registry.json`.
+- **No handler exists.** `create_trace_link` is one of the declared bridge operations with no implementation, so
+  nothing currently exercises the question.
+- **The chain.** `docs/TRACEABILITY.md` describes the requirement → decision → architecture → contract → task →
+  attempt → execution → evidence → review → validation → certification chain, and the first three link types are
+  requirement-anchored: `INTENT_REQUIREMENT`, `REQUIREMENT_ACCEPTANCE`, `REQUIREMENT_DECISION`. It does not name
+  an owning service for the chain.
+- **Traceability is not an authority.** `docs/DATA-MODEL.md` states that traceability "indexes authoritative
+  objects and is not a second source of truth". A trace link therefore records a relationship between objects
+  other services own and decides nothing itself. That is why this is a question about which service *records the
+  index*, not about which service owns the requirements, decisions or tasks being linked.
+
+### Candidate owners
+
+**1. `RequirementService` — the manifest's current value, and the recommendation.**
+Its declared operations are `list_requirements` and `upsert_requirement`, so it already owns a writing operation
+on the first object in the chain, and the chain's first three link types are requirement-anchored.
+*For:* it is already the agreed value in both declaring files, so choosing it changes no owner value anywhere and
+turns an existing agreement into a decision instead of an accident; it already owns the chain's entry object and a
+write path; it maps to `crates/core`, which is where an application service of this kind belongs.
+*Against:* "requirements" is narrower than "everything traceable" — the chain also covers executions, evidence,
+reviews and certifications, so a reader may expect the owner of the index to be named for the index rather than
+for its first node.
+
+**2. `DiagnosticsService` — the value `payloads.json` used to carry.**
+*For:* trace coverage and orphan detection are reporting concerns, and `docs/TRACEABILITY.md` describes orphan
+detection as "a deterministic SQLite query/service operation"; coverage reads like a diagnostic.
+*Against:* its entire declared contract is read-only observability — `get_logs`, `get_communication_health`,
+`get_doctor_report`. `create_trace_link` writes a durable row, so naming it as the owner would place a writing
+operation in a service whose declared shape is reading, and the generated UI owner map would route a write through
+a diagnostics service. This is the strongest argument against it.
+
+**3. A dedicated traceability service (for example `TraceabilityService`).**
+*For:* the index spans every subsystem, so an owner named for the index is honest about that; it would give
+`trace_link_versions` and `trace_coverage` an unambiguous home and give orphan detection a service rather than a
+query.
+*Against:* it is a new application service, a new entry in `workspace.manifest.json`, a new contract in
+`schemas/service-contracts-v1/registry.json`, and a new owner for exactly one declared operation that has no
+handler — the largest of the three changes, for a question that no failing behaviour currently raises.
+`AGENTS.md` section 10 requires checking whether an existing canonical concept already covers something before
+adding a new service, and `RequirementService` does.
+
+### Recommendation (the minimal change)
+
+Lock the manifest's existing value: **`RequirementService`**. It is the only option that changes no owner value,
+it is already agreed in both declaring files, it already owns the chain's entry object and a write path, and it
+keeps a writing operation out of a read-only service. `DiagnosticsService` is rejected on its own declared
+contract rather than on preference.
+
+### The four places that must change if an owner is chosen
+
+Whichever owner is picked, exactly these four must change, and they must change together:
+
+1. **`workspace.manifest.json`** — `tauri_bridge.commands.create_trace_link`. This is the authority the gate
+   resolves every other copy against.
+2. **`schemas/tauri-bridge-v1/payloads.json`** — `commands.create_trace_link.owner`. The gate fails when this
+   disagrees with the manifest, so it cannot be left behind.
+3. **`schemas/service-contracts-v1/registry.json`** — add `create_trace_link` to the chosen service's operation
+   list. It is in no list today and the gate does not require it to be in one, so this is the step no check would
+   catch if it were skipped; adding it also makes the operation nameable as a recovery action, which it is not
+   today.
+4. **The documents** — this block and the ownership paragraph in `docs/TRACEABILITY.md`, both of which would
+   become pointers to the locked decision, plus `docs/DECISION-REGISTER.md` once the decision is locked.
+
+Not a fifth place, but a required consequence: `apps/desktop/src/generated/bridge.ts` and `bridge.rs` carry the
+owner map and are generated from `payloads.json` by `npm run codegen`. They must be regenerated, never
+hand-edited.
 
 ## Cross-cutting — Task selection priority (DEC-108)
 

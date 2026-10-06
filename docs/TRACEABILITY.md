@@ -255,6 +255,16 @@ names the service that owns trace links**, and `schemas/service-contracts-v1/reg
 `create_trace_link` under no service at all, so the agreed value follows from which file is authoritative rather
 than from a decision. It is recorded as an open ownership question, not presented as settled.
 
+The open question, its candidates, the trade-offs and the four places that must change when an owner is chosen
+are set out once, in `docs/ROADMAP.md` under "Cross-cutting — Trace-link operation ownership (open decision, not
+locked)". That block is the proposal; this paragraph summarises it. Both recommend the same owner —
+`RequirementService`, the manifest's existing value — for the same reasons: it changes no owner value anywhere,
+it already owns a writing operation on the chain's entry object (`upsert_requirement`), the chain's first three
+link types are requirement-anchored, and `DiagnosticsService`'s declared contract is read-only observability
+(`get_logs`, `get_communication_health`, `get_doctor_report`), which a writing operation does not belong in.
+**No owner value has been changed by that proposal**, and it is not locked: the register holds locked decisions
+only and has no `PROPOSED` status, which is why the proposal lives in `docs/ROADMAP.md`.
+
 Canonical link types:
 `INTENT_REQUIREMENT`, `REQUIREMENT_ACCEPTANCE`, `REQUIREMENT_DECISION`, `DECISION_ARCHITECTURE`, `ARCHITECTURE_CONTRACT`, `CONTRACT_TASK`, `TASK_ATTEMPT`, `TASK_LEASE`, `ATTEMPT_CHECKPOINT`, `ATTEMPT_EXECUTION`, `LEASE_CHANGESET`, `CHANGESET_EXECUTION`, `EXECUTION_ENVIRONMENT`, `EXECUTION_EVIDENCE`, `EVIDENCE_REVIEW`, `REVIEW_VALIDATION`, `VALIDATION_ENVIRONMENT`, `VALIDATION_CERTIFICATION`.
 
