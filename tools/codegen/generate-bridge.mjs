@@ -93,7 +93,22 @@ if (process.argv.includes("--check")) {
 
 fs.mkdirSync(path.join(root, "apps/desktop/src/generated"), { recursive: true });
 fs.mkdirSync(path.join(root, "apps/desktop/src-tauri/src/generated"), { recursive: true });
-for (const { path: file, content } of outputs) fs.writeFileSync(file, content);
+// Write each file back in the line-ending convention it already had on disk. `bridge.rs` is pinned to LF by
+// `.gitattributes`, but `bridge.ts` is not, and `core.autocrlf=true` checks an unpinned file out with CRLF. The
+// generator emits LF, so writing it raw rewrote CRLF to LF and `git status` reported the file as modified even
+// though its content was identical - the same spurious diff `--check` above already normalises away for the
+// comparison. The consequence was not cosmetic: the mutation harness refuses to start on a modified tracked
+// file, so running codegen before the harness blocked it until someone re-checked-out the file.
+//
+// This is the convention `tools/contracts/mutations.mjs` already uses for its own edits, and it is preferred
+// over adding `*.ts text eol=lf` to `.gitattributes`, which would change how every clone checks out every
+// TypeScript file in the repository in order to fix one generated file. A file that does not exist yet is
+// written with LF, which is the convention git stores; it is also untracked until staged, so it cannot present
+// as a modified tracked file.
+for (const { path: file, content } of outputs) {
+  const usesCrlf = fs.existsSync(file) && fs.readFileSync(file, "utf8").includes("\r\n");
+  fs.writeFileSync(file, usesCrlf ? content.replace(/\n/g, "\r\n") : content);
+}
 console.log(
   `Generated bridge.ts and bridge.rs (${commands.length} commands, ${queries.length} queries, ${events.length} events)`
 );
