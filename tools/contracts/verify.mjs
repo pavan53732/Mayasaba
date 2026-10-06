@@ -1434,26 +1434,33 @@ const delegatingSites=new Map([
 for(const [file,openRe] of mappingSites){
   const src=scannedText.get(file);
   if(src===undefined) fail(`${file} is one of the error-code mappings this check scans, but the file was not read.`);
-  const open=openRe.exec(src);
-  if(!open) fail(
+  // Every match, not just the first. A file can hold more than one mapping of the same shape - validation.rs has
+  // one for workspace rejections and one for attachment rejections - and reading only the first left the second
+  // one's codes unverified: a code the registry does not declare would have passed by sitting in the mapping the
+  // scan never reached. It also made the mutation that removes the mapping stop removing it, because renaming the
+  // first left the second to be found.
+  const opens=[...src.matchAll(new RegExp(openRe.source,"g"))];
+  if(!opens.length) fail(
     `${file}: could not find the error-code mapping this check scans (${openRe}).\n`+
     `A mapping the gate cannot locate is unchecked, so this is a failure rather than a skip.`
   );
-  // Brace-matched body, so the scan covers exactly the mapping and nothing after it.
-  let depth=0,end=-1;
-  for(let i=open.index+open[0].length-1;i<src.length;i++){
-    if(src[i]==="{") depth++;
-    else if(src[i]==="}"&&--depth===0){ end=i; break; }
+  for(const open of opens){
+    // Brace-matched body, so the scan covers exactly the mapping and nothing after it.
+    let depth=0,end=-1;
+    for(let i=open.index+open[0].length-1;i<src.length;i++){
+      if(src[i]==="{") depth++;
+      else if(src[i]==="}"&&--depth===0){ end=i; break; }
+    }
+    if(end<0) fail(`${file}: the error-code mapping's braces are unbalanced, so the codes it produces cannot be read.`);
+    const body=src.slice(open.index,end);
+    const required=delegatingSites.get(openRe.source);
+    if(required!==undefined&&!body.includes(required)) fail(
+      `${file}: the ${openRe} mapping no longer calls ${required}, so it must be producing codes this check never reads.\n`+
+      `Either delegate to the mapping that owns those codes, or list them as literals so they are scanned. A mapping `+
+      `whose output the gate cannot read is unchecked, which is why this fails rather than warns.`
+    );
+    for(const m of body.matchAll(/=>\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
   }
-  if(end<0) fail(`${file}: the error-code mapping's braces are unbalanced, so the codes it produces cannot be read.`);
-  const body=src.slice(open.index,end);
-  const required=delegatingSites.get(openRe.source);
-  if(required!==undefined&&!body.includes(required)) fail(
-    `${file}: the ${openRe} mapping no longer calls ${required}, so it must be producing codes this check never reads.\n`+
-    `Either delegate to the mapping that owns those codes, or list them as literals so they are scanned. A mapping `+
-    `whose output the gate cannot read is unchecked, which is why this fails rather than warns.`
-  );
-  for(const m of body.matchAll(/=>\s*"([A-Z][A-Z0-9_]*)"/g)) recordEmitted(m[1],file);
 }
 for(const [code,file] of emitted) if(!(code in errorCodes)) errorProblems.push(
   `${file} produces the error code "${code}", which schemas/error-v1/registry.json does not register`

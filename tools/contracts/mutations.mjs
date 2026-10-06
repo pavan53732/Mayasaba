@@ -224,8 +224,12 @@ const MUTATIONS = [
     edits: [
       {
         file: VALIDATION_RS,
-        find: "impl WorkspaceRejection {\n    pub fn code(self)",
-        replace: "impl WorkspaceRejection {\n    pub fn rejection_code(self)",
+        // Both mappings in the file, because the gate reads all of them: renaming one leaves the other to be
+        // found, and the mutation would report the check as broken rather than prove it fails when the mapping
+        // is gone.
+        find: "pub fn code(self)",
+        replace: "pub fn rejection_code(self)",
+        all: true,
       },
     ],
     expect: ["could not find the error-code mapping this check scans"],
@@ -683,8 +687,21 @@ const MUTATIONS = [
     id: "scanner-a",
     what: "a frontend file with an unterminated string, so the comment scanner cannot tell code from text",
     check: GATE,
-    edits: [{ file: APP_TSX, append: "\nconst probe = 'unterminated\n" }],
+    edits: [{ file: APP_TSX, append: '\nconst probe = "unterminated\n' }],
     expect: ["the comment scanner lost track of the code"],
+  },
+  {
+    id: "control-scanner-apostrophe",
+    what: "an apostrophe in JSX text does not desynchronize the scanner, so a commented-out invoke stays invisible",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: APP_TSX,
+        append: "\nconst probe = <p>the project's recorded references</p>;\n// invoke(\"ghost_in_a_comment\", {});\n",
+      },
+    ],
+    expect: [],
   },
   {
     id: "control-trace-prose",
