@@ -50,6 +50,7 @@
     "AGENT_RECONNECTING": "common-event.schema.json",
     "AGENT_SYNCED": "common-event.schema.json",
     "AGENT_FAILED": "common-event.schema.json",
+    "AGENT_HEALTH_CHANGED": "common-event.schema.json",
     "TASK_CREATED": "common-event.schema.json",
     "TASK_READY": "common-event.schema.json",
     "TASK_LEASED": "common-event.schema.json",
