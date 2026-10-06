@@ -381,7 +381,8 @@ fn attempt_transition_is_compare_and_swap_and_heartbeat_is_fenced() {
 #[test]
 fn certification_binding_supersession_is_append_only() {
     use mayasaba_storage::NewCertificationBinding;
-    let storage = project_storage();
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
     storage.conn().execute(
         "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_1','prj_reliability','task_1','{}','{}','PASS','1')", []
     ).expect("validation");
@@ -634,12 +635,32 @@ fn durable_lease_lifecycle_is_fenced_and_releasable_after_renewal() {
         "RELEASED"
     );
 
-    let events: i64 = storage.conn().query_row(
-        "SELECT COUNT(*) FROM events WHERE project_id='prj_reliability' AND event_type IN ('LEASE_REQUESTED','LEASE_ACTIVE','LEASE_RENEWED','LEASE_RELEASED')",
-        [], |row| row.get(0)
-    ).expect("events");
+    // lease_task emits LEASE_REQUESTED twice on purpose: once under the TASK identity and once under the
+    // LEASE identity, so the two lifecycles cannot collide (see the comment in lease_task). renew_lease
+    // re-grants, so it emits LEASE_RENEWED and LEASE_ACTIVE. Asserting the per-type breakdown rather than a
+    // single total keeps every phase observable and still fails if any one of them stops being emitted.
+    let mut stmt = storage
+        .conn()
+        .prepare(
+            "SELECT event_type, COUNT(*) FROM events
+             WHERE project_id='prj_reliability'
+               AND event_type IN ('LEASE_REQUESTED','LEASE_ACTIVE','LEASE_RENEWED','LEASE_RELEASED')
+             GROUP BY event_type ORDER BY event_type ASC",
+        )
+        .expect("events");
+    let counts: Vec<(String, i64)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query")
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .expect("collect");
     assert_eq!(
-        events, 4,
+        counts,
+        vec![
+            ("LEASE_ACTIVE".to_string(), 2),
+            ("LEASE_RELEASED".to_string(), 1),
+            ("LEASE_RENEWED".to_string(), 1),
+            ("LEASE_REQUESTED".to_string(), 2),
+        ],
         "request/grant/renew/grant/release lifecycle must be observable"
     );
 }
@@ -662,7 +683,7 @@ fn live_lease_uniqueness_and_deadline_expiry_are_durable() {
         workspace_id: "ws_1".into(),
         project_epoch: 0,
         context_snapshot_id: "ctx_1".into(),
-        state_digest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        state_digest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
         allowed_paths_json: "[]".into(),
         required_capabilities_json: "[]".into(),
         policy_scope: "PROJECT_WRITE".into(),
@@ -736,6 +757,16 @@ fn recovery_ready_transition_is_blocked_by_unresolved_attempt() {
             [],
         )
         .expect("deadline");
+    // The fixture inserts an ACTIVE lease with raw SQL, which bypasses the READY -> LEASE_REQUESTED -> LEASED
+    // transition that lease_task performs, so the task is left READY while a live lease exists. Expiry only
+    // moves a task that is genuinely lease-held, so establish the state the lease implies.
+    storage
+        .conn()
+        .execute(
+            "UPDATE tasks SET status='LEASED' WHERE task_id='task_1'",
+            [],
+        )
+        .expect("lease-held task");
     storage.expire_due_leases("10").expect("expire");
     storage
         .queue_expired_task_for_recovery("task_1", "11")
@@ -762,6 +793,7 @@ fn recovery_ready_transition_is_blocked_by_unresolved_attempt() {
 fn admission_is_fail_closed_and_re_evaluation_requires_supersession() {
     use mayasaba_storage::NewAdmission;
     let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
     let bad = NewAdmission {
         admission_id: "admit_bad".into(),
         project_id: "prj_reliability".into(),
@@ -840,6 +872,7 @@ fn admission_is_fail_closed_and_re_evaluation_requires_supersession() {
 fn lease_cannot_bypass_workspace_admission_or_task_scope() {
     use mayasaba_storage::NewTaskLease;
     let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
     let scope_ok = storage
         .conn()
         .query_row(
@@ -889,7 +922,8 @@ fn lease_cannot_bypass_workspace_admission_or_task_scope() {
 #[test]
 fn attempt_creation_enforces_contiguous_max_attempts() {
     use mayasaba_storage::NewTaskAttempt;
-    let storage = project_storage();
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
     let base = NewTaskAttempt {
         attempt_id: "att_budget_1".into(),
         task_id: "task_1".into(),

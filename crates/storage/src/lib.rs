@@ -5851,7 +5851,7 @@ impl Storage {
             .prepare(
                 "SELECT lease_id,task_id,project_id,session_id,lease_version,status
              FROM task_leases
-             WHERE status IN ('ACTIVE','RENEWING') AND expires_at <= ?1
+             WHERE status IN ('ACTIVE','RENEWING') AND CAST(expires_at AS INTEGER) <= CAST(?1 AS INTEGER)
              ORDER BY lease_id ASC",
             )
             .map_err(StorageError::Db)?;
@@ -5989,7 +5989,7 @@ impl Storage {
     /// Return an expired task to READY only after all durable physical recovery signals are clear.
     pub fn recover_expired_task(&mut self, task_id: &str, now: &str) -> Result<()> {
         let tx = self.conn.transaction().map_err(StorageError::Db)?;
-        let task: Option<(String, String, String, String)> = tx
+        let task: Option<(String, String, String, i64)> = tx
             .query_row(
                 "SELECT project_id,status,workspace_id,current_epoch FROM tasks WHERE task_id=?1",
                 [task_id],
