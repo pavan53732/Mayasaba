@@ -603,8 +603,14 @@ const namesFile=(text,name)=>{
   return false;
 };
 let trackedFiles=null;
+// Which discovery path produced the list. Recorded so a check that reads it can say so rather than implying
+// it: the syntax check below names the source on failure, and the consumer-coverage check names it when the
+// fallback runs. `git ls-files` is preferred because it is the tracked set exactly; the walk is a fallback for
+// a checkout without git, and it necessarily includes untracked files.
+let trackedFilesSource=null;
 try {
   trackedFiles=execFileSync("git",["ls-files"],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim().split(/\r?\n/).filter(Boolean);
+  trackedFilesSource="git ls-files";
 } catch { /* not a git checkout — fall back below */ }
 if(trackedFiles===null){
   const skipDir=new Set([".git","node_modules","target","dist",".kilo"]);
@@ -616,6 +622,7 @@ if(trackedFiles===null){
     }
   };
   walk(".");
+  trackedFilesSource="working-tree walk (git unavailable; untracked files included)";
   console.log("Consumer-coverage check: git unavailable, using working-tree walk (untracked files included).");
 }
 const trackedText=new Map();
@@ -2191,6 +2198,50 @@ if(bridgeGenCheck.startsWith("FAILED")) fail("the generated bridge surface is st
 console.log(/(^|\n)\s*(?:pub\s+)?mod\s+generated\b/.test(rustCode)
   ? "Generated bridge.rs: referenced by a `mod generated` declaration, so the compiler reads it"
   : "Generated bridge.rs: current, but referenced by no `mod` declaration in the shell, so it is not compiled (reported, not blocking)");
+
+// --- Tool-script syntax. The pre-commit hook runs this gate and nothing else, so nothing under tools/ had a
+// syntax check on the way in except this file, which is checked by being run. That is not theoretical: a
+// duplicate top-level `const DATA_MODEL` was committed into tools/contracts/mutations.mjs, and the first thing
+// to notice was a human running the harness by hand. The scripts that go unchecked are exactly the ones the
+// hook deliberately does not run - mutations.mjs mutates the tree and pays a Rust recompile per mutation, and
+// local.mjs compiles and tests the workspace - so "the hook runs it" cannot cover them.
+//
+// `node --check` parses without executing, and that is the whole point rather than an optimisation: running
+// these scripts inside the gate would mutate the tree the gate is checking, which is why mutations.mjs is not
+// in the hook in the first place. A parse per file is also cheap enough to sit in a pre-commit hook - seven
+// files, no compilation - so this adds well under a second.
+//
+// Discovery is the tracked-file list built above, so a script cannot escape the check by being untracked in a
+// git checkout: git is the authority on what is in the repository. The list's source is named on failure, so
+// "checked" is never claimed for a set the reader cannot identify. `process.execPath` is used rather than
+// `node`, because it cannot fail to resolve - the gate is itself running under it - so every failure reported
+// below is a real syntax error rather than a missing executable.
+//
+// Fail-closed in both directions: a file that cannot be read is a failure naming that file, and discovering no
+// scripts at all is a failure too. A syntax check that silently checked nothing would report success for the
+// same reason a test suite that runs no tests does.
+const toolScripts=trackedFiles.filter(f=>f.startsWith("tools/")&&f.endsWith(".mjs"));
+const toolSyntaxProblems=[];
+if(toolScripts.length===0){
+  toolSyntaxProblems.push(`no .mjs script under tools/ was discovered at all (discovery: ${trackedFilesSource}), so this check would have verified nothing`);
+}
+for(const file of toolScripts){
+  try {
+    fs.readFileSync(path.join(root,file),"utf8");
+  } catch(error){
+    toolSyntaxProblems.push(`${file}: could not be read (${error.message})`);
+    continue;
+  }
+  try {
+    execFileSync(process.execPath,["--check",path.join(root,file)],{cwd:root,encoding:"utf8",stdio:["ignore","pipe","pipe"]});
+  } catch(error){
+    // node's diagnostic opens with the file, the position and the error; the lines after it are the source
+    // excerpt, which this gate does not need to repeat.
+    const detail=String(error.stderr||error.stdout||error.message||"").trim().split(/\r?\n/).filter(Boolean);
+    toolSyntaxProblems.push(`${file}: ${detail[0]||"node --check failed and printed no diagnostic"}`);
+  }
+}
+if(toolSyntaxProblems.length) fail(`${toolSyntaxProblems.length} tool script(s) under tools/ do not parse (checked with \`node --check\`, which parses without executing; discovery: ${trackedFilesSource}):\n  - ${toolSyntaxProblems.join("\n  - ")}\nThe pre-commit hook runs only this gate, so this is the only place these scripts' syntax is checked before a commit. Fix the script rather than removing it from this check.`);
 
 // --- Tracked-but-ignored files. .gitignore governs only UNTRACKED paths, so a rule added after files were
 // already committed has no effect on them. That happened twice here: 3,057 files under target/ were committed

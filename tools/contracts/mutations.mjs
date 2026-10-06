@@ -1361,6 +1361,45 @@ const MUTATIONS = [
     ],
     expect: [],
   },
+  // --- Tool-script syntax. The pre-commit hook runs only the contract gate, so nothing under tools/ is parsed
+  // on the way in except verify.mjs itself, which is checked by being run. A duplicate top-level
+  // `const DATA_MODEL` reached a commit in this very file that way, and the first thing to notice was a human
+  // running the harness by hand. These two prove the gate now catches it, and that it catches it as a parse
+  // error rather than as "the file changed".
+  {
+    id: "toolsyntax-a",
+    what: "tools/contracts/mutations.mjs: a duplicate top-level const is appended, the exact defect that reached a commit because the hook checked only verify.mjs",
+    check: GATE,
+    edits: [
+      {
+        // Appending is enough and is deliberately minimal: the file already declares DATA_MODEL near the top,
+        // so a second declaration is a genuine SyntaxError, and the mutation does not depend on any anchor
+        // inside a 1,700-line file staying put.
+        file: "tools/contracts/mutations.mjs",
+        append: "\nconst DATA_MODEL = 1;\n",
+      },
+    ],
+    expect: [
+      "1 tool script(s) under tools/ do not parse",
+      "tools/contracts/mutations.mjs:",
+    ],
+  },
+  {
+    id: "control-toolsyntax-comment",
+    what: "tools/contracts/mutations.mjs: a comment is appended to the same file the syntax mutation targets, which changes no syntax and must stay green",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        // The control is aimed at the same file on purpose. A check that fired because mutations.mjs had
+        // changed - rather than because it no longer parsed - would pass the mutation above for the wrong
+        // reason, and this is what separates the two.
+        file: "tools/contracts/mutations.mjs",
+        append: "\n// Appended by a mutation control. Comments are not syntax.\n",
+      },
+    ],
+    expect: [],
+  },
 ];
 
 // -----------------------------------------------------------------------------------------------------------
