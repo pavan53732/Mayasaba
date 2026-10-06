@@ -260,8 +260,13 @@ are set out once, in `docs/ROADMAP.md` under "Cross-cutting — Trace-link opera
 locked)". That block is the proposal; this paragraph summarises it. Both recommend the same owner —
 `RequirementService`, the manifest's existing value — for the same reasons: it changes no owner value anywhere,
 it already owns a writing operation on the chain's entry object (`upsert_requirement`), the chain's first three
-link types are requirement-anchored, and `DiagnosticsService`'s declared contract is read-only observability
-(`get_logs`, `get_communication_health`, `get_doctor_report`), which a writing operation does not belong in.
+link types are requirement-anchored, and `DiagnosticsService` is where an operator looks to observe rather than
+to change authoritative state, so it is the weaker home for the operation that writes the durable index. (An
+earlier version of this summary, and of the ROADMAP block, gave the reason as `DiagnosticsService`'s contract
+being read-only. That was wrong: the registry carried three reads and omitted `get_event_cursor` and
+`request_event_resync`, which the manifest and `payloads.json` had already assigned to it, so its real contract
+is four reads and one command. The registry has since been made to agree, and the ROADMAP block records the
+correction.)
 **No owner value has been changed by that proposal**, and it is not locked: the register holds locked decisions
 only and has no `PROPOSED` status, which is why the proposal lives in `docs/ROADMAP.md`.
 

@@ -268,6 +268,11 @@ trace links. No traceability service exists; `RequirementService` is the manifes
 was `payloads.json`'s. Until a decision names the owner, the agreed value is a consequence of the manifest being
 authoritative rather than of a decision, and the generated UI owner map is only as right as that value.
 
+`create_trace_link` is now the **only** declared bridge operation that belongs to no service, and it is recorded
+as such in `tools/contracts/unowned-bridge-operations.json` with this block named as its future owner. The gate
+fails if that justification outlives its gap, so choosing an owner here forces the entry to be removed rather
+than leaving a stale note behind.
+
 **This is a proposal, not a decision, and no owner value has been changed.** It is recorded here rather than in
 `docs/DECISION-REGISTER.md` because that register holds locked decisions only — its own header calls it "a
 human-readable register of currently locked design decisions" — and its status vocabulary has no `PROPOSED` value
@@ -309,10 +314,21 @@ for its first node.
 **2. `DiagnosticsService` — the value `payloads.json` used to carry.**
 *For:* trace coverage and orphan detection are reporting concerns, and `docs/TRACEABILITY.md` describes orphan
 detection as "a deterministic SQLite query/service operation"; coverage reads like a diagnostic.
-*Against:* its entire declared contract is read-only observability — `get_logs`, `get_communication_health`,
-`get_doctor_report`. `create_trace_link` writes a durable row, so naming it as the owner would place a writing
-operation in a service whose declared shape is reading, and the generated UI owner map would route a write through
-a diagnostics service. This is the strongest argument against it.
+*Against:* `create_trace_link` writes a durable row, and a diagnostics service is where an operator looks to
+observe rather than to change authoritative state, so the generated UI owner map would route a durable write
+through it.
+*This argument was originally stated as "its entire declared contract is read-only observability", and that
+premise was false when it was written.* It listed the three operations
+`schemas/service-contracts-v1/registry.json` carried — `get_logs`, `get_communication_health`,
+`get_doctor_report` — and treated them as the whole contract, while `workspace.manifest.json` and
+`payloads.json` had already assigned `DiagnosticsService` two more: `get_event_cursor`, a read, and
+`request_event_resync`, a **command**. The registry simply omitted them, and nothing compared the three
+declarations, which is the same gap the ownership rule in `tools/contracts/verify.mjs` now closes. The registry
+has since been made to agree with the other two, so the service's real contract is four reads and one command.
+The objection above is therefore narrowed to what actually distinguishes the two operations rather than to a
+claim about the service's shape: `request_event_resync` requests an operational action — DEC-069 keeps it
+declared and unimplemented because a resync needs an adapter to re-send — and writes no domain row, whereas
+`create_trace_link` would write a durable trace link, which is the authoritative index this decision is about.
 
 **3. A dedicated traceability service (for example `TraceabilityService`).**
 *For:* the index spans every subsystem, so an owner named for the index is honest about that; it would give
@@ -327,9 +343,10 @@ adding a new service, and `RequirementService` does.
 ### Recommendation (the minimal change)
 
 Lock the manifest's existing value: **`RequirementService`**. It is the only option that changes no owner value,
-it is already agreed in both declaring files, it already owns the chain's entry object and a write path, and it
-keeps a writing operation out of a read-only service. `DiagnosticsService` is rejected on its own declared
-contract rather than on preference.
+it is already agreed in both declaring files, it already owns the chain's entry object and a write path, and
+`DiagnosticsService` is the weaker fit for an operation that writes the durable index — a service an operator
+reads for observability. `DiagnosticsService` is rejected on that ground rather than on a claim about its shape,
+which, as the note under candidate 2 records, is four reads and one command rather than read-only.
 
 ### The four places that must change if an owner is chosen
 
