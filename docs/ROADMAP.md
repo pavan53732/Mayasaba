@@ -372,6 +372,32 @@ certification now requires a candidate, an `ASSERTED` binding is unreachable in 
 nominates one. That is recorded rather than worked around. Five storage tests cover the stage and 7 mutations prove
 the gate rules fire.
 
+## Cross-cutting — Agent performance telemetry (DEC-112)
+
+Recorded here rather than under a milestone because no milestone owned "how is this agent doing". Agent attempt
+history was durable in `task_attempts` and summarised nowhere, so any answer to that question was assembled by hand
+from raw rows, and any answer an agent gave about itself would have been self-report.
+
+- the report is derived and read-only: per agent, raw counts by attempt state, the sample size, and the attempts
+  that recorded a failure. Nothing is written and no table is added
+- the threshold is not declared in code. `reporting.minimum_sample_for_percentage` in
+  `schemas/council-v1/council-policies.json` already owns it and already says the data is informational only, so
+  `crates/agents` reads that file rather than minting a second reporting policy for one rule (DEC-017)
+- a rate is reported only at or above that sample; below it the rate is absent with a reason, and an agent with no
+  attempts has no row, because an absent measurement must not read as a zero
+- `validation_survival` is reported `UNAVAILABLE` and names its cause: `validation_runs` records `task_id` and no
+  `attempt_id`, so no attempt can be attributed a validation result, and inferring one would attribute a task's
+  single result to every attempt that ran against it (DEC-083)
+- it is reachable through `get_agent_status`, which the contract already declared and nothing implemented, so the
+  wire surface does not grow (the bridge count moves from 11 of 63 to 12 of 63)
+- **a per-task-kind breakdown** is the remaining work, and it is not approximated: no task-kind column exists
+  anywhere in the schema, so reporting one would require inventing the classification
+
+**Status: the report is derived, policy-suppressed and informational only; nothing records an attempt in
+production.** The guarantee that it cannot influence scheduling is proved by asserting the selection output is
+byte-identical with and without attempt data, which cannot pass for a selector that reads it. Four agent tests, one
+selection test, two shell conformance tests and 5 mutations cover it.
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

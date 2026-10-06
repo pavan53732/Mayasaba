@@ -135,6 +135,37 @@
         "issues":{"type":"array","items":{"$ref":"#/$defs/RecoveryIssue"}}
       }
     },
+    "get_agent_statusRequest":{
+      "title":"Read one project's agent performance report",
+      "description":"Read-only. Names the project whose agent attempt history is summarised. It writes nothing and it changes no scheduling state.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1}
+      }
+    },
+    "get_agent_statusResponse":{
+      "title":"One row per agent that has attempt history in the project",
+      "description":"Derived from task_attempts and stored nowhere, so it cannot disagree with the record it describes. Raw counts and a sample size are always reported; failure_rate is present only when the sample reaches the reporting policy's minimum, and is null with failure_rate_suppressed_reason set otherwise, because a rate over a handful of attempts reads as a measurement (DEC-112). validation_survival is UNAVAILABLE because validation_runs records task_id and no attempt_id, so no attempt can be attributed a validation result; the figure is reported rather than inferred. An agent with no attempts has no row rather than a row of zeroes, because a zeroed row reads as a measured zero. This data is informational only and is not consulted by selection, routing, thresholds or authority.",
+      "type":"array",
+      "items":{
+        "type":"object",
+        "additionalProperties":false,
+        "required":["agent_id","sample_size","by_state","attempts_with_recorded_failure","failure_rate","failure_rate_suppressed_reason","validation_survival","validation_survival_reason","informational_only"],
+        "properties":{
+          "agent_id":{"type":"string","minLength":1},
+          "sample_size":{"type":"integer","minimum":1,"description":"Every attempt this agent made in the project: the sample size a rate is reported over. At least one, because an agent with no attempts has no row."},
+          "by_state":{"type":"array","items":{"$ref":"#/$defs/AgentStateCount"}},
+          "attempts_with_recorded_failure":{"type":"integer","minimum":0},
+          "failure_rate":{"type":["number","null"],"minimum":0,"description":"Null when the sample is below the reporting policy minimum. Null is the suppression: an unreported rate is absent rather than zero, because zero is a measurement and this is the absence of one."},
+          "failure_rate_suppressed_reason":{"type":["string","null"],"description":"Set exactly when failure_rate is null, so the absence is explained rather than left to be read as zero."},
+          "validation_survival":{"enum":["UNAVAILABLE"]},
+          "validation_survival_reason":{"type":"string","minLength":1},
+          "informational_only":{"type":"boolean"}
+        }
+      }
+    },
     "get_communication_healthRequest":{
       "title":"Read one project's durable communication health",
       "description":"Read-only. Names the project whose communication state is reported.",
@@ -397,6 +428,17 @@
     }
   },
   "$defs":{
+    "AgentStateCount":{
+      "title":"How many of one agent's attempts ended in one state",
+      "description":"task_attempts.state is a closed vocabulary, and every state an agent's attempts reached is reported rather than only the interesting ones: a count that omits a state makes the remaining counts look like a total. States are reported in the order the query returns them, which is deterministic.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["state","count"],
+      "properties":{
+        "state":{"type":"string","minLength":1},
+        "count":{"type":"integer","minimum":1}
+      }
+    },
     "DeliveryCounts":{
       "title":"How many of a project's messages are unfinished, by state",
       "description":"Terminal and successful states are deliberately absent: this is a health view, and a count of everything would answer a different question. dead_lettered is counted from the dead_letters table, which is the durable dead-letter record.",

@@ -1848,6 +1848,7 @@ dependencies = [
 name = "mayasaba-desktop"
 version = "0.1.0"
 dependencies = [
+ "mayasaba-agents",
  "mayasaba-bus",
  "mayasaba-core",
  "mayasaba-protocol",

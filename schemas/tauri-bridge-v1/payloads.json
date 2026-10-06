@@ -246,7 +246,10 @@
     "get_agent_status": {
       "owner": "AgentService",
       "request": "get_agent_statusRequest",
-      "response": "get_agent_statusResponse"
+      "response": "get_agent_statusResponse",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true}
+      ]
     },
     "get_council_round": {
       "owner": "CouncilService",

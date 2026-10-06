@@ -2210,3 +2210,154 @@ mod tests {
         assert_eq!(unknown.native_kind, NativeEventKind::UNKNOWN);
     }
 }
+
+// --- Agent performance reporting (DEC-112).
+//
+// Derived, read-only and informational. It exists because `get_agent_status` is a declared query with no
+// implementation and because agent attempt data is recorded in `task_attempts` and summarised nowhere. It reports
+// raw counts with a sample size per agent, and reports a rate only when the reporting policy's minimum sample is
+// met, because a percentage over a handful of attempts reads as a measurement.
+//
+// Nothing here is read by task selection, routing, mode selection or any threshold. The policy that owns the
+// suppression rule says so itself, and `crates/tasks/tests/selection.rs` proves selection output is byte-identical
+// whether or not attempt data exists.
+
+/// The reporting policy, embedded from its canonical owner rather than copied.
+///
+/// The block lives in `council-policies.json` because decision-class reporting is council-owned, and its rule
+/// already covers reporting per agent. Reading a policy is not owning it; minting a second reporting policy for
+/// agent telemetry would be a second source of truth for one rule (DEC-017), and copying the minimum sample into
+/// a Rust constant is the "locked constant" this repository keeps out of code.
+const COUNCIL_POLICIES: &str = include_str!("../../../schemas/council-v1/council-policies.json");
+
+/// What could not be reported, so a caller never reads an absent value as a zero.
+#[derive(Debug)]
+pub enum AgentReportError {
+    Policy(String),
+    Storage(mayasaba_storage::StorageError),
+}
+
+impl From<mayasaba_storage::StorageError> for AgentReportError {
+    fn from(value: mayasaba_storage::StorageError) -> Self {
+        Self::Storage(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentStateCount {
+    pub state: String,
+    pub count: i64,
+}
+
+/// One agent's attempt history in a project, with any rate the reporting policy permits.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentPerformanceReport {
+    pub agent_id: String,
+    pub sample_size: i64,
+    pub by_state: Vec<AgentStateCount>,
+    pub attempts_with_recorded_failure: i64,
+    /// Present only when `sample_size` reaches the policy's minimum. `None` is the suppression: a rate that is
+    /// not reported is absent rather than zero, because zero is a measurement and this is the absence of one.
+    pub failure_rate: Option<f64>,
+    /// Why `failure_rate` is absent, so a reader is told the rate was withheld rather than that it was zero.
+    pub failure_rate_suppressed_reason: Option<String>,
+    /// Whether attempts could be tied to validation outcomes. Always `UNAVAILABLE` today: `validation_runs`
+    /// carries `task_id` and no `attempt_id`, so no attempt can be attributed a validation result. Reported
+    /// rather than estimated.
+    pub validation_survival: String,
+    pub validation_survival_reason: String,
+    /// Stated on every report because the guarantee is the point of the report: this data is descriptive and
+    /// must not affect routing, thresholds, mode selection or authority.
+    pub informational_only: bool,
+}
+
+/// The minimum sample the reporting policy requires before a rate may be shown.
+///
+/// Read from the policy file rather than declared here, so the threshold has one owner.
+pub fn minimum_sample_for_percentage() -> Result<i64, AgentReportError> {
+    let parsed: Value = serde_json::from_str(COUNCIL_POLICIES).map_err(|error| {
+        AgentReportError::Policy(format!(
+            "schemas/council-v1/council-policies.json is not valid JSON: {error}"
+        ))
+    })?;
+    parsed
+        .get("reporting")
+        .and_then(|reporting| reporting.get("minimum_sample_for_percentage"))
+        .and_then(Value::as_i64)
+        .ok_or_else(|| {
+            AgentReportError::Policy(
+                "schemas/council-v1/council-policies.json declares no reporting.minimum_sample_for_percentage"
+                    .to_string(),
+            )
+        })
+}
+
+/// The reason a rate is withheld, or absent when the sample is large enough to report one.
+fn failure_rate(
+    attempts: i64,
+    failures: i64,
+    minimum_sample: i64,
+) -> (Option<f64>, Option<String>) {
+    if attempts < minimum_sample {
+        return (
+            None,
+            Some(format!(
+                "sample size {attempts} is below the reporting policy minimum of {minimum_sample}; a rate over this many attempts would read as a measurement"
+            )),
+        );
+    }
+    if attempts == 0 {
+        // Unreachable while the minimum is at least one, and stated rather than divided by, because a
+        // zero-attempt agent must not produce a rate from nothing.
+        return (
+            None,
+            Some("no attempts were recorded, so there is no rate to compute".to_string()),
+        );
+    }
+    (Some(failures as f64 / attempts as f64), None)
+}
+
+impl AgentService {
+    /// Agent performance reports for a project: raw counts, a sample size, and a rate only when the policy allows.
+    ///
+    /// This is a query over what was recorded. It writes nothing, it is not consulted by selection, and the
+    /// attempt-to-validation link it would need to report validation survival does not exist, so that figure is
+    /// reported `UNAVAILABLE` rather than inferred from task-level validation.
+    pub fn agent_performance_report(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<AgentPerformanceReport>, AgentReportError> {
+        let minimum_sample = minimum_sample_for_percentage()?;
+        let counts = self.storage.agent_attempt_counts(project_id)?;
+        Ok(counts
+            .into_iter()
+            .map(|counts| {
+                let (rate, suppressed) = failure_rate(
+                    counts.sample_size,
+                    counts.attempts_with_recorded_failure,
+                    minimum_sample,
+                );
+                AgentPerformanceReport {
+                    agent_id: counts.agent_id,
+                    sample_size: counts.sample_size,
+                    by_state: counts
+                        .by_state
+                        .into_iter()
+                        .map(|state| AgentStateCount {
+                            state: state.state,
+                            count: state.count,
+                        })
+                        .collect(),
+                    attempts_with_recorded_failure: counts.attempts_with_recorded_failure,
+                    failure_rate: rate,
+                    failure_rate_suppressed_reason: suppressed,
+                    validation_survival: "UNAVAILABLE".to_string(),
+                    validation_survival_reason:
+                        "validation_runs records task_id and no attempt_id, so no attempt can be attributed a validation result; the figure is reported as unavailable rather than inferred from task-level validation"
+                            .to_string(),
+                    informational_only: true,
+                }
+            })
+            .collect())
+    }
+}

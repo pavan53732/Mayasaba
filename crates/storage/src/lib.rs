@@ -4256,6 +4256,23 @@ pub struct NewCertificationBinding {
     pub created_at: String,
 }
 
+/// One agent's attempt counts for a project, derived from `task_attempts` and stored nowhere.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentAttemptCounts {
+    pub agent_id: String,
+    /// Every attempt this agent made in the project: the sample size a rate would be reported over.
+    pub sample_size: i64,
+    pub by_state: Vec<AgentAttemptStateCount>,
+    /// Attempts that recorded a failure, which is the only failure signal `task_attempts` carries.
+    pub attempts_with_recorded_failure: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentAttemptStateCount {
+    pub state: String,
+    pub count: i64,
+}
+
 /// A recorded nomination of a passing validation as a release candidate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReleaseCandidateRecord {
@@ -7982,6 +7999,50 @@ impl Storage {
             )
             .optional()
             .map_err(StorageError::Db)
+    }
+
+    /// Per-agent attempt counts for a project, derived from `task_attempts` and stored nowhere.
+    ///
+    /// This is the raw material for agent performance reporting, and it returns counts rather than a rate: a rate
+    /// over a handful of attempts reads as a measurement, so the suppression rule belongs to the reporting policy
+    /// rather than to the query (DEC-112). Nothing here is written, and nothing here is read by selection.
+    pub fn agent_attempt_counts(&self, project_id: &str) -> Result<Vec<AgentAttemptCounts>> {
+        let mut by_agent: std::collections::BTreeMap<String, AgentAttemptCounts> =
+            std::collections::BTreeMap::new();
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT agent_id, state, COUNT(*), COALESCE(SUM(CASE WHEN failure_id IS NULL THEN 0 ELSE 1 END), 0)
+                 FROM task_attempts WHERE project_id=?1
+                 GROUP BY agent_id, state
+                 ORDER BY agent_id ASC, state ASC",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = statement
+            .query_map([project_id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(StorageError::Db)?;
+        for row in rows {
+            let (agent_id, state, count, with_failure) = row.map_err(StorageError::Db)?;
+            let entry = by_agent
+                .entry(agent_id.clone())
+                .or_insert_with(|| AgentAttemptCounts {
+                    agent_id,
+                    sample_size: 0,
+                    by_state: Vec::new(),
+                    attempts_with_recorded_failure: 0,
+                });
+            entry.sample_size += count;
+            entry.attempts_with_recorded_failure += with_failure;
+            entry.by_state.push(AgentAttemptStateCount { state, count });
+        }
+        Ok(by_agent.into_values().collect())
     }
 }
 

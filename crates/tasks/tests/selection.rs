@@ -1104,3 +1104,71 @@ fn inheritance_does_not_leak_between_projects() {
         vec![("task_prereq".to_string(), 1, 100)]
     );
 }
+
+#[test]
+fn selection_is_identical_with_and_without_agent_attempt_data_present() {
+    // DEC-112: agent performance telemetry is informational only and must not influence scheduling. The strongest
+    // available evidence for that is that the same inputs produce the same selection whether or not attempt data
+    // exists, which cannot be true of a selector that reads it.
+    let mut storage = project_storage();
+    add_ready(&storage, "task_a", 5, "1");
+    add_ready(&storage, "task_b", 1, "2");
+    add_ready(&storage, "task_c", 1, "3");
+    depend(&storage, "task_c", "task_b");
+    make_leaseable(&storage, "task_b");
+    let lease = lease_task(&mut storage, &lease_request("task_b")).expect("lease");
+
+    // The quiet snapshot is taken after the lease and before any attempt. Leasing is a scheduling fact and is
+    // held constant across both snapshots, so the only thing that changes between them is attempt history.
+    let quiet_selection = selected(&storage, 10);
+    let quiet_effective = effective(&storage, 10);
+    assert_eq!(
+        quiet_selection,
+        vec!["task_a".to_string()],
+        "the fixture must select something, or the comparison proves nothing"
+    );
+
+    // A full retry budget, including a failure and a timeout, which is the attempt history most likely to tempt a
+    // selector into demoting the agent that produced it.
+    for (attempt_id, attempt_no, state) in [
+        ("att_q1", 1, "COMPLETED"),
+        ("att_q2", 2, "FAILED"),
+        ("att_q3", 3, "TIMED_OUT"),
+    ] {
+        start_attempt(
+            &storage,
+            &NewTaskAttempt {
+                attempt_id: attempt_id.into(),
+                task_id: "task_b".into(),
+                project_id: PROJECT.into(),
+                attempt_no,
+                lease_id: lease.lease_id.clone(),
+                agent_id: AGENT.into(),
+                session_id: SESSION.into(),
+                workspace_id: WORKSPACE.into(),
+                fence_token: lease.lease_version,
+                project_epoch: 0,
+                context_snapshot_id: CONTEXT.into(),
+                state: state.into(),
+                checkpoint_id: None,
+                failure_id: None,
+                started_at: Some("1".into()),
+                heartbeat_at: Some("1".into()),
+                ended_at: Some("2".into()),
+                created_at: "1".into(),
+            },
+        )
+        .expect("attempt");
+    }
+
+    // The telemetry the selector would have to consult is present and non-empty, so its absence from the
+    // selection below is a property of the selector rather than of an empty table.
+    let counts = storage.agent_attempt_counts(PROJECT).expect("counts");
+    assert_eq!(counts.len(), 1, "one agent has attempt history");
+    assert_eq!(counts[0].agent_id, AGENT);
+    assert_eq!(counts[0].sample_size, 3);
+    assert_eq!(counts[0].by_state.len(), 3);
+
+    assert_eq!(selected(&storage, 10), quiet_selection);
+    assert_eq!(effective(&storage, 10), quiet_effective);
+}

@@ -162,6 +162,14 @@ the rows at the end are what does not exist, recorded rather than implied.
 | A vocabulary declared in Rust and as a SQL CHECK constraint must agree | DEC-111 | `tools/contracts/verify.mjs` compares 18 constants with the constraint that enforces each | VALIDATED |
 | An operation that rejects, supersedes or withdraws a release candidate | DEC-111 | - | NOT_ADDRESSED |
 | A production caller that nominates a release candidate | DEC-111 | - | NOT_ADDRESSED |
+| Agent attempt counts are derived per agent and stored nowhere | DEC-112 | `crates/agents/tests/agent_telemetry.rs`; `agent_attempt_counts` is a grouped read and no column records its output | VALIDATED |
+| A failure rate is withheld below the reporting policy's minimum sample | DEC-112 | `crates/agents/tests/agent_telemetry.rs`; `minimum_sample_for_percentage` reads the policy file | VALIDATED |
+| An agent with no attempts has no report row rather than a row of zeroes | DEC-112 | `crates/agents/tests/agent_telemetry.rs` | VALIDATED |
+| Validation survival is reported `UNAVAILABLE` rather than inferred | DEC-112 | `crates/agents/tests/agent_telemetry.rs`; `validation_runs` carries `task_id` and no `attempt_id` | VALIDATED |
+| The reporting threshold is read from its policy owner and not declared in Rust | DEC-112 | `tools/contracts/verify.mjs` requires the `include_str!` and refuses a numeric `*SAMPLE*` constant | VALIDATED |
+| Agent telemetry does not influence task selection | DEC-112 | `crates/tasks/tests/selection.rs` asserts byte-identical selection with and without attempt data; `tools/contracts/verify.mjs` refuses a reference from the selection facade | VALIDATED |
+| A per-task-kind performance breakdown | DEC-112 | - | NOT_ADDRESSED |
+| A production caller that records agent attempts | DEC-112 | - | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
@@ -211,6 +219,19 @@ two of which are mutated in `tools/contracts/mutations.mjs` to prove it can fail
 change. The two `NOT_ADDRESSED` rows are the reason the stage is enforced and unexercised: nothing nominates a
 candidate outside a test, and nothing moves one out of `PROPOSED`, so `REJECTED`, `SUPERSEDED` and `WITHDRAWN` are
 declared and unreachable.
+
+The agent-performance rows are `VALIDATED` against `crates/agents`, because that is where the policy is applied,
+and against `crates/tasks` for the one row that is a guarantee rather than a feature. The suppression rows are
+`VALIDATED` by a test that sits exactly at the policy minimum and one attempt below it, so an off-by-one in either
+direction fails: the threshold itself is never restated in a check, because it is read from
+`council-policies.json` and the gate refuses a numeric `*SAMPLE*` constant in the code that applies it. The
+informational-only row is `VALIDATED` in the strongest form the repository offers: the same selection call is made
+before and after a full retry budget is recorded, including a failure and a timeout, and the two results are
+asserted byte-identical — a comparison that cannot pass for a selector that reads the data. The gate adds the
+structural half by refusing a reference from the selection facade to the reporting API. The two `NOT_ADDRESSED`
+rows are why the report is enforced and unexercised: nothing records an attempt outside a test, and no task-kind
+column exists anywhere in the schema, so a per-kind breakdown would require inventing the classification rather
+than deriving it.
 
 ## Persistence implementation
 

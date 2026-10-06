@@ -322,3 +322,30 @@ Native CLI output is first normalized to schemas/agent-adapter-v1/native-event.s
 A native kind with no MCF equivalent is dropped or retained as adapter-local telemetry; it must **not** be translated to `ERROR`. `ERROR` is a failure signal, and emitting it for an unmapped progress record would fabricate a failure that did not occur. This is why `REASONING`, `STEP_START`, `STEP_FINISH` and `UNKNOWN` map to `null` in the registry rather than to an error type.
 
 Contract verification enforces that the `native_kind` enum and the registry's mapping keys stay in lockstep, and that every non-null mapping target is a real MCF message type.
+
+## Agent performance reporting
+
+Agent performance is reported, not scored (DEC-112). The report is derived from `task_attempts`, which already
+records `agent_id`, `state` and `failure_id`, and it is exposed through the `get_agent_status` query. It writes
+nothing and adds no table.
+
+- Raw counts by attempt state, with the sample size, are always reported. A rate without its sample size is a rate
+  without its denominator.
+- `failure_rate` is present only when the sample reaches `reporting.minimum_sample_for_percentage` in
+  `schemas/council-v1/council-policies.json`. Below it the rate is absent and a reason is given, because a
+  percentage over a handful of attempts reads as a measurement. An agent with no attempts has no report row rather
+  than a row of zeroes, for the same reason.
+- `validation_survival` is reported `UNAVAILABLE`. `validation_runs` records `task_id` and no `attempt_id`, so no
+  attempt can be attributed a validation result; deriving one from task-level validation would attribute a task's
+  single result to every attempt that ran against it (DEC-083).
+- There is no per-task-kind breakdown, because no task-kind column exists anywhere in the schema. It is absent
+  rather than approximated.
+
+**This data is informational only.** It must not affect routing, thresholds, mode selection, scheduling or
+authority, and the rule that says so is owned by the reporting policy rather than by this document. The guarantee
+is enforced in three places: the policy sentence, a contract-gate check that refuses a reference from the selection
+facade to the reporting API, and a test asserting the selection output is byte-identical with and without attempt
+data present.
+
+An agent's own report of its performance is never an input. Every figure is computed by the controller from stored
+attempt rows, so nothing here can report a value it did not compute.

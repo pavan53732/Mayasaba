@@ -87,6 +87,9 @@ const CONFLICT_CLASSES = "schemas/workspace-v1/integration-conflict-classes.json
 const ADMISSION_SCHEMA = "schemas/workspace-v1/admission.schema.json";
 const STORAGE_LIB = "crates/storage/src/lib.rs";
 const SQL_SCHEMA = "schemas/sqlite-v1/schema.sql";
+const AGENTS_LIB = "crates/agents/src/lib.rs";
+const TASKS_LIB = "crates/tasks/src/lib.rs";
+const COUNCIL_POLICIES = "schemas/council-v1/council-policies.json";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -1183,6 +1186,102 @@ const MUTATIONS = [
         file: "docs/SQLITE-DATA-ARCHITECTURE.md",
         find: "`release_candidates` records the stage between a passing validation",
         replace: "Reworded by a mutation control. `release_candidates` records the stage between a passing validation",
+      },
+    ],
+    expect: [],
+  },
+
+  // --- DEC-112: agent performance telemetry, and the two properties that make it safe.
+  // The first property is that the reporting threshold has one owner and it is not the code applying it. The
+  // second is the guarantee itself: the data is informational only. Both are contract facts rather than
+  // implementation preferences, so both are proved by breaking them.
+  {
+    id: "dec112-a",
+    what: "council-policies.json: the reporting rule stops saying the data is informational only",
+    check: GATE,
+    edits: [
+      {
+        file: COUNCIL_POLICIES,
+        find: "Outcome data is informational only and must not affect routing, thresholds, mode selection or authority.",
+        replace: "Outcome data is advisory.",
+      },
+    ],
+    expect: [
+      "council-policies.json reporting rule must state that the data is informational only and must not affect routing or thresholds",
+    ],
+  },
+  {
+    id: "dec112-b",
+    what: "crates/agents: the reporting threshold is locked into a Rust constant instead of read from the policy",
+    check: GATE,
+    edits: [
+      {
+        file: AGENTS_LIB,
+        find: "pub fn minimum_sample_for_percentage() -> Result<i64, AgentReportError> {",
+        replace:
+          "const MINIMUM_SAMPLE_FOR_PERCENTAGE: i64 = 5;\npub fn minimum_sample_for_percentage() -> Result<i64, AgentReportError> {\n    let _locked = MINIMUM_SAMPLE_FOR_PERCENTAGE;",
+      },
+    ],
+    expect: [
+      "declares a numeric constant for the reporting threshold (const MINIMUM_SAMPLE_FOR_PERCENTAGE: i64 = 5)",
+    ],
+  },
+  {
+    id: "dec112-c",
+    what: "crates/agents: the consumer stops embedding the policy that owns the threshold it applies",
+    check: GATE,
+    edits: [
+      {
+        file: AGENTS_LIB,
+        find: 'const COUNCIL_POLICIES: &str = include_str!("../../../schemas/council-v1/council-policies.json");',
+        replace: 'const COUNCIL_POLICIES: &str = "{}";',
+      },
+    ],
+    expect: [
+      "does not embed schemas/council-v1/council-policies.json, so the reporting minimum it applies cannot be the policy's value",
+    ],
+  },
+  {
+    id: "dec112-d",
+    what: "council-policies.json: the sample size stops being reported alongside the counts",
+    check: GATE,
+    edits: [
+      {
+        file: COUNCIL_POLICIES,
+        find: '"show_raw_counts_and_sample_size":true',
+        replace: '"show_raw_counts_and_sample_size":false',
+      },
+    ],
+    expect: [
+      "council-policies.json must require raw counts with a sample size, because a rate without its sample size is a rate without its denominator",
+    ],
+  },
+  {
+    id: "dec112-e",
+    what: "crates/tasks: task selection consults the agent performance report it must not be influenced by",
+    check: GATE,
+    edits: [
+      {
+        file: TASKS_LIB,
+        find: "    storage.list_schedulable_tasks(project_id, limit)",
+        replace:
+          "    let _ = storage.agent_attempt_counts(project_id);\n    storage.list_schedulable_tasks(project_id, limit)",
+      },
+    ],
+    expect: [
+      "crates/tasks/src/lib.rs references the agent performance report, which is informational only and must not influence selection",
+    ],
+  },
+  {
+    id: "control-dec112-prose",
+    what: "crates/agents: the reporting prose is reworded while the phrases the policy is checked for remain",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: AGENTS_LIB,
+        find: "// --- Agent performance reporting (DEC-112).",
+        replace: "// --- Agent performance reporting (DEC-112). Reworded by a mutation control.",
       },
     ],
     expect: [],

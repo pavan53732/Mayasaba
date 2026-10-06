@@ -17,6 +17,7 @@ mod bus_shell;
 
 use std::sync::Mutex;
 
+use mayasaba_agents::{AgentPerformanceReport, AgentReportError, AgentService, AgentStateCount};
 use mayasaba_core::attachment_service::{
     AttachRequest, AttachmentError, AttachmentProvenance, AttachmentResolution, AttachmentService,
 };
@@ -199,6 +200,37 @@ fn get_recovery_status(
             })
             .collect(),
     })
+}
+
+/// Agent performance reports for one project: derived counts, a sample size, and a rate only when the reporting
+/// policy permits one.
+///
+/// This is the implementation of a query the bridge contract already declared, so it adds no operation. It writes
+/// nothing, and the report it returns is not consulted by selection, routing, thresholds or authority (DEC-112).
+#[tauri::command(rename_all = "snake_case")]
+fn get_agent_status(
+    service: State<'_, Mutex<AgentService>>,
+    project_id: String,
+) -> Result<Vec<AgentPerformanceReport>, CommandError> {
+    let service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "AgentService lock was poisoned by a prior panic".to_string(),
+    })?;
+    service
+        .agent_performance_report(&project_id)
+        .map_err(|error| match error {
+            // The policy is embedded at compile time, so this means the embedded file did not parse. That is a
+            // broken build input rather than a bad request, and it is reported as such instead of as a storage
+            // failure, which would send a reader to the wrong file.
+            AgentReportError::Policy(message) => CommandError {
+                code: "SCHEMA_INVALID",
+                message,
+            },
+            AgentReportError::Storage(error) => CommandError {
+                code: "STORAGE_FAILURE",
+                message: error.to_string(),
+            },
+        })
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -781,6 +813,15 @@ fn main() {
     let attachment_service = AttachmentService::open(&database_path())
         .expect("Mayasaba could not open its durable attachment store; see AGENTS.md section 20");
 
+    // AgentService owns agent sessions and the performance report derived from attempt history (DEC-112), so it
+    // holds its own connection to the same store rather than reaching through ProjectService - the same reason the
+    // bus and the attachment service do (DEC-072). Opened eagerly so an unreachable store surfaces at startup
+    // rather than on the first query.
+    let agent_service = AgentService::new(
+        mayasaba_storage::Storage::open(&database_path())
+            .expect("Mayasaba could not open its durable agent store; see AGENTS.md section 20"),
+    );
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(service))
@@ -789,10 +830,12 @@ fn main() {
         // spawn_blocking task a handler will use.
         .manage(bus_state)
         .manage(Mutex::new(attachment_service))
+        .manage(Mutex::new(agent_service))
         .invoke_handler(tauri::generate_handler![
             create_project,
             list_projects,
             get_recovery_status,
+            get_agent_status,
             validate_workspace,
             replay_dead_letter,
             get_communication_health,
@@ -835,6 +878,7 @@ mod wire_shape_tests {
         "create_project",
         "list_projects",
         "get_recovery_status",
+        "get_agent_status",
         "validate_workspace",
         "replay_dead_letter",
         "get_communication_health",
@@ -1056,6 +1100,47 @@ mod wire_shape_tests {
             ..project_view()
         };
         conforms("create_projectResponse", &no_brief);
+    }
+
+    /// One agent's report, with the rate either present or withheld.
+    ///
+    /// The two shapes are separate wire values rather than one: a null `failure_rate` is the suppression, and it
+    /// carries a reason so the absence cannot be read as a measured zero.
+    fn agent_report(failure_rate: Option<f64>) -> AgentPerformanceReport {
+        AgentPerformanceReport {
+            agent_id: "agent_sel".to_string(),
+            sample_size: 5,
+            by_state: vec![
+                AgentStateCount {
+                    state: "COMPLETED".to_string(),
+                    count: 4,
+                },
+                AgentStateCount {
+                    state: "FAILED".to_string(),
+                    count: 1,
+                },
+            ],
+            attempts_with_recorded_failure: 1,
+            failure_rate,
+            failure_rate_suppressed_reason: failure_rate
+                .is_none()
+                .then(|| "sample size 5 is below the reporting policy minimum of 5".to_string()),
+            validation_survival: "UNAVAILABLE".to_string(),
+            validation_survival_reason:
+                "validation_runs records task_id and no attempt_id, so no attempt can be attributed a validation result"
+                    .to_string(),
+            informational_only: true,
+        }
+    }
+
+    #[test]
+    fn get_agent_status_response_conforms() {
+        conforms("get_agent_statusResponse", &vec![agent_report(Some(0.2))]);
+    }
+
+    #[test]
+    fn get_agent_status_response_with_a_withheld_rate_conforms() {
+        conforms("get_agent_statusResponse", &vec![agent_report(None)]);
     }
 
     #[test]

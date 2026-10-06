@@ -1976,7 +1976,38 @@ if(!(typeof minLineages==="number"&&minLineages>=2)) councilProblems.push(`counc
 if(councilPolicies.evidence?.block_convergence_on_load_bearing_assumption!==true) councilProblems.push("council-policies.json must block convergence on a load-bearing assumption");
 if(typeof councilPolicies.escalation!=="string"||councilPolicies.escalation.length===0) councilProblems.push("council-policies.json declares no escalation rule; exhaustion must produce an outcome rather than silent acceptance");
 if(typeof councilPolicies.reporting?.minimum_sample_for_percentage!=="number") councilProblems.push("council-policies.json declares no minimum sample for percentage reporting");
+// DEC-112: agent performance telemetry reads this reporting policy, and the guarantee that makes the telemetry
+// safe is a property of the policy text rather than of the code that consumes it. A policy that stopped saying the
+// data is informational only would leave the consumer reading a suppression rule that no longer claims to be
+// advisory, so the claim is checked where it is written.
+if(councilPolicies.reporting?.show_raw_counts_and_sample_size!==true) councilProblems.push("council-policies.json must require raw counts with a sample size, because a rate without its sample size is a rate without its denominator");
+const reportingRule=councilPolicies.reporting?.rule;
+if(typeof reportingRule!=="string"||!/informational only/.test(reportingRule)||!/must not affect/.test(reportingRule)) councilProblems.push("council-policies.json reporting rule must state that the data is informational only and must not affect routing or thresholds; the agent telemetry guarantee is that sentence");
 if(councilProblems.length) fail(councilProblems.length+" council decision-quality contract problem(s):\n  - "+councilProblems.join("\n  - "));
+
+// --- Agent performance reporting (DEC-112): the threshold has one owner, and it is not the code that applies it.
+// A minimum sample copied into Rust keeps working after the policy changes and stops agreeing with it, which is the
+// failure mode the policy file exists to prevent. Two facts are checked, and the second is the one that catches a
+// copy: the consumer reads the policy file, and it declares no numeric constant of its own for this threshold.
+const AGENTS_LIB="crates/agents/src/lib.rs";
+const agentsLib=readText(AGENTS_LIB);
+const agentReportProblems=[];
+if(!agentsLib.includes('include_str!("../../../schemas/council-v1/council-policies.json")')) agentReportProblems.push(
+  `${AGENTS_LIB} does not embed schemas/council-v1/council-policies.json, so the reporting minimum it applies cannot be the policy's value`
+);
+const lockedSample=agentsLib.match(/\bconst\s+[A-Z0-9_]*SAMPLE[A-Z0-9_]*\s*:[^=]*=\s*[0-9]/);
+if(lockedSample) agentReportProblems.push(
+  `${AGENTS_LIB} declares a numeric constant for the reporting threshold (${lockedSample[0].trim()}); the minimum sample belongs to the policy file, and a constant here would silently stop agreeing with it`
+);
+// The other half of the guarantee, stated structurally. The behavioural proof is
+// `selection_is_identical_with_and_without_agent_attempt_data_present` in crates/tasks/tests/selection.rs; this
+// catches the reference before the behaviour has a chance to change, and it is deliberately narrow - it reads the
+// selection facade rather than storage, which legitimately owns the derived query the report is built from.
+const tasksLib=readText("crates/tasks/src/lib.rs");
+if(/agent_performance_report|agent_attempt_counts/.test(tasksLib)) agentReportProblems.push(
+  "crates/tasks/src/lib.rs references the agent performance report, which is informational only and must not influence selection"
+);
+if(agentReportProblems.length) fail(agentReportProblems.length+" agent reporting contract problem(s):\n  - "+agentReportProblems.join("\n  - "));
 
 // --- Bus retry/dispatch policy (DEC-058) against the machine it terminates through and against the crate.
 // `bus-policies.json` is configuration, so nothing here locks its numbers: what is checked is that the numbers
