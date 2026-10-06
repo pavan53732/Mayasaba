@@ -651,7 +651,20 @@ const MUTATIONS = [
         replace: "| ADDITIVE || DEC-075 | Wiring replay",
       },
     ],
-    expect: ["index-table rows concatenated onto single lines"],
+    expect: ["carries 2 index-table rows"],
+  },
+  {
+    id: "trace-f",
+    what: "DECISION-REGISTER.md: a DEC heading appended to the paragraph before it, so the heading is not a heading",
+    check: GATE,
+    edits: [
+      {
+        file: DECISION_REGISTER,
+        find: "and th\n### DEC-097 — Lease fence rotates only on ownership change",
+        replace: "and th### DEC-097 — Lease fence rotates only on ownership change",
+      },
+    ],
+    expect: ["carries a DEC heading after other text"],
   },
   {
     id: "control-trace-prose",

@@ -1002,26 +1002,31 @@ const traceExtensions=/\.(rs|ts|tsx|js|mjs|json|sql|md|toml|css|html)$/;
 // A decision is defined either by a heading or by a row of the register's index table. Both forms are real:
 // DEC-070 to DEC-075 appear as index rows, and the later entries use h4 headings with no em dash.
 //
-// The index-row pattern is deliberately NOT anchored to the start of a line. An earlier version of this check
-// was, and eleven index rows in the register had lost their newlines and been concatenated onto one 6663
-// character line, so DEC-059 was defined and the anchored pattern could not see it. The check then reported a
-// false positive - a decision record it claimed was lost - which is the one failure mode a gate must not have,
-// because a gate that fails on a correct file gets switched off rather than fixed. The structure is now
-// enforced as well, so the register cannot silently become unparseable again.
+// NEITHER pattern is anchored to the start of a line, and that is deliberate. An earlier version anchored both,
+// and the register had lost newlines in two places: eleven index rows were concatenated onto one 6663 character
+// line, and DEC-097's heading was appended to the end of DEC-096's paragraph. Both decisions were defined the
+// whole time and the anchored patterns could not see either, so the check reported a decision record as lost
+// when the real defect was a broken document. A gate that fails on a correct file is worse than no gate, because
+// it gets switched off rather than fixed. Both structures are now enforced below as well, so this cannot recur
+// silently.
 const registerText=readText("docs/DECISION-REGISTER.md");
 const definedDecisions=new Set();
-for(const m of registerText.matchAll(/^#{2,6}\s*(DEC-\d+)/gm)) definedDecisions.add(m[1]);
+for(const m of registerText.matchAll(/#{2,6}\s*(DEC-\d+)/g)) definedDecisions.add(m[1]);
 for(const m of registerText.matchAll(/\|\s*(DEC-\d+)\s*\|/g)) definedDecisions.add(m[1]);
 
-// A Markdown table row is a line. A line carrying more than one index-row start is a table whose rows were
-// joined by a lost newline, which makes the register's own index of which decisions exist unreadable - and, for
-// any line-anchored reader, wrong. This asserts nothing about what the decisions say; it is structure only.
-const concatenatedIndexRows=[];
+// A Markdown table row is a line, and a Markdown heading is a line. A line carrying more than one index-row
+// start is a table whose rows were joined by a lost newline; a line carrying a heading after other text is a
+// heading that was joined to the paragraph before it. Either way the register's own index of which decisions
+// exist becomes unreadable - and, for any line-anchored reader, wrong. This asserts nothing about what the
+// decisions say; it is structure only.
+const registerStructureProblems=[];
 registerText.split(/\r?\n/).forEach((line,index)=>{
-  const count=[...line.matchAll(/\|\s*DEC-\d+\s*\|/g)].length;
-  if(count>1) concatenatedIndexRows.push(`line ${index+1} carries ${count} index-table rows: ${line.slice(0,72)}...`);
+  const rows=[...line.matchAll(/\|\s*DEC-\d+\s*\|/g)].length;
+  if(rows>1) registerStructureProblems.push(`line ${index+1} carries ${rows} index-table rows: ${line.slice(0,72)}...`);
+  const headingAt=line.search(/#{2,6}\s*DEC-\d+/);
+  if(headingAt>0) registerStructureProblems.push(`line ${index+1} carries a DEC heading after other text: ...${line.slice(Math.max(0,headingAt-48),headingAt+40)}`);
 });
-if(concatenatedIndexRows.length) fail(`docs/DECISION-REGISTER.md has index-table rows concatenated onto single lines, so the table is not a table and its index of which decisions exist cannot be read:\n  - ${concatenatedIndexRows.join("\n  - ")}\nSplit each row onto its own line.`);
+if(registerStructureProblems.length) fail(`docs/DECISION-REGISTER.md has DEC entries that are not on their own line, so the register's index of which decisions exist cannot be read:\n  - ${registerStructureProblems.join("\n  - ")}\nA table row and a heading each have to start a line. Split the line.`);
 
 const repoNames=new Set();
 const repoPaths=new Set();

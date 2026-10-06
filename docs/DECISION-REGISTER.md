@@ -1133,7 +1133,8 @@ Classification: REFINEMENT. Agent adapters may prepare a contract-derived Proces
 Classification: ADDITIVE. `RecoveryService` reports recoverable TaskAttempts and CommandExecutions from durable state plus latest process observations. It may classify the next reconciliation action, but it does not invent process outcomes, grant leases, retry tasks, or certify artifacts. Those mutations remain owned by TaskService, ExecutionService and ValidationService respectively.
 
 ### DEC-096 — Lease admission is atomic across Task and TaskLease lifecycle
-Classification: REFINEMENT. The lease transaction records TASK `READY -> LEASE_REQUESTED`, lease `REQUESTED -> ACTIVE`, and task `LEASE_REQUESTED -> LEASED` in one SQLite transaction. A task cannot become schedulable again while a live lease exists, and th### DEC-097 — Lease fence rotates only on ownership change
+Classification: REFINEMENT. The lease transaction records TASK `READY -> LEASE_REQUESTED`, lease `REQUESTED -> ACTIVE`, and task `LEASE_REQUESTED -> LEASED` in one SQLite transaction. A task cannot become schedulable again while a live lease exists, and th
+### DEC-097 — Lease fence rotates only on ownership change
 Classification: REFINEMENT. A TaskAttempt keeps the lease_version captured when that attempt was admitted. Heartbeat/renewal changes heartbeat and expiry timestamps but does not rotate the fence token, because rotating it would invalidate the still-running attempt without a new ownership event. A new lease acquisition changes authority through a new lease_id; expired, released or revoked leases cannot authorize the old attempt.
 
 ## Change procedure
