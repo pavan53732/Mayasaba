@@ -115,8 +115,10 @@ No live AI CLI is required for this proof. The slice passes only when the questi
 
 **Status: reliability/runtime foundation implemented; full milestone remains open.** Durable task leases, fencing,
 attempt identity, deterministic ready-task selection, command execution records, process observations, bounded local
-process supervision and restart reconciliation are implemented. Git worktrees, full workspace mutation policy,
-real artifact/evidence capture and end-to-end project execution remain open.
+process supervision, restart reconciliation, durable artifact/evidence/validation persistence, file hashing and
+execution artifact binding are implemented. Git worktree command isolation/observation specifications are also
+implemented. Actual controller-mediated worktree materialization/integration, full workspace mutation policy,
+runtime build/test/evidence orchestration and end-to-end project execution remain open.
 - request/acceptance-criteria-to-task DAG
 - task leases
 - lease renewal/expiry

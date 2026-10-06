@@ -1192,3 +1192,6 @@ Classification: REFINEMENT. `AGENT_HEALTH_CHANGED` is a canonical MCF service ev
 
 ### DEC-101 — Git worktree operations are workspace-defined and execution-mediated
 Classification: ADDITIVE. `crates/workspace` defines deterministic Git repository/status/HEAD/worktree command specifications and validates Windows path/ref inputs. `crates/execution` remains the sole material process authority. Existing workspace, revision and admission records remain authoritative; no new worktree table is introduced.
+
+### DEC-102 — Evidence capture is immutable metadata plus local artifacts
+Classification: ADDITIVE. EvidenceService records artifact identity, path, SHA-256 and size in the existing artifact/evidence tables and links evidence to artifacts through the existing `evidence_links` authority. Capture never widens workspace scope or creates a second provenance store. Command stdout/stderr artifact bindings remain fields on the existing `command_executions` record.
