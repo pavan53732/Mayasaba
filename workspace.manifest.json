@@ -259,7 +259,8 @@
       "start_simulation": "SimulationService",
       "stop_simulation": "SimulationService",
       "create_trace_link": "RequirementService",
-      "attach_project_context_attachment": "AttachmentService"
+      "attach_project_context_attachment": "AttachmentService",
+      "record_user_contribution": "ProjectService"
     },
     "queries": {
       "get_project": "ProjectService",

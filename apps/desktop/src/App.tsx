@@ -9,6 +9,7 @@ import {
   pickAttachmentFiles,
   pickAttachmentFolder,
   pickFolder,
+  recordUserContribution,
   validateWorkspace,
 } from "./intake/bridge";
 import {
@@ -21,7 +22,7 @@ import {
   type AttachmentResolution,
   type AttachmentTray,
 } from "./attachments/state";
-import { canSendMessage, chatReducer, initialChatState } from "./chat/state";
+import { canSendMessage, chatReducer, initialChatState, type UserContribution } from "./chat/state";
 import {
   EMPTY_DRAFT,
   initialState,
@@ -615,18 +616,20 @@ function UnattachedSelections({ tray }: { tray: AttachmentTray }) {
  *
  * The attachment half is wired to the three operations the contract declares: the tray is seeded from the
  * project's stored attachments, and attaching here records immediately, because the project already exists.
- * The message half is presentation state.
+ * The message half is wired to `record_user_contribution` (DEC-030), so submitting records a `UserContribution`
+ * and the composer renders the row the service stored rather than the draft it sent.
  *
- * No operation records a `UserContribution` yet. DEC-030 records the requirement — "A new Tauri command is
- * required for classified free-text input" — and `payloads.json` declares no such command, so this component
- * does not invent one (AGENTS.md section 8), and it has no `sent` state to render. What is real is the
- * enablement rule: `canSendMessage` takes the message text and nothing else, so the send control is available
- * with nothing attached, which is DEC-106's requirement stated on the surface itself rather than only in a
- * test.
+ * The classification sent is `COMMENTARY` and the stored `result_type` is `PENDING`, because nothing routes the
+ * text to an owning service that could rule on it. That is what the record says: the user contributed this
+ * text and it was labelled for routing. It does not claim project truth changed, and the notice names the
+ * unchanged epoch pair so the surface cannot imply otherwise.
+ *
+ * The enablement rule is unchanged and still the point: `canSendMessage` takes the message text and nothing
+ * else, so the send control is available with nothing attached, which is DEC-106's requirement stated on the
+ * surface itself rather than only in a test.
  */
 function OngoingChatComposer({ project }: { project: ProjectView }) {
   const [state, dispatch] = useReducer(chatReducer, "CHAT_COMPOSER", initialChatState);
-  const [gapReported, setGapReported] = useState(false);
   const [loadingAttachments, setLoadingAttachments] = useState(true);
 
   // Seed the tray from what Rust stores, so a restart shows the project's real context rather than whatever a
@@ -682,6 +685,21 @@ function OngoingChatComposer({ project }: { project: ProjectView }) {
 
   const canSend = canSendMessage(state);
 
+  const onSend = useCallback(async () => {
+    const body = state.text;
+    dispatch({ type: "submit" });
+    // The advisory label for routing, and nothing more. Nothing on this side decides materiality: the owning
+    // service does, and this value is never read as authorization. It is COMMENTARY because no operation routes
+    // the text to a service that could rule on it, and the stored result_type records that rather than implying
+    // a change.
+    const recorded = await recordUserContribution(project.project_id, body, "COMMENTARY");
+    if (isContribution(recorded)) {
+      dispatch({ type: "recorded", contribution: recorded });
+    } else {
+      dispatch({ type: "refused", error: recorded });
+    }
+  }, [project.project_id, state.text]);
+
   return (
     <section
       aria-label="Ongoing Chat Composer"
@@ -719,7 +737,7 @@ function OngoingChatComposer({ project }: { project: ProjectView }) {
         }
       />
 
-      <button onClick={() => setGapReported(true)} disabled={!canSend} style={button}>
+      <button onClick={onSend} disabled={!canSend} style={button}>
         Send
       </button>
       <p style={hint}>
@@ -727,14 +745,26 @@ function OngoingChatComposer({ project }: { project: ProjectView }) {
         is available with nothing attached and with references that no longer resolve.
       </p>
 
-      {gapReported ? (
-        <div role="alert" style={{ ...notice, borderColor: "#b45309", color: "#92400e" }}>
-          <strong>Nothing was recorded.</strong>
+      {state.kind === "recorded" ? (
+        <div role="status" style={{ ...notice, borderColor: "#047857", color: "#065f46" }}>
+          <strong>Recorded.</strong>
           <div style={{ marginTop: 4 }}>
-            Recording a chat message needs an operation the contract does not declare yet. DEC-030 states that a
-            new Tauri command is required for classified free-text input, and no such command exists in{" "}
-            <code>schemas/tauri-bridge-v1/payloads.json</code>. This composer does not invent one. Attaching
-            files is fully wired; recording the message is not.
+            Stored as <code>{state.contribution.contribution_id}</code> with the advisory classification{" "}
+            <code>{state.contribution.classification}</code>. No owning service has ruled on it, so the outcome is{" "}
+            <code>{state.contribution.result_type}</code> and project truth is unchanged — the epoch pair is{" "}
+            <code>
+              {state.contribution.epoch_before} → {state.contribution.epoch_after}
+            </code>
+            . The label above is advisory; it never authorized anything.
+          </div>
+        </div>
+      ) : null}
+
+      {state.kind === "refused" ? (
+        <div role="alert" style={{ ...notice, borderColor: "#b45309", color: "#92400e" }}>
+          <strong>Not recorded.</strong>
+          <div style={{ marginTop: 4 }}>
+            <code>{state.error.code}</code> — {state.error.message} Your draft and references are kept.
           </div>
         </div>
       ) : null}
@@ -760,6 +790,16 @@ function isProjectView(value: ProjectView | CommandError): value is ProjectView 
  * by the shape the contract gives each, not by which fields happen to be present.
  */
 function isResolution(value: AttachmentResolution | CommandError): value is AttachmentResolution {
+  return typeof (value as CommandError).code !== "string";
+}
+
+/**
+ * True when the service answered with a stored contribution rather than a refusal.
+ *
+ * A `CommandError` always carries a string `code` and a contribution never does, so this distinguishes the two
+ * by the shape the contract gives each, not by which fields happen to be present.
+ */
+function isContribution(value: UserContribution | CommandError): value is UserContribution {
   return typeof (value as CommandError).code !== "string";
 }
 

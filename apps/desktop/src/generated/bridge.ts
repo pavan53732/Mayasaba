@@ -38,7 +38,8 @@ export const COMMANDS = [
   "start_simulation",
   "stop_simulation",
   "create_trace_link",
-  "attach_project_context_attachment"
+  "attach_project_context_attachment",
+  "record_user_contribution"
 ] as const;
 export const QUERIES = [
   "get_project",
@@ -141,8 +142,9 @@ export const COMMAND_OWNERS = {
   "validate_configuration": "ConfigurationService",
   "start_simulation": "SimulationService",
   "stop_simulation": "SimulationService",
-  "create_trace_link": "DiagnosticsService",
+  "create_trace_link": "RequirementService",
   "attach_project_context_attachment": "AttachmentService",
+  "record_user_contribution": "ProjectService",
 } as const;
 
 /** Owning application service per query, from payloads.json. */

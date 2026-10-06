@@ -9,6 +9,7 @@
 // `@tauri-apps/api` lazily, so importing this module in a plain Node test does not require Tauri.
 
 import type { AttachmentProvenance, AttachmentResolution } from "../attachments/state";
+import type { ContributionClassification, UserContribution } from "../chat/state";
 import type { CommandError, ProjectView, RecoveryReport } from "./state";
 
 export type Transport = (command: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -323,6 +324,34 @@ export async function resolveProjectContextAttachment(
       project_id: projectId,
       attachment_id: attachmentId,
     })) as AttachmentResolution;
+  } catch (thrown) {
+    return asCommandError(thrown);
+  }
+}
+
+/**
+ * Record a free-text contribution submitted after project creation (DEC-030).
+ *
+ * `classification` is the advisory label produced for routing. It is not authorization and the service does not
+ * treat it as any: the owning service decides materiality, and only a material change to project truth
+ * increments `project_epoch`. There is no epoch argument, because the service reads the project's own epoch, so
+ * this side cannot record an effect it chose.
+ *
+ * The returned contribution is the stored row, and `result_type` is `PENDING` because nothing routes a
+ * contribution to an owning service yet. Rejections are returned rather than thrown, because a refused message
+ * is an expected outcome.
+ */
+export async function recordUserContribution(
+  projectId: string,
+  body: string,
+  classification: ContributionClassification,
+): Promise<UserContribution | CommandError> {
+  try {
+    return (await transport("record_user_contribution", {
+      project_id: projectId,
+      body,
+      classification,
+    })) as UserContribution;
   } catch (thrown) {
     return asCommandError(thrown);
   }

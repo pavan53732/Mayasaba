@@ -39,7 +39,8 @@
         "start_simulation",
         "stop_simulation",
         "create_trace_link",
-        "attach_project_context_attachment"
+        "attach_project_context_attachment",
+        "record_user_contribution"
       ]
     },
     "query": {

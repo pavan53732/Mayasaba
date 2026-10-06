@@ -277,6 +277,33 @@ for(const c of bridge.properties.command.enum) if(!payloadRegistry.commands?.[c]
 for(const q of bridge.properties.query.enum) if(!payloadRegistry.queries?.[q]) fail("No query payload metadata: "+q);
 for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e]) fail("No event payload metadata: "+e);
 
+// --- An operation's owner is declared twice, and until now nothing compared the two declarations.
+//
+// `workspace.manifest.json` is the authority the identifier checks above read, and `payloads.json` repeats the
+// same fact as `owner` on every operation. Each file was checked for internal consistency and neither was
+// checked against the other, so the two could name different services for one operation while every check
+// above still passed - the same shape of blindness DEC-053 and DEC-056 each describe, and the reason both of
+// those were found by measurement rather than by the gate.
+//
+// The sections are walked rather than the identifier enums, because an operation present in payloads.json and
+// absent from the enum is already reported above, and this check is about the two owners disagreeing rather
+// than about which operations exist.
+const ownershipSections=[
+  ["commands","Command",workspace.tauri_bridge.commands],
+  ["queries","Query",workspace.tauri_bridge.queries],
+  ["events","Event",workspace.tauri_bridge.events],
+];
+for(const [section,label,authority] of ownershipSections){
+  for(const [name,operation] of Object.entries(payloadRegistry[section] ?? {})){
+    const declared=operation?.owner;
+    // An operation with no declared owner is payloads.schema.json's business, not this check's.
+    if(declared===undefined) continue;
+    const authoritative=authority?.[name];
+    if(authoritative===undefined) continue;
+    if(declared!==authoritative) fail(`${label} ${name} is owned by "${authoritative}" in workspace.manifest.json but "${declared}" in schemas/tauri-bridge-v1/payloads.json`);
+  }
+}
+
 // --- The bridge gate is two-way (DEC-053).
 // Every bridge check above reads the contract and nothing else, so the gate could prove the contract was
 // self-consistent while being blind to both failures that actually existed: a handler registered under a name

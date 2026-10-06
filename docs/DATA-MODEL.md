@@ -120,7 +120,13 @@ Ownership (DEC-107): the entity, its project association and its lifecycle are o
 
 `UserContribution` durably records a free-text user message submitted after project creation, together with its advisory classification and its outcome. It is a record of what the user contributed, not an authority for project truth: the owning domain service remains authoritative for any resulting requirement, decision, epoch or context mutation. A contribution may reference its originating UI message/event identifiers.
 
+Ownership: `ProjectService` in `crates/core` owns the record and the `record_user_contribution` command that writes it. DEC-030 makes a material contribution increment `project_epoch`, and `ProjectService` already owns `projects`, `project_briefs` and the epoch, so the record is written by the service that owns the fact the record is about. The advisory classification stays where it already belonged — the intake router, as ConfigurationService policy — and `ProjectService` stores the label without acting on it. Rows are append-only: there is no update path and no delete path, so a later ruling is a later row rather than a rewrite of this one.
+
 The advisory classification is produced by the intake router (ConfigurationService policy), is stored on the `UserContribution` row, and is never read as authorization by the owning service. It exists only to route the contribution to the owning service and to label it in the timeline.
+
+Three vocabularies are closed by CHECK constraints in `schemas/sqlite-v1/schema.sql`, because they were free `TEXT NOT NULL` columns declared in no schema at all, so any string could be stored and nothing could state what the members were. `classification` is `MATERIAL`, `CONTEXT` or `COMMENTARY` — DEC-030's own three outcomes. `classification_source` is `INTAKE_ROUTER`. `result_type` is `EPOCH_ADVANCED`, `CONTEXT_SNAPSHOT`, `NO_CHANGE` or `PENDING`, where `PENDING` means the contribution is recorded and no owning service has ruled on it yet. `epoch_after` is never below `epoch_before`.
+
+What is not implemented is routing. `record_user_contribution` records the contribution with `result_type = PENDING` and an unchanged epoch pair, because no operation yet carries the text to the owning service that would decide materiality and produce a real outcome. The record therefore says exactly what happened — the user contributed this text and it was labelled for routing — and does not claim project truth changed.
 
 Traceability is directional: ProjectBrief → Requirement → requirement acceptance → Architecture. A requirement or decision derived from a brief retains the reference to the brief version it derives from.
 

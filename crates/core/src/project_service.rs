@@ -13,7 +13,10 @@
 
 use std::path::Path;
 
-use mayasaba_storage::{CreatedProject, NewProject, ProjectRecord, RecoveryReport, Storage};
+use mayasaba_storage::{
+    CreatedProject, NewProject, NewUserContribution, ProjectRecord, RecoveryReport, Storage,
+    UserContributionRecord,
+};
 use mayasaba_workspace::{validate_workspace_candidate, WorkspaceRejection, WorkspaceValidation};
 
 /// Validate a user-selected folder as a candidate workspace root, without persisting anything.
@@ -45,6 +48,10 @@ pub enum ProjectValidationError {
     BlankInitialBrief,
     /// Reserved for the domain judgement that intake owns, deliberately not taken here.
     IntentNotYetAssessed,
+    /// The advisory classification was not one of the declared members. A schema violation rather than a domain
+    /// rejection: the contract declares a closed enum, the wire type is a string, and this is where the closed
+    /// set is enforced on the command path.
+    UnknownClassification(String),
 }
 
 impl std::fmt::Display for ProjectValidationError {
@@ -60,6 +67,11 @@ impl std::fmt::Display for ProjectValidationError {
             ProjectValidationError::IntentNotYetAssessed => {
                 write!(f, "brief intake assessment is not implemented")
             }
+            ProjectValidationError::UnknownClassification(value) => write!(
+                f,
+                "classification {value:?} is not one of {}",
+                ContributionClassification::MEMBERS
+            ),
         }
     }
 }
@@ -69,6 +81,115 @@ impl std::error::Error for ProjectValidationError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreateProjectOutcome {
     Created { project: ProjectRecord },
+}
+
+/// The advisory classification a post-intake contribution was routed under, as a closed vocabulary.
+///
+/// The members are DEC-030's own three outcomes: a material change to project truth, a non-material context
+/// change, and commentary. The label is **advisory** - `DATA-MODEL.md` and `MEMORY-CONTEXT.md` both state that
+/// it is never read as authorization by the owning service - so this type exists to keep the stored value
+/// inside the declared set, not to grant anything. The owning service decides materiality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContributionClassification {
+    Material,
+    Context,
+    Commentary,
+}
+
+impl ContributionClassification {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Material => "MATERIAL",
+            Self::Context => "CONTEXT",
+            Self::Commentary => "COMMENTARY",
+        }
+    }
+
+    /// The declared member set, in one place, so the error message and the schema CHECK cannot drift apart.
+    pub const MEMBERS: &'static str = "MATERIAL, CONTEXT, COMMENTARY";
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "MATERIAL" => Some(Self::Material),
+            "CONTEXT" => Some(Self::Context),
+            "COMMENTARY" => Some(Self::Commentary),
+            _ => None,
+        }
+    }
+}
+
+/// What the owning service actually did about a contribution.
+///
+/// `Pending` is the honest value for a contribution that has been recorded but not yet ruled on. It is not a
+/// placeholder for a future truth: the Control Room displays this field rather than the advisory label
+/// (`CONTROL-ROOM.md`), so a recorded-but-undecided contribution must read as exactly that instead of
+/// appearing to have changed project truth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContributionResult {
+    EpochAdvanced,
+    ContextSnapshot,
+    NoChange,
+    Pending,
+}
+
+impl ContributionResult {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::EpochAdvanced => "EPOCH_ADVANCED",
+            Self::ContextSnapshot => "CONTEXT_SNAPSHOT",
+            Self::NoChange => "NO_CHANGE",
+            Self::Pending => "PENDING",
+        }
+    }
+}
+
+/// Request as declared by `record_user_contributionRequest` in
+/// `schemas/tauri-bridge-v1/payload-types.json`.
+///
+/// `classification` is a closed enum on the wire but arrives as a string, because serde cannot enforce an enum
+/// on a command argument; the service is where the closed set is enforced. There is no `epoch` field: the
+/// service reads the project's own epoch, so a caller cannot record an epoch effect it chose (the same reason
+/// the attachment command takes no `authorized_scope`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordContributionRequest {
+    pub project_id: String,
+    pub body: String,
+    pub classification: String,
+}
+
+/// The authoritative state that exists after a contribution was recorded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserContributionOutcome {
+    pub contribution_id: String,
+    pub project_id: String,
+    pub body: String,
+    pub classification: String,
+    pub classification_confidence: Option<f64>,
+    pub classification_source: String,
+    pub result_type: String,
+    pub result_reference: Option<String>,
+    pub epoch_before: i64,
+    pub epoch_after: i64,
+    pub created_at: String,
+}
+
+impl From<UserContributionRecord> for UserContributionOutcome {
+    /// One conversion, so a recorded contribution and a later read of it cannot drift apart in shape.
+    fn from(record: UserContributionRecord) -> Self {
+        UserContributionOutcome {
+            contribution_id: record.contribution_id,
+            project_id: record.project_id,
+            body: record.body,
+            classification: record.classification,
+            classification_confidence: record.classification_confidence,
+            classification_source: record.classification_source,
+            result_type: record.result_type,
+            result_reference: record.result_reference,
+            epoch_before: record.epoch_before,
+            epoch_after: record.epoch_after,
+            created_at: record.created_at,
+        }
+    }
 }
 
 /// Owns its store rather than borrowing one. Borrowing `&mut Storage` for the service's lifetime made the
@@ -163,6 +284,67 @@ impl ProjectService {
     /// Authoritative list of every project, newest first.
     pub fn list_projects(&self) -> Result<Vec<ProjectRecord>, CreateProjectError> {
         Ok(self.storage.list_projects()?)
+    }
+
+    /// Record a free-text contribution submitted after project creation (DEC-030).
+    ///
+    /// The classification is validated against the declared set and then stored as the advisory label it is.
+    /// The result is `PENDING` and `epoch_after` equals `epoch_before`, because this operation does not route
+    /// the contribution to the owning service that would decide materiality. `DATA-MODEL.md` and DEC-030 both
+    /// place that judgement with the owning service, so a record asserting an epoch change here would be the
+    /// second source of truth DEC-030 exists to prevent. What is recorded is exactly what happened: the user
+    /// contributed this text, it was labelled for routing, and nothing has ruled on it yet.
+    ///
+    /// The epoch is read and the row is written under the caller's `&mut self`, and the shell holds this service
+    /// behind a mutex, so the recorded pair describes one observation rather than two reads that could disagree.
+    pub fn record_contribution(
+        &mut self,
+        req: &RecordContributionRequest,
+    ) -> Result<UserContributionOutcome, CreateProjectError> {
+        if req.project_id.trim().is_empty() {
+            return Err(ProjectValidationError::EmptyField("project_id").into());
+        }
+        if req.body.trim().is_empty() {
+            return Err(ProjectValidationError::EmptyField("body").into());
+        }
+        let classification =
+            ContributionClassification::parse(&req.classification).ok_or_else(|| {
+                ProjectValidationError::UnknownClassification(req.classification.clone())
+            })?;
+
+        // Read the project before writing anything, so an unknown project is refused without leaving a row
+        // behind and the recorded epoch is the project's own rather than a caller's claim.
+        let project = self.storage.get_project(&req.project_id)?;
+
+        let new = NewUserContribution {
+            contribution_id: format!(
+                "con_{}",
+                Self::digest(&format!("contribution:{}", next_nonce()))
+            ),
+            project_id: req.project_id.clone(),
+            // The stored body is the trimmed text, so the stored contribution is the one that was validated.
+            body: req.body.trim().to_string(),
+            classification: classification.as_str().to_string(),
+            // Null because no router produced a confidence. A number here would be invented.
+            classification_confidence: None,
+            classification_source: "INTAKE_ROUTER".to_string(),
+            result_type: ContributionResult::Pending.as_str().to_string(),
+            result_reference: None,
+            epoch_before: project.current_epoch,
+            epoch_after: project.current_epoch,
+            context_snapshot_before: None,
+            context_snapshot_after: None,
+            created_at: (self.now)(),
+        };
+
+        self.storage.insert_user_contribution(&new)?;
+
+        // Read back rather than returning what was submitted, so the caller renders what was committed - the
+        // same rule the attachment operations follow.
+        Ok(self
+            .storage
+            .get_user_contribution(&new.contribution_id)?
+            .into())
     }
 
     /// The structural half of the contract. A request that fails here never reaches persistence.

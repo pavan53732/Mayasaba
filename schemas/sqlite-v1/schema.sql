@@ -743,17 +743,30 @@ CREATE TABLE IF NOT EXISTS user_answers (
 -- returned. The classification is advisory; result_type is what the service actually did, and the Control
 -- Room displays the outcome rather than the label. A contribution never substitutes for the authoritative
 -- object it produced.
+--
+-- The vocabularies are closed here rather than left as free text. `classification`, `classification_source`
+-- and `result_type` were TEXT NOT NULL with no CHECK and were declared in no schema at all, so any string
+-- could be stored and nothing could state what the members were. The members come from DEC-030's own wording -
+-- a material change increments the epoch, a non-material context change produces a snapshot at the current
+-- epoch, and commentary changes nothing - plus PENDING, for a contribution that is recorded before any owning
+-- service has ruled on it. `epoch_after >= epoch_before` because a contribution records an epoch effect and
+-- no contribution may move the epoch backwards.
+--
+-- A CHECK reaches only a database created after it, because `open()` re-executes this batch and
+-- `CREATE TABLE IF NOT EXISTS` is a no-op on a table that already exists. That is safe here and only here: no
+-- command has ever written this table, so every existing database holds zero rows and there is nothing a
+-- migration would have to reconcile.
 CREATE TABLE IF NOT EXISTS user_contributions (
   contribution_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
   body TEXT NOT NULL,
-  classification TEXT NOT NULL,
+  classification TEXT NOT NULL CHECK(classification IN ('MATERIAL','CONTEXT','COMMENTARY')),
   classification_confidence REAL,
-  classification_source TEXT NOT NULL,
-  result_type TEXT NOT NULL,
+  classification_source TEXT NOT NULL CHECK(classification_source IN ('INTAKE_ROUTER')),
+  result_type TEXT NOT NULL CHECK(result_type IN ('EPOCH_ADVANCED','CONTEXT_SNAPSHOT','NO_CHANGE','PENDING')),
   result_reference TEXT,
   epoch_before INTEGER NOT NULL,
-  epoch_after INTEGER NOT NULL,
+  epoch_after INTEGER NOT NULL CHECK(epoch_after >= epoch_before),
   context_snapshot_before TEXT,
   context_snapshot_after TEXT,
   created_at TEXT NOT NULL,

@@ -309,6 +309,26 @@
         "checks":{"type":"array","items":{"$ref":"#/types/AttachmentCheckView"}}
       }
     },
+    "UserContributionView":{
+      "title":"One recorded free-text contribution and what the owning service did about it",
+      "description":"The stored row, read back rather than echoed. `classification` is the advisory label produced for routing and `result_type` is what the owning service actually did; the Control Room displays the outcome rather than the label, so a contribution the service found immaterial is never shown as having changed project truth. A contribution never substitutes for the authoritative object it produced.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["contribution_id","project_id","body","classification","classification_source","result_type","epoch_before","epoch_after","created_at"],
+      "properties":{
+        "contribution_id":{"type":"string","minLength":1},
+        "project_id":{"type":"string","minLength":1},
+        "body":{"type":"string","minLength":1},
+        "classification":{"enum":["MATERIAL","CONTEXT","COMMENTARY"],"description":"Advisory. Never read as authorization by the owning service."},
+        "classification_confidence":{"type":["number","null"],"description":"Null until a router produces a confidence. A number here would be invented."},
+        "classification_source":{"enum":["INTAKE_ROUTER"],"description":"Which producer labelled the contribution. The intake router is the declared producer of the advisory classification."},
+        "result_type":{"enum":["EPOCH_ADVANCED","CONTEXT_SNAPSHOT","NO_CHANGE","PENDING"],"description":"What the owning service did. PENDING means recorded with nothing having ruled on it yet, which is not a claim that project truth changed."},
+        "result_reference":{"type":["string","null"],"description":"The authoritative object the outcome produced, when there is one. Null on PENDING and NO_CHANGE."},
+        "epoch_before":{"type":"integer","description":"The project epoch the owning service read. Read by the service, never supplied by the caller."},
+        "epoch_after":{"type":"integer","minimum":0,"description":"The project epoch the service left behind. Equal to epoch_before unless a material change advanced it (DEC-030)."},
+        "created_at":{"type":"string","minLength":1}
+      }
+    },
     "attach_project_context_attachmentRequest":{
       "title":"Record a local file or folder as supporting context for a project",
       "description":"Attaching records a reference and its provenance and nothing else: no read, copy, hash or index (DEC-106). There is no authorized_scope field, because the scope is read from the project's own stored workspace root by the service; a caller-supplied scope would let a caller choose the boundary its own path is checked against (DEC-048).",
@@ -357,6 +377,23 @@
       "title":"The attachment and its current resolvability",
       "description":"The same shape attach and list return, so one attachment has one description across all three operations.",
       "$ref":"#/types/AttachmentResolutionView"
+    },
+    "record_user_contributionRequest":{
+      "title":"Record a free-text contribution submitted after project creation",
+      "description":"DEC-030 requires a command for classified free-text input and records that the classification is advisory: only the owning authoritative service determines materiality, and only a material change to project truth increments project_epoch. There is deliberately no epoch field, so a caller cannot record an epoch effect it chose; the service reads the project's own epoch.",
+      "type":"object",
+      "additionalProperties":false,
+      "required":["project_id","body","classification"],
+      "properties":{
+        "project_id":{"type":"string","minLength":1},
+        "body":{"type":"string","minLength":1,"pattern":"\\S","description":"The user's free text. Whitespace only is refused before anything is persisted."},
+        "classification":{"enum":["MATERIAL","CONTEXT","COMMENTARY"],"description":"The advisory label produced for routing. Never read as authorization by the owning service."}
+      }
+    },
+    "record_user_contributionResponse":{
+      "title":"The authoritative state that exists after the contribution was recorded",
+      "description":"The stored row read back from the database, so a caller renders what was committed rather than the draft it submitted.",
+      "$ref":"#/types/UserContributionView"
     }
   },
   "$defs":{

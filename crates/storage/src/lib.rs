@@ -234,6 +234,51 @@ pub struct Storage {
     conn: Connection,
 }
 
+/// A `user_contributions` row to insert: what the user said, the advisory classification it was routed under,
+/// and the outcome the owning service produced.
+///
+/// The caller supplies both epochs rather than this layer re-deriving them. `epoch_before` is the epoch the
+/// owning service read while it held the service lock, and `epoch_after` is what it left behind, so the stored
+/// pair is the effect the service actually observed. Re-deriving them here would record an effect computed
+/// against a second read.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewUserContribution {
+    pub contribution_id: String,
+    pub project_id: String,
+    pub body: String,
+    pub classification: String,
+    pub classification_confidence: Option<f64>,
+    pub classification_source: String,
+    pub result_type: String,
+    pub result_reference: Option<String>,
+    pub epoch_before: i64,
+    pub epoch_after: i64,
+    pub context_snapshot_before: Option<String>,
+    pub context_snapshot_after: Option<String>,
+    pub created_at: String,
+}
+
+/// Authoritative readback of one recorded contribution.
+///
+/// This is what the Control Room displays, and it deliberately carries the service's `result_type` beside the
+/// advisory `classification`: `CONTROL-ROOM.md` requires the outcome the owning service produced to be shown
+/// rather than the advisory label, so that a contribution the service found immaterial is never displayed as
+/// having changed project truth.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserContributionRecord {
+    pub contribution_id: String,
+    pub project_id: String,
+    pub body: String,
+    pub classification: String,
+    pub classification_confidence: Option<f64>,
+    pub classification_source: String,
+    pub result_type: String,
+    pub result_reference: Option<String>,
+    pub epoch_before: i64,
+    pub epoch_after: i64,
+    pub created_at: String,
+}
+
 /// An `events` row to append, with its chain link computed here rather than supplied.
 ///
 /// `prev_hash`, `event_hash` and `sequence` are deliberately absent: they are derived, not authored. A caller
@@ -2396,6 +2441,110 @@ impl Storage {
             phase: "DISCOVERY".to_string(),
             status: "ACTIVE".to_string(),
         })
+    }
+
+    /// Record one free-text user contribution.
+    ///
+    /// There is no update path and no delete path. DEC-106's rule for attachments - a row is never deleted and
+    /// provenance is never mutated - is the same rule here: a contribution records what the user said and what
+    /// the owning service did about it at that moment, and a later ruling is a later row rather than a rewrite
+    /// of this one.
+    ///
+    /// The three vocabularies are closed by CHECK constraints in `schemas/sqlite-v1/schema.sql`, so an
+    /// unregistered classification or result cannot reach the table even from a caller that bypasses the
+    /// service. The message a violation produces is a database error rather than a domain rejection, which is
+    /// why the service validates first and this is the second line rather than the first.
+    pub fn insert_user_contribution(&mut self, new: &NewUserContribution) -> Result<()> {
+        self.conn
+            .execute(
+                "INSERT INTO user_contributions (
+                     contribution_id, project_id, body, classification, classification_confidence,
+                     classification_source, result_type, result_reference, epoch_before, epoch_after,
+                     context_snapshot_before, context_snapshot_after, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                rusqlite::params![
+                    new.contribution_id,
+                    new.project_id,
+                    new.body,
+                    new.classification,
+                    new.classification_confidence,
+                    new.classification_source,
+                    new.result_type,
+                    new.result_reference,
+                    new.epoch_before,
+                    new.epoch_after,
+                    new.context_snapshot_before,
+                    new.context_snapshot_after,
+                    new.created_at,
+                ],
+            )
+            .map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// Authoritative readback of one contribution.
+    pub fn get_user_contribution(&self, contribution_id: &str) -> Result<UserContributionRecord> {
+        self.conn
+            .query_row(
+                "SELECT contribution_id, project_id, body, classification, classification_confidence,
+                        classification_source, result_type, result_reference, epoch_before, epoch_after, created_at
+                 FROM user_contributions WHERE contribution_id = ?1",
+                [contribution_id],
+                |row| {
+                    Ok(UserContributionRecord {
+                        contribution_id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        body: row.get(2)?,
+                        classification: row.get(3)?,
+                        classification_confidence: row.get(4)?,
+                        classification_source: row.get(5)?,
+                        result_type: row.get(6)?,
+                        result_reference: row.get(7)?,
+                        epoch_before: row.get(8)?,
+                        epoch_after: row.get(9)?,
+                        created_at: row.get(10)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(StorageError::Db)?
+            .ok_or_else(|| StorageError::NotFound(format!("user contribution {contribution_id}")))
+    }
+
+    /// One project's contributions, oldest first.
+    ///
+    /// Ordered by `created_at` and then by `rowid`, because the timestamp has one-second resolution and two
+    /// contributions submitted in the same second would otherwise come back in an unspecified order - the same
+    /// reason the attachment list breaks its tie on insertion order rather than leaving it to the planner.
+    pub fn list_user_contributions(&self, project_id: &str) -> Result<Vec<UserContributionRecord>> {
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT contribution_id, project_id, body, classification, classification_confidence,
+                        classification_source, result_type, result_reference, epoch_before, epoch_after, created_at
+                 FROM user_contributions WHERE project_id = ?1
+                 ORDER BY created_at ASC, rowid ASC",
+            )
+            .map_err(StorageError::Db)?;
+        let rows = statement
+            .query_map([project_id], |row| {
+                Ok(UserContributionRecord {
+                    contribution_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    body: row.get(2)?,
+                    classification: row.get(3)?,
+                    classification_confidence: row.get(4)?,
+                    classification_source: row.get(5)?,
+                    result_type: row.get(6)?,
+                    result_reference: row.get(7)?,
+                    epoch_before: row.get(8)?,
+                    epoch_after: row.get(9)?,
+                    created_at: row.get(10)?,
+                })
+            })
+            .map_err(StorageError::Db)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::Db)
     }
 
     /// Append one event to its chain, in its own transaction.

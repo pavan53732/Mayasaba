@@ -77,6 +77,8 @@ const PAYLOAD_TYPES = "schemas/tauri-bridge-v1/payload-types.json";
 const TRACEABILITY = "docs/TRACEABILITY.md";
 const DECISION_REGISTER = "docs/DECISION-REGISTER.md";
 const DATA_MODEL = "docs/DATA-MODEL.md";
+const MANIFEST = "workspace.manifest.json";
+const PAYLOADS = "schemas/tauri-bridge-v1/payloads.json";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -753,6 +755,56 @@ const MUTATIONS = [
         find: "An attachment is context and evidence, never project truth (DEC-049).",
         replace:
           "An attachment is context and evidence, never project truth (DEC-049). DEC-999 and `docs/NOT-A-REAL-FILE.md` are named in prose here, and prose is not a table.",
+      },
+    ],
+    expect: [],
+  },
+  // The owner of an operation is declared twice: in `workspace.manifest.json`, which the bridge identifier
+  // checks read and `payloads.schema.json` names as the resolver, and in `payloads.json`, which
+  // `tools/codegen/generate-bridge.mjs` reads to emit the owner map the frontend routes calls by. Nothing
+  // compared the two until this check existed, and they had already drifted: `create_trace_link` was
+  // DiagnosticsService in one file and RequirementService in the other, so the generated UI map named a
+  // different authority than the contract did. These three prove the comparison fires on a missing owner and on
+  // a disagreeing one, and that it reads the owner field rather than whatever prose happens to sit beside it.
+  {
+    id: "contrib-a",
+    what: "workspace.manifest.json: a declared command with no owner",
+    check: GATE,
+    edits: [
+      {
+        file: MANIFEST,
+        find: '      "attach_project_context_attachment": "AttachmentService",\n      "record_user_contribution": "ProjectService"\n    },',
+        replace: '      "attach_project_context_attachment": "AttachmentService"\n    },',
+      },
+    ],
+    expect: ["No command owner: record_user_contribution"],
+  },
+  {
+    id: "contrib-b",
+    what: "payloads.json: an operation owner that disagrees with workspace.manifest.json",
+    check: GATE,
+    edits: [
+      {
+        file: PAYLOADS,
+        find: '    "record_user_contribution": {\n      "owner": "ProjectService",',
+        replace: '    "record_user_contribution": {\n      "owner": "AttachmentService",',
+      },
+    ],
+    expect: [
+      'is owned by "ProjectService" in workspace.manifest.json but "AttachmentService"',
+    ],
+  },
+  {
+    id: "control-contrib-prose",
+    what: "payloads.json: naming a service in an operation's prose is not an ownership declaration",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: PAYLOADS,
+        find: '"atomicity": "one durable write: the contribution row is inserted and read back.',
+        replace:
+          '"atomicity": "AttachmentService is named here in prose, and the owner field is what the check reads. one durable write: the contribution row is inserted and read back.',
       },
     ],
     expect: [],

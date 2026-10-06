@@ -23,7 +23,8 @@ use mayasaba_core::attachment_service::{
 use mayasaba_core::bus_runtime::{CoreClock, CoreIdSource};
 use mayasaba_core::diagnostics::DiagnosticsService;
 use mayasaba_core::project_service::{
-    CreateProjectRequest, ProjectService, ProjectValidationError,
+    CreateProjectError, CreateProjectRequest, ProjectService, ProjectValidationError,
+    RecordContributionRequest,
 };
 use mayasaba_core::recovery_service::{RecoveryService, ReplayRefusal};
 use mayasaba_storage::StorageError;
@@ -90,6 +91,9 @@ impl From<ProjectValidationError> for CommandError {
             ProjectValidationError::EmptyField(_) => "EMPTY_FIELD",
             ProjectValidationError::BlankInitialBrief => "BLANK_INITIAL_BRIEF",
             ProjectValidationError::IntentNotYetAssessed => "INTAKE_NOT_IMPLEMENTED",
+            // The contract declares `classification` as a closed enum and the wire type is a string, so an
+            // undeclared member is a schema violation rather than a domain rejection.
+            ProjectValidationError::UnknownClassification(_) => "SCHEMA_INVALID",
         };
         CommandError {
             code,
@@ -548,6 +552,42 @@ impl From<AttachmentResolution> for AttachmentResolutionView {
     }
 }
 
+/// The wire shape of one recorded contribution, as declared by `UserContributionView` in
+/// `schemas/tauri-bridge-v1/payload-types.json`.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct UserContributionView {
+    contribution_id: String,
+    project_id: String,
+    body: String,
+    classification: String,
+    classification_confidence: Option<f64>,
+    classification_source: String,
+    result_type: String,
+    result_reference: Option<String>,
+    epoch_before: i64,
+    epoch_after: i64,
+    created_at: String,
+}
+
+impl From<mayasaba_core::project_service::UserContributionOutcome> for UserContributionView {
+    fn from(outcome: mayasaba_core::project_service::UserContributionOutcome) -> Self {
+        UserContributionView {
+            contribution_id: outcome.contribution_id,
+            project_id: outcome.project_id,
+            body: outcome.body,
+            classification: outcome.classification,
+            classification_confidence: outcome.classification_confidence,
+            classification_source: outcome.classification_source,
+            result_type: outcome.result_type,
+            result_reference: outcome.result_reference,
+            epoch_before: outcome.epoch_before,
+            epoch_after: outcome.epoch_after,
+            created_at: outcome.created_at,
+        }
+    }
+}
+
 /// Map an attachment rejection onto the registry code that names it.
 ///
 /// The workspace arm delegates to `AttachmentRejection::code()` rather than re-listing its codes, so the
@@ -655,6 +695,62 @@ fn resolve_project_context_attachment(
     Ok(resolution.into())
 }
 
+/// Record a free-text contribution submitted after project creation (DEC-030).
+///
+/// The classification is a closed enum on the wire but arrives as a string, because serde cannot enforce an
+/// enum on a command argument; the service enforces the declared set and refuses anything outside it. There is
+/// no epoch argument: the service reads the project's own epoch, so a caller cannot record an epoch effect it
+/// chose - the same reason the attachment command takes no `authorized_scope` (DEC-048).
+///
+/// This records the contribution and nothing else. It does not route the text to the owning service that would
+/// decide materiality, so the stored `result_type` is `PENDING` and the epoch pair is equal. A command that
+/// asserted an epoch change here would be the second source of truth DEC-030 exists to prevent.
+#[tauri::command(rename_all = "snake_case")]
+fn record_user_contribution(
+    service: State<'_, Mutex<ProjectService>>,
+    project_id: String,
+    body: String,
+    classification: String,
+) -> Result<UserContributionView, CommandError> {
+    let mut service = service.lock().map_err(|_| CommandError {
+        code: "SERVICE_POISONED",
+        message: "ProjectService lock was poisoned by a prior panic".to_string(),
+    })?;
+
+    let outcome = service
+        .record_contribution(&RecordContributionRequest {
+            project_id,
+            body,
+            classification,
+        })
+        .map_err(|error| {
+            let message = error.to_string();
+            match error {
+                // Delegated rather than re-listed. A second copy of this mapping here is the second source of
+                // truth DEC-055 exists to prevent, and the two copies were already free to disagree about the
+                // same condition the moment the validation enum gained a variant.
+                CreateProjectError::Validation(validation) => CommandError::from(validation),
+                CreateProjectError::Workspace(rejection) => CommandError {
+                    code: rejection.code(),
+                    message,
+                },
+                // `record_contribution` reads the project before it writes, so the only `NotFound` reachable
+                // here is the project the caller named. It reuses the code the attachment command already uses
+                // for that condition rather than minting a second name for it (DEC-055).
+                CreateProjectError::Storage(StorageError::NotFound(_)) => CommandError {
+                    code: "PROJECT_MISMATCH",
+                    message,
+                },
+                CreateProjectError::Storage(_) => CommandError {
+                    code: "STORAGE_FAILURE",
+                    message,
+                },
+            }
+        })?;
+
+    Ok(outcome.into())
+}
+
 fn main() {
     // The service owns its store and is registered as managed state. It is created eagerly so a failure to
     // open the durable store surfaces at startup rather than on the first command.
@@ -703,7 +799,8 @@ fn main() {
             get_event_cursor,
             attach_project_context_attachment,
             list_project_context_attachments,
-            resolve_project_context_attachment
+            resolve_project_context_attachment,
+            record_user_contribution
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mayasaba");
@@ -745,6 +842,7 @@ mod wire_shape_tests {
         "attach_project_context_attachment",
         "list_project_context_attachments",
         "resolve_project_context_attachment",
+        "record_user_contribution",
     ];
 
     /// The JSON Schema keywords this validator implements. A validated type that uses anything else is a test
@@ -1220,6 +1318,29 @@ mod wire_shape_tests {
             "resolve_project_context_attachmentResponse",
             &unresolved_attachment(),
         );
+    }
+
+    /// One recorded contribution in the shape the service returns it: labelled for routing, with nothing having
+    /// ruled on it, and an epoch pair that is equal because no material change was recorded.
+    fn recorded_contribution() -> UserContributionView {
+        UserContributionView {
+            contribution_id: "con_0000000000000001".to_string(),
+            project_id: "prj_0000000000000002".to_string(),
+            body: "Please also cover the export path.".to_string(),
+            classification: "COMMENTARY".to_string(),
+            classification_confidence: None,
+            classification_source: "INTAKE_ROUTER".to_string(),
+            result_type: "PENDING".to_string(),
+            result_reference: None,
+            epoch_before: 0,
+            epoch_after: 0,
+            created_at: "1700000000".to_string(),
+        }
+    }
+
+    #[test]
+    fn record_user_contribution_response_conforms() {
+        conforms("record_user_contributionResponse", &recorded_contribution());
     }
 
     /// A handler registered in `generate_handler![...]` with no shape test is a wire surface nothing checks.

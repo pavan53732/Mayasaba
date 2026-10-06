@@ -197,7 +197,7 @@
       "cancellable": true
     },
     "create_trace_link": {
-      "owner": "DiagnosticsService",
+      "owner": "RequirementService",
       "request": "create_trace_linkRequest",
       "response": "create_trace_linkResponse",
       "cancellable": false
@@ -212,6 +212,18 @@
         {"name":"project_id","type":"string","required":true,"description":"The project the reference belongs to. An attachment is project-scoped, so it is never addressed by attachment id alone."},
         {"name":"source_path","type":"string","required":true,"description":"The local file or folder the user selected. Locality, existence, kind and containment in the project's authorized workspace are validated before anything is persisted; the canonical form is what is stored, and it is never rewritten."},
         {"name":"provenance","type":"string","required":true,"description":"Which composer offered the reference: INITIAL_INTAKE_COMPOSER or CHAT_COMPOSER. Recorded once and never mutated."}
+      ]
+    },
+    "record_user_contribution": {
+      "owner": "ProjectService",
+      "request": "record_user_contributionRequest",
+      "response": "record_user_contributionResponse",
+      "cancellable": false,
+      "atomicity": "one durable write: the contribution row is inserted and read back. The service reads the project and its epoch first, so an unknown project is refused before anything is written and the recorded epoch pair is the project's own rather than a caller's claim.",
+      "request_fields": [
+        {"name":"project_id","type":"string","required":true,"description":"The project the contribution belongs to. The contribution is recorded against this project's own epoch, which the service reads rather than accepting from the caller."},
+        {"name":"body","type":"string","required":true,"description":"The free text the user submitted after project creation. Stored trimmed; text that is whitespace only is refused before anything is written."},
+        {"name":"classification","type":"string","required":true,"description":"The advisory label the intake router produced: MATERIAL, CONTEXT or COMMENTARY. Advisory only - the owning service determines materiality and this value is never read as authorization. There is deliberately no epoch field, because a caller that supplied the epoch could record an effect it chose."}
       ]
     }
   },

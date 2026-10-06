@@ -16,6 +16,7 @@ import {
   initialChatState,
   isSending,
   type ChatState,
+  type UserContribution,
 } from "./state.ts";
 
 function editing(text: string, tray: AttachmentTray = emptyTray("CHAT_COMPOSER")): ChatState {
@@ -102,7 +103,8 @@ describe("a normal message needs no attachment", () => {
 describe("attachment is not a substitute prerequisite either", () => {
   test("attachments alone do not make an empty message sendable", () => {
     // The converse of the rule. If a tray could enable sending, the composer would be accepting a message that
-    // carries no user text, which is not a UserContribution.
+    // carries no user text, which is not a contribution the service would record: `body` is required and text
+    // that is whitespace only is refused before anything is written.
     for (const tray of [unresolvedTray(), refusedTray()]) {
       assert.equal(canSendMessage(editing("", tray)), false);
       assert.equal(canSendMessage(editing("   ", tray)), false);
@@ -177,5 +179,82 @@ describe("both surfaces share one attachment reducer", () => {
     // Editing text does not disturb the tray, and a tray action does not disturb the text.
     assert.equal(chatReducer(attached, { type: "edit", text: "hi" }).text, "hi");
     assert.equal(chatTray(chatReducer(attached, { type: "edit", text: "hi" })).entries.length, 1);
+  });
+});
+
+describe("a recorded contribution is the row the service stored", () => {
+  /** The stored row, in the shape `record_user_contributionResponse` declares. */
+  const stored: UserContribution = {
+    contribution_id: "con_0000000000000001",
+    project_id: "prj_1",
+    body: "please also cover the export path",
+    classification: "COMMENTARY",
+    classification_confidence: null,
+    classification_source: "INTAKE_ROUTER",
+    result_type: "PENDING",
+    result_reference: null,
+    epoch_before: 0,
+    epoch_after: 0,
+    created_at: "1700000000",
+  };
+
+  /** Narrow a state to its contribution, so the assertions below read as the property rather than as a cast. */
+  function recordedOf(state: ChatState): UserContribution {
+    assert.equal(state.kind, "recorded");
+    if (state.kind !== "recorded") throw new Error("the state was not recorded");
+    return state.contribution;
+  }
+
+  test("recording clears the draft so one intent cannot be recorded twice", () => {
+    const sending = chatReducer(editing("please also cover the export path"), { type: "submit" });
+    const recorded = chatReducer(sending, { type: "recorded", contribution: stored });
+    assert.equal(recorded.kind, "recorded");
+    assert.equal(recorded.text, "");
+    // An empty draft is not sendable, so the same intent cannot be submitted again from this state.
+    assert.equal(canSendMessage(recorded), false);
+  });
+
+  test("the composer renders the stored row, not the draft it submitted", () => {
+    // If the reducer kept the submitted text, the composer would be displaying a message the database never
+    // received. The row is what the service returned.
+    const sending = chatReducer(editing("a draft that differs from the stored body"), { type: "submit" });
+    const contribution = recordedOf(chatReducer(sending, { type: "recorded", contribution: stored }));
+    assert.equal(contribution.body, stored.body);
+    assert.equal(contribution.contribution_id, stored.contribution_id);
+  });
+
+  test("an unrouted contribution records no epoch change", () => {
+    // The record must not imply project truth changed. Nothing routes a contribution to an owning service yet,
+    // so the outcome is PENDING and the epoch pair is equal (DEC-030).
+    const contribution = recordedOf(
+      chatReducer(chatReducer(editing("hello"), { type: "submit" }), {
+        type: "recorded",
+        contribution: stored,
+      }),
+    );
+    assert.equal(contribution.result_type, "PENDING");
+    assert.equal(contribution.result_reference, null);
+    assert.equal(contribution.epoch_after, contribution.epoch_before);
+  });
+
+  test("the tray survives recording, and editing returns to composing", () => {
+    const before = editing("hello", unresolvedTray());
+    const recorded = chatReducer(chatReducer(before, { type: "submit" }), {
+      type: "recorded",
+      contribution: stored,
+    });
+    assert.equal(chatTray(recorded).entries.length, 1);
+
+    const next = chatReducer(recorded, { type: "edit", text: "and another thing" });
+    assert.equal(next.kind, "editing");
+    assert.equal(next.text, "and another thing");
+    assert.equal(chatTray(next).entries.length, 1);
+  });
+
+  test("a submit carrying no text is refused by the reducer, not only by the predicate", () => {
+    // The predicate and the reducer must agree. A caller that dispatches submit directly must not be able to
+    // produce a contribution carrying no user text.
+    const blank = editing("   ");
+    assert.equal(chatReducer(blank, { type: "submit" }), blank);
   });
 });

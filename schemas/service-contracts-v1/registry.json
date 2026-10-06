@@ -9,7 +9,7 @@
     "ownership":"Each operation has exactly one owner service."
   },
   "services":{
-    "ProjectService":["create_project","open_project","get_project","list_projects"],
+    "ProjectService":["create_project","open_project","get_project","list_projects","record_user_contribution"],
     "LifecycleService":["pause_project","resume_project","stop_project","abandon_project","get_project_status"],
     "AgentService":["launch_agent","stop_agent","pause_agent","resume_agent","get_agent_status"],
     "CouncilService":["answer_user_question","get_council_round","open_round","submit_round_result","close_round"],

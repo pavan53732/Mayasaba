@@ -132,14 +132,26 @@ the rows at the end are what does not exist, recorded rather than implied.
 | Consume: an owning service accepts a material change caused by the contents | DEC-106 | — | NOT_ADDRESSED |
 | An attachment cannot be cited as evidence before it is captured | DEC-102 | — | NOT_ADDRESSED |
 | Detaching an association without deleting the row | DEC-106 | — | NOT_ADDRESSED |
-| A chat message is recorded as a classified user contribution | DEC-030 | — | NOT_ADDRESSED |
+| A chat message is recorded as a classified user contribution | DEC-030 | `crates/core/tests/user_contribution.rs` records one end to end and reads the row back through `crates/storage/src/lib.rs`; `apps/desktop/src/chat/state.test.ts` covers the composer's `recorded` state | VALIDATED |
 | Whether two attachments may reference one `source_path` in one project | DEC-106 | — | DECIDED |
+| `ProjectService` owns the record and the command that writes it | DEC-030 | `workspace.manifest.json` and `schemas/service-contracts-v1/registry.json` declare the owner, `schemas/tauri-bridge-v1/payloads.json` declares the operation, and `tools/contracts/verify.mjs` fails when the three disagree | VALIDATED |
+| The advisory classification is stored but never acted on: recording a `MATERIAL` label does not advance the epoch | DEC-030 | `crates/core/tests/user_contribution.rs`; `a_material_label_is_advisory_and_does_not_advance_the_epoch` records a `MATERIAL` label and asserts the project's `current_epoch` is unchanged | VALIDATED |
+| The `classification`, `classification_source` and `result_type` vocabularies are closed | DEC-030 | `schemas/sqlite-v1/schema.sql` CHECK constraints; `crates/core/src/project_service.rs` refuses an undeclared label before anything is written | VALIDATED |
+| A refusal writes no row, and the stored body is the trimmed text that was validated | DEC-030 | `crates/core/tests/user_contribution.rs`; the unknown-project, undeclared-classification and whitespace-only cases each assert the project holds no contribution | VALIDATED |
+| Routing a contribution to the owning service that would decide materiality | DEC-030 | — | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
-`content_hash` and `context_evidence_id` are nullable and empty in every stored row. The last row is open by
-decision rather than by omission: DEC-106 leaves the question unanswered, and nothing in the schema enforces an
-answer in either direction.
+`content_hash` and `context_evidence_id` are nullable and empty in every stored row. The `source_path` row is
+open by decision rather than by omission: DEC-106 leaves the question unanswered, and nothing in the schema
+enforces an answer in either direction.
+
+The `UserContribution` rows are `VALIDATED` for the Rust path and for the composer's reducer. Recording is wired
+through `apps/desktop/src/App.tsx` the same way the tray is, which is why that surface is `IMPLEMENTED` and not
+`VALIDATED` for the same reason as the rows above. What is **not** addressed is routing: `record_user_contribution`
+stores `result_type = PENDING` with an unchanged epoch pair, because no operation carries the text to the owning
+service that would decide materiality. The record therefore claims no epoch effect, which is why recording a
+`MATERIAL` label is asserted to leave `current_epoch` alone.
 
 ## Persistence implementation
 
@@ -151,6 +163,17 @@ Canonical tables:
 - `trace_coverage` — materialized coverage facts derived from authoritative links and validation/certification state.
 
 A trace link is validated by `schemas/trace-v1/trace-link.schema.json`; its `link_type` is the closed vocabulary of the canonical chain above.
+
+The `create_trace_link` operation's owner is declared twice: in `workspace.manifest.json` and in
+`schemas/tauri-bridge-v1/payloads.json`. `payloads.schema.json` states that the gate resolves an operation's
+`owner` against the manifest, and `tools/codegen/generate-bridge.mjs` reads it from `payloads.json` to emit the
+map the frontend routes calls by. Nothing compared the two until the ownership cross-check was added to
+`tools/contracts/verify.mjs`, and they had drifted: `payloads.json` named `DiagnosticsService` while the manifest
+named `RequirementService`, so the generated UI map named a different authority than the contract did. The copy
+was corrected to the manifest, because the contract declares the manifest authoritative. **No canonical document
+names the service that owns trace links**, and `schemas/service-contracts-v1/registry.json` lists
+`create_trace_link` under no service at all, so the agreed value follows from which file is authoritative rather
+than from a decision. It is recorded as an open ownership question, not presented as settled.
 
 Canonical link types:
 `INTENT_REQUIREMENT`, `REQUIREMENT_ACCEPTANCE`, `REQUIREMENT_DECISION`, `DECISION_ARCHITECTURE`, `ARCHITECTURE_CONTRACT`, `CONTRACT_TASK`, `TASK_ATTEMPT`, `TASK_LEASE`, `ATTEMPT_CHECKPOINT`, `ATTEMPT_EXECUTION`, `LEASE_CHANGESET`, `CHANGESET_EXECUTION`, `EXECUTION_ENVIRONMENT`, `EXECUTION_EVIDENCE`, `EVIDENCE_REVIEW`, `REVIEW_VALIDATION`, `VALIDATION_ENVIRONMENT`, `VALIDATION_CERTIFICATION`.

@@ -224,10 +224,48 @@ service, the three bridge operations and the shared tray presentation are in pla
 and the TypeScript sides, and the intake and chat composers both attach. Three things are deliberately not done
 and are recorded rather than implied: nothing sets `content_hash` or `context_evidence_id`, because `capture`
 and `consume` have no operation and attaching must not perform them; a directory is attached as a scope and
-never enumerated, so nothing durable describes its contents; and the chat composer records **no message**,
-because DEC-030 requires a new Tauri command for classified free-text input and `payloads.json` declares none —
-the composer states that gap instead of inventing the API. Whether two attachments may reference one
+never enumerated, so nothing durable describes its contents; and whether two attachments may reference one
 `source_path` in a single project remains deliberately open (DEC-106).
+
+## Cross-cutting — UserContribution (DEC-030)
+
+Recorded here rather than under a milestone, for the same reason as the attachment block above: DEC-030 requires
+"a new Tauri command for classified free-text input", no milestone listed it, and the requirement sat recorded
+in `App.tsx` as a gap the composer stated instead of inventing.
+
+A `UserContribution` durably records a free-text message submitted after project creation, with the advisory
+classification it was routed under and the outcome the owning service produced. It is a record of what the user
+contributed and never an authority for project truth: only the owning authoritative service determines
+materiality, and only a material change increments `project_epoch` (DEC-030).
+
+- `ProjectService` in `crates/core` owns the record and the command, because DEC-030 makes a material
+  contribution increment `project_epoch` and `ProjectService` already owns `projects`, `project_briefs` and the
+  epoch. The advisory classification stays with the intake router as ConfigurationService policy
+- `record_user_contribution` on the bridge, with shape-tested wire types and the owner declared in
+  `workspace.manifest.json` and `schemas/service-contracts-v1/registry.json`
+- the three vocabularies closed by CHECK constraints in `schemas/sqlite-v1/schema.sql`: `classification` is
+  `MATERIAL`/`CONTEXT`/`COMMENTARY`, `classification_source` is `INTAKE_ROUTER`, and `result_type` is
+  `EPOCH_ADVANCED`/`CONTEXT_SNAPSHOT`/`NO_CHANGE`/`PENDING`
+- the Ongoing Chat Composer records the message and renders the row the service stored, not the draft it sent
+- **routing** — carrying the text to the owning service that would decide materiality and produce a real
+  outcome, replacing `PENDING` — is declared by DEC-030 and deliberately not done
+
+**Status: recording is implemented; routing is not.** The command, the service operation, the table and the
+composer are in place and tested, and the append-only rule holds: there is no update path and no delete path, so
+a later ruling is a later row. What is deliberately not done is the routing itself, so every recorded row carries
+`result_type = PENDING` with `epoch_after = epoch_before`. That is the honest record — the user contributed this
+text and it was labelled for routing — and the composer names the unchanged epoch pair on the surface so the
+advisory label cannot be read as a change to project truth. Nothing yet reads a contribution back for display in
+a timeline, because no operation lists them.
+
+## Cross-cutting — Trace-link operation ownership (open)
+
+`create_trace_link` is declared in two files and owned by no service in
+`schemas/service-contracts-v1/registry.json`. The two declarations now agree, and the ownership cross-check in
+`tools/contracts/verify.mjs` keeps them agreeing, but no canonical document names the service that should own
+trace links. No traceability service exists; `RequirementService` is the manifest's value and `DiagnosticsService`
+was `payloads.json`'s. Until a decision names the owner, the agreed value is a consequence of the manifest being
+authoritative rather than of a decision, and the generated UI owner map is only as right as that value.
 
 ## Release gate
 
