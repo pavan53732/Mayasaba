@@ -1195,3 +1195,34 @@ Classification: ADDITIVE. `crates/workspace` defines deterministic Git repositor
 
 ### DEC-102 — Evidence capture is immutable metadata plus local artifacts
 Classification: ADDITIVE. EvidenceService records artifact identity, path, SHA-256 and size in the existing artifact/evidence tables and links evidence to artifacts through the existing `evidence_links` authority. Capture never widens workspace scope or creates a second provenance store. Command stdout/stderr artifact bindings remain fields on the existing `command_executions` record.
+
+### DEC-103 — Local verification covers the Rust workspace, not only contracts
+Classification: REFINEMENT. Applies and refines DEC-036; supersedes nothing.
+
+Previous behavior: the local gate was exactly `npm run verify:contracts`. It validates schemas, spine and off-spine edges, event emitters, bridge identifiers, the error registry, generated surfaces and SQLite documentation grouping, and it never invokes a Rust compiler or test runner. A green gate and an unbuildable workspace were therefore fully compatible, and that is what happened: `cargo build` failed with 104 errors while the gate reported success on every commit.
+
+New behavior: `npm run verify:local` runs, in order, the contract gate, `cargo fmt --all --check`, `cargo build --workspace --all-targets`, `cargo test --workspace` and the desktop suite; it stops at the first failure and prints a per-step summary. `npm run verify:rust` runs the three Rust steps alone, and `--only=<group|id>` narrows further. The runner is `tools/verify/local.mjs` and **refuses to run on any platform other than Windows**.
+
+Reason: DEC-036 decided that verification happens on the user's own Windows PC rather than a hosted runner, and that decision is unchanged. What DEC-036 did not do was widen the gate's scope, so the local mechanism validated contracts only. The gap it left is that nothing local ever compiled or tested the workspace. Note that the abandoned hosted workflow would not have closed it either: `.github/workflows/contracts.yml` ran on `ubuntu-latest` and executed only `node tools/contracts/verify.mjs`, so it too never compiled Rust. The gap was scope, not hosting.
+
+The Windows-only refusal is the decision's substance rather than a convenience. AGENTS.md §3 and DEC-003/DEC-004 make Mayasaba Windows-only and local-first, and DEC-036 makes verification a gate on the user's own machine. A hosted runner — including a Windows-hosted one — moves execution off that machine, so it violates the boundary instead of satisfying it. GitHub remains the source repository, history and code-review surface only, and the repository carries no `.github/` tree.
+
+Compatibility impact: ADDITIVE for contributors; no runtime code, MCF envelope, message, event, transition, schema or database is touched, and `npm run verify:contracts` keeps its exact current meaning and output. The pre-commit hook is unchanged, so no commit becomes slower and no contributor is newly blocked; running the wider matrix remains a deliberate act.
+
+Migration/reconciliation: none required. No database exists in a distributed form and nothing here is persisted. The `.github/` tree is absent and must stay absent.
+
+Tests affected: none of the existing suites change. The runner is itself the new surface and is verified by running it; `npm run verify:local` exits 0 on a clean tree at this decision's commit.
+
+Known limitations: (1) the runner stops at the first failing step, so a run reports the first failure rather than every failure. (2) MSI packaging and any runtime or end-to-end exercise of the installed application are not included; they remain separate local steps on the same machine. (3) The runner is not wired into the pre-commit hook, so it is available rather than enforced — a contributor who never invokes it sees no difference, which is the same opt-in property DEC-036 accepted for the gate itself.
+
+### DEC-104 — Lease expiry integration is deferred to the M3 transport work
+Classification: ADDITIVE (records a decision; changes no code).
+
+`expire_due_leases` is implemented and correct — it expires due leases and persists the owning Task's `LEASE_EXPIRED` consequence in one transaction — and it has no production caller. `crates/tasks::expire_leases` is a pass-through that nothing invokes. The decided position is that this is **not** a defect to repair now, and it is **not** to be wired up reflexively by a future agent.
+
+Reason: DEC-073 already forbids a background dispatch loop until a real transport exists, on the grounds that a loop running against a transport that cannot deliver would exhaust retry budgets and dead-letter genuine messages. The same reasoning applies to a timer that expires leases with nothing downstream to reconcile them. DEC-095 places desired-versus-observed execution reconciliation in Recovery, which is where the caller belongs once M3 supplies the transport and the reconciliation loop that makes expiry consequential.
+
+Compatibility impact: none. No code changes. This entry exists so that the absence of a caller is read as a recorded position rather than an oversight.
+
+Tests affected: none. `crates/storage/tests/orchestration_reliability.rs` exercises expiry and recovery directly at the storage layer, where they are correct, and those tests pass.
+

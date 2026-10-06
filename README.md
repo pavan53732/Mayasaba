@@ -254,6 +254,20 @@ git config core.hooksPath .githooks
 
 `.githooks/pre-commit` lives in the repository, so there is one copy and nothing to install or keep in sync — `core.hooksPath` is a pointer, not a copy, and `git config core.hooksPath` reports the whole state of the mechanism. The gate prints whether the hook is enabled in its summary line. That report is informational and never a failure, so a contributor who deliberately opts out is not blocked.
 
+### Full local verification
+
+The contract gate validates contracts. It never compiles or tests Rust, so a green gate and a broken build are entirely compatible — which is how a workspace with 104 build errors reached `main` while the gate reported success. `npm run verify:local` closes that scope gap:
+
+~~~text
+npm run verify:local
+~~~
+
+It runs, in order, the contract gate, `cargo fmt --all --check`, `cargo build --workspace --all-targets`, `cargo test --workspace` and the desktop test suite, stops at the first failure, and prints a per-step summary. `npm run verify:rust` runs only the three Rust steps, and `--only=<group|id>` narrows the selection further (`--list` names the groups and ids).
+
+`tools/verify/local.mjs` **refuses to run on any platform other than Windows**. That is deliberate rather than incidental. Mayasaba is Windows-only and local-first (AGENTS.md §3; DEC-003, DEC-004), and DEC-036 makes verification a gate on the user's own Windows PC. A hosted runner — including a Windows-hosted one — moves execution off that machine, so it violates the boundary rather than satisfying it. GitHub is the source repository, history and code-review surface only; it runs nothing. For the same reason the repository carries no `.github/` tree at all (DEC-036, DEC-103).
+
+This runner covers build, tests and gates. MSI packaging, and any runtime or end-to-end exercise of the installed application, remain separate local steps on the same machine.
+
 ## Current status
 
 Verified on 2026-10-05 as part of the DEC-053 bridge reconciliation and the DEC-054, DEC-055 and DEC-056
