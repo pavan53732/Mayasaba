@@ -277,10 +277,12 @@ the Tauri bridge identifiers against their declared owners in `workspace.manifes
 and its declared controls, the declared manifests, each crate's declared dependencies, the canonical error
 registry against the protocol's own error enums and against the codes the implementation produces, both
 sides of the Tauri bridge, and each handler's arguments against the operation's declared request fields. It
-reports 59 MCF message types, 121 events, 12 state machines, 32 Tauri commands, 27
-queries, 30 UI events and 31 registered error codes, of which 11 are produced by the implementation. It
-invariant-checks 28 of the 68 canonical artifacts; the other 40 are parsed but have no invariant enforced
-against them.
+reports the live totals for the MCF registries (message types, events, state machines), for the Tauri bridge
+(commands, queries, UI events), for the canonical error registry (codes registered, and codes the
+implementation actually produces) and for gate coverage (canonical artifacts invariant-checked, against those
+parsed for readability with no invariant enforced). Those figures are the gate's own output rather than a tally
+repeated here, so they cannot drift from the contracts they count: run `npm run verify:contracts` and read its
+report lines for the current numbers.
 
 What is implemented:
 

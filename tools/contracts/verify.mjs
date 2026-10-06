@@ -316,12 +316,17 @@ for(const [section,label,authority] of ownershipSections){
 //   implementation -> contract   is a FAILURE. A registered handler or a transport call that names an
 //                                operation the contract does not declare is drift with no defence: the
 //                                contract is the authority (AGENTS.md section 5), so the code is wrong.
-//   contract -> implementation   is REPORTED. The contract deliberately leads implementation - it declares 59
-//                                operations and 4 exist - so "declared and unimplemented" cannot be a failure
-//                                without either deleting 55 declarations or introducing a second registry of
-//                                "pending" operations, which would be a competing source of truth (DEC-017).
-//                                It is reported with its count and names on every run so the gap stays visible
-//                                instead of being silently absorbed by a green gate.
+//   contract -> implementation   is REPORTED. The contract deliberately leads implementation - it declares
+//                                operations that no handler implements yet - so "declared and unimplemented"
+//                                cannot be a failure without either deleting those declarations or introducing
+//                                a second registry of "pending" operations, which would be a competing source
+//                                of truth (DEC-017). It is reported with its live count and names on every run,
+//                                so the gap stays visible instead of being silently absorbed by a green gate.
+//                                No tally is written into this comment: it changes whenever an operation is
+//                                declared or implemented, and a number here would be stale the next time either
+//                                happened - which is precisely what the numbers this comment used to carry had
+//                                become. The count lives in the gate's own output, where it cannot drift from
+//                                the contract it counts.
 //
 // A call site whose operation name is not a string literal is a FAILURE rather than a skip: an unresolvable
 // name is precisely the case the check cannot cover, and ignoring it would let the drift this block exists to
@@ -1332,8 +1337,10 @@ for(const line of traceText.split(/\r?\n/)){
 if(traceProblems.length) fail(`${traceProblems.length} traceability problem(s) in docs/TRACEABILITY.md:\n  - ${traceProblems.join("\n  - ")}\nA row that cannot be checked is a row that can claim anything. Fix the row, or the register, or the path it cites.`);
 
 // --- Registry conformance against its own schema. payloads.json required `errors` on every operation while
-// every operation carried an undeclared `owner`, so the file did not satisfy payloads.schema.json on any of
-// its 58 operations and nothing detected it. The gate validated that the file existed, never its contents.
+// every operation carried an undeclared `owner`, so the file did not satisfy payloads.schema.json on any of its
+// operations and nothing detected it. The gate validated that the file existed, never its contents. The
+// operation count is deliberately absent: the sentence describes the state of the file when the defect was
+// live, and a number that described that state no longer describes this one.
 // This is a shape check rather than a full JSON Schema evaluation, which is enough for these two files and
 // honest about being so: it enforces required keys, forbidden keys, and key types.
 const payloadSchema=read("schemas/tauri-bridge-v1/payloads.schema.json");
