@@ -1247,3 +1247,70 @@ Tests affected: the gate's own mutation suite gains one mutation, `dec105-a`, wh
 
 Known limitations: (1) the check reads the working tree, so a `.github/workflows/` tree that exists only in some other branch is not reported by a run on this branch; the decision is enforced where it matters, at the commit that would introduce it, because the gate is wired to the pre-commit hook. (2) Because the scope is `workflows/`, GitHub-side automation that is not a workflow is permitted — `.github/dependabot.yml`, for instance, which opens pull requests from GitHub's side and so arguably crosses the same boundary. It is currently allowed because the decision names workflows. Widening the check to cover it is a new decision, not a bug fix.
 
+### DEC-106 — Attachment storage is a durable local reference with provenance; ingestion is a separate explicit operation
+Classification: REFINEMENT of DEC-049; supersedes nothing. HARD_LOCK for the storage model and the optionality rule. **Ownership is deliberately left OPEN by this record** — see "Open item" below.
+
+Decision. A `ProjectContextAttachment` is a **durable local reference with captured provenance**. Attaching a file or folder records *that the user selected this path at this time, inside this authorized scope*, and nothing more. It does not read, copy, hash, index, summarize or otherwise ingest the material.
+
+> Content ingestion and indexing are a **separate explicit operation**, and **do not occur merely because a file was attached**.
+
+Optionality. Attachments are an **optional capability, not mandatory input**. The canonical documents already settle this and no product decision is required: `ORCHESTRATOR-DESIGN.md:73` says "optional local context attachments", `REQUIREMENTS.md:10` says "supports optional local context attachments", and `CONTROL-ROOM-DESIGN.md:79` says the composer "may include" a control. Therefore:
+
+> **The chat composer must support attachments, and an attachment is never a prerequisite for submitting a normal user message.**
+
+Both surfaces. Attachments are required on **two** surfaces and implementing only the first does not satisfy the requirement: the **Initial Intake Composer** (`CONTROL-ROOM-DESIGN.md:70`) and the **Ongoing Chat Composer** (`CONTROL-ROOM-DESIGN.md:71`). `DATA-MODEL.md:77` states the association explicitly — "an intake request **or a later project contribution**" — and a "later project contribution" is a `UserContribution`, which is the chat path.
+
+Three distinct operations, which must not be collapsed into one:
+
+1. **Attach** — record the reference and its provenance. No content is read, copied or indexed. Available at intake and after creation.
+2. **Capture** — compute a content hash and produce an Artifact/Evidence record. **Explicit and on request only.**
+3. **Consume** — an owning service accepts a material change caused by the contents. **Explicit and separate** (DEC-049).
+
+Durability semantics. These resolve the questions a bare path reference raises, and each is answered by an existing authority rather than by a new mechanism:
+
+| Situation | Resolution |
+|---|---|
+| Source file modified after attachment | The reference still resolves; content identity is not implied. A consumer needing content identity computes a hash and records the comparison **as a check outcome**, never as a silent assumption. Modification does not invalidate the attachment: it is context, not truth. |
+| Source file deleted | The row **persists**. A later read fails with a typed error code and the failure is recorded as evidence. It is never rendered as "empty" or as though no attachment existed. |
+| Source file moved | `source_path` is **never rewritten**; rewriting it would rewrite history. The old path simply becomes unresolvable, and re-attaching is a **new attachment identity**, not an update. |
+| Directory contents change | `kind = DIRECTORY` means "the scope, not a snapshot". Enumeration is never durable; a consumer that enumerates records what it observed and that observation's hash as evidence. |
+| Agent reads the attachment in a later epoch | The attachment belongs to the **project**, not to an epoch. Consuming it does not advance the epoch (`ORCHESTRATOR-DESIGN.md:75`). Content that reveals material change is a *contribution* the owning service must accept (DEC-030). |
+| Attachment cited as evidence for a council claim | **A bare path reference cannot be evidence.** Evidence requires immutable provenance and a content hash (DEC-102, `mcf-v2/evidence.schema.json`). Citing an attachment requires a prior **capture** producing an Artifact/Evidence record that the attachment links to. |
+| Project reopened months later | Rows are durable. The UI shows captured provenance plus a **resolvability check** (does the path still exist, is it still inside the authorized scope) and must not claim the content is unchanged unless a hash comparison says so. |
+
+Two invariants follow, and they are what makes this model safe against DEC-049 rather than merely convenient:
+
+- **Append-only.** `source_path` is never rewritten, a row is never deleted, and provenance is never mutated. A re-attachment is a new identity.
+- **Resolvability is a check, not a state.** Existence and scope are evaluated *when read*, and the outcome is recorded. This is deliberately the existing `Admission` pattern (`schemas/workspace-v1/admission.schema.json`: per-check status plus one verdict, append-oriented through `supersedes_admission_id`), reused rather than reinvented as a second check-outcome shape.
+
+Intended entity shape, for the attachment slice to confirm rather than inherit (`DATA-MODEL.md:81`):
+
+~~~text
+ProjectContextAttachment
+  attachment_id
+  project_id
+  source_path          (immutable once written)
+  kind                 FILE | DIRECTORY
+  authorized_scope
+  captured_at
+  provenance
+  lifecycle_state      SELECTED | PENDING | ACCEPTED | REJECTED
+  content_hash         (nullable — set only by an explicit capture)
+  evidence/context links (nullable — set only by an explicit consume)
+~~~
+
+`content_hash` and the links are nullable **by design**, so that capture and consume can be added later **without replacing the attachment's identity**. That is the property that makes the first implementation safe to extend.
+
+Reason. DEC-049 established that attachments are context and never project truth, and deferred implementation because the storage model was undecided (`DATA-MODEL.md:83`). Leaving it undecided indefinitely is not neutral: the requirement is defined in ten places and implemented in none, and `DATA-MODEL.md:79` warns that an implementation agent must not invent a competing shape. Recording the model now converts an implicit gap into an explicit contract, which is what allows the slice to be built without improvising.
+
+Compatibility impact. Conceptual and additive. No entity, table, column, command, MCF message, event, transition or UI event is added by this record; `DATA-MODEL.md` continues to mark `ProjectContextAttachment` as **not yet durable**. No existing behavior changes, because nothing implements attachments.
+
+Open item — ownership. This record deliberately does **not** assign canonical ownership. The entity's semantics span three concerns: scope and locality validation belongs to `crates/workspace` (DEC-048); hash, artifact and provenance belong to `crates/evidence` (DEC-102); project association, lifecycle and the intake/contribution routing belong to `crates/core`. Ownership is to be assigned **after** the semantics above, not before, and the candidate resolution under consideration is `AttachmentService` in `crates/core` with `crates/workspace` supplying the scope check and `crates/evidence` supplying capture-on-request — mirroring how `Admission` is owned by `WorkspaceService` while carrying per-check statuses from other concerns. That assignment is **not decided here** and must be recorded separately before implementation.
+
+Migration/reconciliation: none. No database is distributed and nothing is persisted, so there is nothing to migrate. When the slice lands, the table is new and no existing row is affected.
+
+Tests affected: none yet, because nothing is implemented. The slice must add: reference-only attachment creates a durable row with provenance and reads no content; an attachment outside the authorized scope is rejected by the workspace check; a deleted source yields a typed error and a preserved row; re-attaching after a move produces a new identity and leaves `source_path` unrewritten; capture is the only path that sets `content_hash`; an attachment cannot be cited as evidence before capture; the chat composer submits a normal message with no attachment; and the UI never renders an attachment as uploaded, indexed, analysed or accepted before the controller returns that state (`CONTROL-ROOM-DESIGN.md:79`).
+
+Known limitations: (1) Ownership is unresolved, so the slice cannot begin until a further record assigns it. (2) The lifecycle vocabulary `SELECTED | PENDING | ACCEPTED | REJECTED` is recorded here as the intended set but is not yet a machine-readable enum; it must become one, and it must not be confused with the intake submission states draft/submitting/created/rejected (DEC-049, `CONTROL-ROOM-DESIGN.md:83`). (3) Whether two attachments may reference the same `source_path` in one project is not addressed here. (4) Nothing in this record prevents an owning service from accepting a material change from attachment contents; it only ensures that acceptance is explicit.
+
+

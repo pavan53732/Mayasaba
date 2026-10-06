@@ -72,15 +72,36 @@ Core identity and display metadata:
 
 The `name` column is retained deliberately: removing it would couple display metadata to filesystem naming forever and eliminate the ability to rename a project without renaming its directory.
 
-### ProjectContextAttachment — concept only, NOT YET DURABLE
+### ProjectContextAttachment — model decided, NOT YET DURABLE
 
-A user-selected local file or directory associated with an intake request or a later project contribution, retained as supporting context and evidence.
+A user-selected local file or directory associated with an intake request **or a later project contribution**, retained as supporting context and evidence.
 
 This is recorded as a concept only. It has **no table, no column and no command**, and the gate does not expect it in `schema.sql`. It is documented here so an implementation agent does not invent a competing shape, not because it is implemented.
 
-Intended properties, for the attachment slice to confirm rather than inherit: attachment identifier, project identifier, source path, kind (`FILE` or `DIRECTORY`), source scope, capture timestamp, provenance, optional content hash, lifecycle status.
+**Storage model (DEC-106, settled).** An attachment is a **durable local reference with captured provenance**. Attaching records that the user selected this path at this time inside this authorized scope, and nothing more: no read, no copy, no hash, no index. Content ingestion and indexing are a **separate explicit operation** and do not occur merely because a file was attached. An attachment is an **optional capability**; the chat composer must support it, and an attachment is never a prerequisite for submitting a normal user message.
 
-Authority: attachments are contextual inputs, not project truth. Their presence does not modify `ProjectBrief`, requirements, decisions or epoch unless an owning service explicitly accepts a material state change caused by their contents (DEC-049). The storage model — reference the original local path, copy it, or ingest and index it — is undecided and belongs to the attachment slice.
+Three operations, which must not be collapsed: **attach** (record the reference and provenance), **capture** (compute a hash and produce an Artifact/Evidence record — explicit and on request only), and **consume** (an owning service accepts a material change caused by the contents — explicit and separate).
+
+Intended properties, for the attachment slice to confirm rather than inherit:
+
+- attachment identifier
+- project identifier
+- source path — **immutable once written**; a re-attachment is a new identity, never an update
+- kind (`FILE` or `DIRECTORY`); for a directory this means the scope, not a snapshot, and enumeration is never durable
+- source scope
+- capture timestamp
+- provenance
+- optional content hash — **set only by an explicit capture**
+- lifecycle status — `SELECTED | PENDING | ACCEPTED | REJECTED`
+- optional context/evidence links — **set only by an explicit consume**
+
+`content_hash` and the links are nullable by design so that capture and consume can be added later **without replacing the attachment's identity**.
+
+**Durability semantics (DEC-106).** A modified source does not invalidate the attachment, because content identity is not implied; a consumer needing it computes a hash and records the comparison as a check outcome. A deleted or moved source leaves the row **in place** — history is append-only and `source_path` is never rewritten — and a later read fails with a typed code that is recorded rather than rendered as an empty attachment. Resolvability is therefore a **check performed when read, not a stored state**, reusing the `Admission` pattern in `schemas/workspace-v1/admission.schema.json`. A bare path reference **cannot be cited as evidence**: evidence requires immutable provenance and a content hash (DEC-102), so citing an attachment requires a prior capture.
+
+Authority: attachments are contextual inputs, not project truth. Their presence does not modify `ProjectBrief`, requirements, decisions or epoch unless an owning service explicitly accepts a material state change caused by their contents (DEC-049). An attachment belongs to the **project**, not to an epoch, so consuming one never advances the epoch on its own.
+
+Ownership is **not yet assigned** and is deliberately left open by DEC-106: scope validation belongs to `crates/workspace`, hash/artifact/provenance to `crates/evidence`, and project association plus intake/contribution routing to `crates/core`. The assignment must be recorded before the slice is implemented.
 
 ## Important relationships
 
