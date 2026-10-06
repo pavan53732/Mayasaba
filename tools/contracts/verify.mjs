@@ -1109,15 +1109,20 @@ for (const m of sqlCode.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]
 // is the failure this whole file is written to avoid. `OUTCOME_SOURCE_VOCABULARY` is already wrapped that way,
 // so the brittleness was live: pairing it was what exposed it.
 const storageVocabSource = fs.readFileSync(path.join(root, "crates/storage/src/lib.rs"), "utf8");
-const rustVocabulary = (name) => {
-  const m = new RegExp(`const ${name}: &\\[&str\\]\\s*=\\s*&\\[([\\s\\S]*?)\\];`).exec(storageVocabSource);
+// The declared type is either `&[&str]` (a slice) or `[&str; N]` (a fixed-size array); both spellings are in use
+// for a vocabulary and rustfmt does not choose between them. `CHECKS` in crates/core is the array form and is one
+// of the declared pairs below, so the reader has to accept both or that pair would be reported as unreadable.
+const vocabSourceCache = new Map([["crates/storage/src/lib.rs", storageVocabSource]]);
+const rustVocabulary = (name, file = "crates/storage/src/lib.rs") => {
+  if (!vocabSourceCache.has(file)) vocabSourceCache.set(file, fs.readFileSync(path.join(root, file), "utf8"));
+  const m = new RegExp(`const ${name}: (?:&\\[&str\\]|\\[&str;\\s*\\d+\\])\\s*=\\s*&?\\[([\\s\\S]*?)\\];`).exec(vocabSourceCache.get(file));
   return m ? [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]) : null;
 };
 const vocabProblems = [];
 for (const [constant, columns] of VOCAB_PAIRS) {
   const values = rustVocabulary(constant);
   if (values === null) {
-    vocabProblems.push(`crates/storage/src/lib.rs declares no \`const ${constant}: &[&str] = &[...];\` for the gate to read, so the vocabulary it enforces is compared with nothing`);
+    vocabProblems.push(`crates/storage/src/lib.rs declares no \`const ${constant}: &[&str] = &[...];\` (or \`[&str; N]\`) for the gate to read, so the vocabulary it enforces is compared with nothing`);
     continue;
   }
   if (values.length === 0) vocabProblems.push(`crates/storage/src/lib.rs ${constant} is empty, so it would accept nothing and the comparison below would be vacuous`);
@@ -1178,6 +1183,121 @@ for(const column of unpairedCheckEnums){
 }
 if(unpairedProblems.length) fail(`${unpairedProblems.length} unjustified unpaired CHECK vocabulary problem(s):\n  - ${unpairedProblems.join("\n  - ")}\nEvery closed vocabulary Rust enforces is either paired with its CHECK constraint or justified in ${unpairedAllowListPath}. There is no third state.`);
 console.log(`Vocabulary constants: ${VOCAB_PAIRS.length} Rust constant(s) compared with the SQL CHECK that enforces the same vocabulary; ${unpairedCheckEnums.length} CHECK constraint(s) have no Rust constant, and ${unpairedCheckEnums.length===0?"there are none to justify":`every one is justified in ${unpairedAllowListPath} (${unpairedCheckEnums.map((c)=>`${c} -> ${allowedUnpaired.get(c).future_owner}`).join("; ")})`}`);
+
+// --- Rust vocabulary constants vs the JSON schema enums that declare the same vocabulary.
+//
+// `VOCAB_PAIRS` above covers a vocabulary written down twice as a Rust constant and a SQL `CHECK`. The same
+// duplication happens one layer up, against a JSON schema enum, and nothing compared those either. `CHECK_IDS`
+// in crates/storage validated an admission's `check_id` against a list copied out of
+// `schemas/workspace-v1/admission.schema.json`, so a `check_id` added to the schema would have been refused by
+// the code that reads it - "unknown check_id" - and no gate would have noticed. `CHECKS` in crates/core is the
+// same shape: the attachment resolvability checks, listed once for evaluation order and once for the wire.
+//
+// The pairs are declared rather than inferred, for the reason given above `VOCAB_PAIRS`: a set of strings is not
+// a vocabulary, and set equality attaches one to whichever enum happens to match. Three things an audit of every
+// Rust vocabulary constant against every schema enum turned up are deliberately NOT paired here:
+//
+//   - `SHIPPED` in crates/council has the same three values as `adapter-types.schema.json`'s `agent_type` enum,
+//     but it is a `const` inside a `#[cfg(test)] mod tests` block. It asserts a property of the shipped adapter
+//     set; it does not enforce a vocabulary, so a pair would fail on a legitimate change to either side.
+//   - `AGENT_TYPES`, `CHANNELS`, `PHASES`, `MESSAGE_TYPES`, `EVENT_TYPES` and the rest of the constants under
+//     `crates/protocol/src/generated/` hold the same values as their schemas because `npm run codegen` writes
+//     them from those schemas. The codegen `--check` already fails when they disagree, and it is the stronger
+//     check: it regenerates and diffs, rather than comparing one extracted list.
+//   - `VALIDATION_VERDICTS` matches three enums. Two are `verdict` fields, which is the vocabulary it validates
+//     (`validation_runs.verdict`); the third is `certification.schema.json`'s gate `status`, which shares the
+//     words PASS/FAIL/BLOCKED but is a gate outcome rather than a verdict. Only the two verdict fields are
+//     paired, because a coincidental match is precisely what this table must not record.
+//
+// Order is compared, not only membership: `CHECKS` is the order the checks are evaluated in and the wire enum
+// repeats that order, so a reordering is a disagreement rather than a cosmetic difference.
+const JSON_ENUM_VOCAB_PAIRS = [
+  // The admission vocabulary: declared once in schemas/workspace-v1/admission.schema.json, restated by the Rust
+  // that validates an admission on its way into SQLite. `ADMISSION_CHECK_STATUSES` is paired with the bridge's
+  // attachment view as well, because that view carries the same check statuses and says so in crates/core.
+  ["CHECK_IDS", "crates/storage/src/lib.rs", ["schemas/workspace-v1/admission.schema.json#properties.checks.items.properties.check_id.enum"]],
+  ["ADMISSION_KINDS", "crates/storage/src/lib.rs", ["schemas/workspace-v1/admission.schema.json#properties.kind.enum"]],
+  ["ADMISSION_CHECK_STATUSES", "crates/storage/src/lib.rs", [
+    "schemas/workspace-v1/admission.schema.json#properties.checks.items.properties.status.enum",
+    "schemas/tauri-bridge-v1/payload-types.json#types.AttachmentCheckView.properties.status.enum",
+  ]],
+  ["ADMISSION_VERDICTS", "crates/storage/src/lib.rs", ["schemas/workspace-v1/admission.schema.json#properties.verdict.enum"]],
+  ["REFUSAL_REASON_CLASSES", "crates/storage/src/lib.rs", ["schemas/workspace-v1/admission.schema.json#properties.refusal_reasons.items.enum"]],
+  // The MCF-v2 records crates/storage writes and reads back.
+  ["EXECUTION_CLASSIFICATIONS", "crates/storage/src/lib.rs", ["schemas/mcf-v2/execution.schema.json#properties.classification.enum"]],
+  ["LEASE_STATES", "crates/storage/src/lib.rs", ["schemas/mcf-v2/task-lease.schema.json#properties.status.enum"]],
+  ["ARTIFACT_KINDS", "crates/storage/src/lib.rs", ["schemas/mcf-v2/artifact.schema.json#properties.kind.enum"]],
+  ["EVIDENCE_KINDS", "crates/storage/src/lib.rs", ["schemas/mcf-v2/evidence.schema.json#properties.kind.enum"]],
+  ["VALIDATION_VERDICTS", "crates/storage/src/lib.rs", [
+    "schemas/mcf-v2/validation.schema.json#properties.verdict.enum",
+    "schemas/validation-v1/review.schema.json#properties.verdict.enum",
+  ]],
+  ["AGENT_HEALTH_STATES", "crates/storage/src/lib.rs", ["schemas/agent-adapter-v1/adapter-types.schema.json#properties.types.properties.HealthStatus.properties.state.enum"]],
+  ["TRACE_LINK_TYPES", "crates/storage/src/lib.rs", ["schemas/trace-v1/trace-link.schema.json#properties.link_type.enum"]],
+  // The attachment resolvability checks: evaluation order in crates/core, the wire view in the bridge payloads.
+  ["CHECKS", "crates/core/src/attachment_service.rs", ["schemas/tauri-bridge-v1/payload-types.json#types.AttachmentCheckView.properties.check.enum"]],
+];
+// Resolve `<file>#<dotted.path>` to the array of strings at that path, or to a reason it could not be read. Every
+// failure mode returns a message naming the file and the path rather than `undefined`: a gate that cannot read
+// what it compares must fail, not pass quietly.
+const jsonEnumAt = (ref) => {
+  const hash = ref.indexOf("#");
+  if (hash <= 0 || hash === ref.length - 1) return { error: `${ref} is not a \`<file>#<dotted.path>\` reference, so the gate cannot resolve it` };
+  const file = ref.slice(0, hash);
+  const dotted = ref.slice(hash + 1);
+  let document;
+  try {
+    document = JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+  } catch (error) {
+    return { error: `${file} could not be read or parsed (${error.message})` };
+  }
+  let node = document;
+  for (const key of dotted.split(".")) {
+    const container = node;
+    if (container === null || typeof container !== "object") {
+      return { error: `${file} declares no \`${dotted}\`: \`${key}\` was looked up on ${container === null ? "null" : `a ${typeof container}`}` };
+    }
+    if (Array.isArray(container)) {
+      const index = Number(key);
+      if (!Number.isInteger(index) || index < 0 || index >= container.length) {
+        return { error: `${file} declares no \`${dotted}\`: \`${key}\` is not an index into an array of ${container.length}` };
+      }
+      node = container[index];
+    } else {
+      if (!(key in container)) return { error: `${file} declares no \`${dotted}\`: it has no \`${key}\`` };
+      node = container[key];
+    }
+  }
+  if (!Array.isArray(node) || !node.every((v) => typeof v === "string")) {
+    return { error: `${file} \`${dotted}\` is not an array of strings, so it is not an enum the gate can compare` };
+  }
+  if (node.length === 0) return { error: `${file} \`${dotted}\` is empty, so the comparison would be vacuous` };
+  return { values: node };
+};
+const jsonEnumProblems = [];
+for (const [constant, file, refs] of JSON_ENUM_VOCAB_PAIRS) {
+  const values = rustVocabulary(constant, file);
+  if (values === null) {
+    jsonEnumProblems.push(`${file} declares no \`const ${constant}: &[&str] = &[...];\` (or \`[&str; N]\`) for the gate to read, so the vocabulary it enforces is compared with nothing`);
+    continue;
+  }
+  if (values.length === 0) jsonEnumProblems.push(`${file} ${constant} is empty, so it would accept nothing and the comparison below would be vacuous`);
+  for (const ref of refs) {
+    const declared = jsonEnumAt(ref);
+    if (declared.error) {
+      jsonEnumProblems.push(`${declared.error}; ${constant} in ${file} has nothing to be compared with, so either the path moved or this pair is stale`);
+      continue;
+    }
+    if (declared.values.join(",") !== values.join(",")) {
+      jsonEnumProblems.push(`${constant} in ${file} is [${values.join(", ")}] but ${ref} allows [${declared.values.join(", ")}]; the constant the code checks and the enum the schema declares must agree, in the same order`);
+    }
+  }
+}
+// The report line is printed here, beside the pairs it counts, but the failure is raised at the end of the gate.
+// `fail` throws and ends the run, so a check placed here would report a mutated refusal reason - or any other
+// property of the same files - as a vocabulary divergence, replacing the message the check that owns that
+// property would have given. Raising it last means this check can only add a reason, never hide one.
+console.log(`Vocabulary constants: ${JSON_ENUM_VOCAB_PAIRS.length} further Rust constant(s) compared with the JSON schema enum that declares the same vocabulary`);
 
 // SQLITE-DATA-ARCHITECTURE.md groups the tables by concern, and that grouping drifted the moment
 // project_briefs and user_contributions were added: the tables existed in schema.sql and in DATA-MODEL.md
@@ -2443,6 +2563,14 @@ if(hostedCiProblems.length) fail(
   "boundary instead of satisfying it. GitHub is the source repository, history and code-review surface only. "+
   "Run `npm run verify:local` instead. Removing this violation is the fix; editing this check to permit it is "+
   "a decision that must be recorded first."
+);
+
+// Deferred from the vocabulary section, which explains why: a check that compares whole vocabularies has to be
+// raised after every check that polices another property of the same files, or it masks them.
+if(jsonEnumProblems.length) fail(
+  jsonEnumProblems.length+" Rust/JSON-schema vocabulary divergence(s):\n  - "+jsonEnumProblems.join("\n  - ")+"\n"+
+  "A vocabulary declared twice must be declared identically, or one of the two is a promise the other breaks. "+
+  "Fix whichever drifted; do not remove the pair, because removing it is what let the divergence go unnoticed."
 );
 
 console.log("Mayasaba contract verification passed.");

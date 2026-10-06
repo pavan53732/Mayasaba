@@ -91,6 +91,7 @@ const AGENTS_LIB = "crates/agents/src/lib.rs";
 const TASKS_LIB = "crates/tasks/src/lib.rs";
 const COUNCIL_POLICIES = "schemas/council-v1/council-policies.json";
 const UNPAIRED_ALLOW_LIST = "tools/contracts/unpaired-check-vocabularies.json";
+const CORE_ATTACHMENT_SERVICE = "crates/core/src/attachment_service.rs";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -1528,6 +1529,140 @@ const MUTATIONS = [
         file: UNPAIRED_ALLOW_LIST,
         find: '"rule": "Every SQL CHECK',
         replace: '"rule":  "Every SQL CHECK',
+      },
+    ],
+    expect: [],
+  },
+  // The Rust/JSON-schema half of the same rule. A vocabulary declared twice - once as a Rust constant and once
+  // as a JSON schema enum - has to be declared identically, and these four cover both directions of that
+  // disagreement on both sides of the pair: the schema drifting from the constant, and the constant drifting
+  // from the schema, for a storage constant and for the crates/core one that is an array rather than a slice.
+  {
+    id: "jsonvocab-a",
+    what: "admission.schema.json: the check_id enum renames a value, so the schema no longer declares the vocabulary crates/storage validates with",
+    check: GATE,
+    edits: [
+      {
+        file: ADMISSION_SCHEMA,
+        find: '              "DEPENDENCY_CONFLICT_CLEAR"',
+        replace: '              "DEPENDENCY_CONFLICT_CLEARED"',
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "CHECK_IDS in crates/storage/src/lib.rs is [",
+      "DEPENDENCY_CONFLICT_CLEAR] but schemas/workspace-v1/admission.schema.json#properties.checks.items.properties.check_id.enum allows [",
+      "DEPENDENCY_CONFLICT_CLEARED]",
+    ],
+  },
+  {
+    id: "jsonvocab-b",
+    what: "crates/storage: the CHECK_IDS constant renames a value, so the code refuses a check_id the schema still declares",
+    check: GATE,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: '            "DEPENDENCY_CONFLICT_CLEAR",',
+        replace: '            "DEPENDENCY_CONFLICT_CLEARED",',
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "CHECK_IDS in crates/storage/src/lib.rs is [",
+      "DEPENDENCY_CONFLICT_CLEARED] but schemas/workspace-v1/admission.schema.json#properties.checks.items.properties.check_id.enum allows [",
+      "DEPENDENCY_CONFLICT_CLEAR]",
+    ],
+  },
+  {
+    id: "jsonvocab-c",
+    what: "payload-types.json: the attachment check enum renames a value, so the wire no longer carries the checks crates/core evaluates",
+    check: GATE,
+    edits: [
+      {
+        file: PAYLOAD_TYPES,
+        find: '"check":{"enum":["EXISTS","LOCALITY","KIND","SCOPE"]}',
+        replace: '"check":{"enum":["EXISTS","LOCALITY","KIND","SCOPE_CHECK"]}',
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "CHECKS in crates/core/src/attachment_service.rs is [EXISTS, LOCALITY, KIND, SCOPE] but schemas/tauri-bridge-v1/payload-types.json#types.AttachmentCheckView.properties.check.enum allows [EXISTS, LOCALITY, KIND, SCOPE_CHECK]",
+    ],
+  },
+  {
+    id: "jsonvocab-d",
+    what: "crates/core: the CHECKS array constant renames a value, which is also what proves the reader accepts the [&str; N] spelling",
+    check: GATE,
+    edits: [
+      {
+        file: CORE_ATTACHMENT_SERVICE,
+        find: 'const CHECKS: [&str; 4] = ["EXISTS", "LOCALITY", "KIND", "SCOPE"];',
+        replace: 'const CHECKS: [&str; 4] = ["EXISTS", "LOCALITY", "KIND", "SCOPE_CHECK"];',
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "CHECKS in crates/core/src/attachment_service.rs is [EXISTS, LOCALITY, KIND, SCOPE_CHECK] but schemas/tauri-bridge-v1/payload-types.json#types.AttachmentCheckView.properties.check.enum allows [EXISTS, LOCALITY, KIND, SCOPE]",
+    ],
+  },
+  {
+    id: "jsonvocab-e",
+    what: "admission.schema.json: the check_id enum is reordered without changing its membership, so a pair that compared only membership would stay green",
+    check: GATE,
+    edits: [
+      {
+        file: ADMISSION_SCHEMA,
+        find: '              "REPOSITORY_IDENTITY",\n              "BASELINE_CLEAN",',
+        replace: '              "BASELINE_CLEAN",\n              "REPOSITORY_IDENTITY",',
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "CHECK_IDS in crates/storage/src/lib.rs is [REPOSITORY_IDENTITY, BASELINE_CLEAN,",
+      "allows [BASELINE_CLEAN, REPOSITORY_IDENTITY,",
+    ],
+  },
+  {
+    id: "jsonvocab-f",
+    what: "verify.mjs: a declared JSON path no longer resolves, so the check has nothing to compare and must fail rather than pass quietly",
+    check: GATE,
+    edits: [
+      {
+        file: "tools/contracts/verify.mjs",
+        find: "#properties.checks.items.properties.check_id.enum",
+        replace: "#properties.checks.items.properties.check_id.enums",
+      },
+    ],
+    expect: [
+      "Rust/JSON-schema vocabulary divergence(s)",
+      "declares no `properties.checks.items.properties.check_id.enums`: it has no `enums`",
+      "CHECK_IDS in crates/storage/src/lib.rs has nothing to be compared with",
+    ],
+  },
+  {
+    id: "control-jsonvocab-whitespace",
+    what: "admission.schema.json: a space before a comma inside the check_id enum, a whitespace change that declares exactly the same vocabulary",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: ADMISSION_SCHEMA,
+        find: '              "REPOSITORY_IDENTITY",',
+        replace: '              "REPOSITORY_IDENTITY" ,',
+      },
+    ],
+    expect: [],
+  },
+  {
+    id: "control-jsonvocab-wrapped-const",
+    what: "crates/storage: ADMISSION_VERDICTS is wrapped the way rustfmt wraps a long declaration, which declares exactly the same vocabulary",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: 'const ADMISSION_VERDICTS: &[&str] = &["ADMITTED", "REFUSED", "BLOCKED"];',
+        replace: 'const ADMISSION_VERDICTS: &[&str] = &[\n        "ADMITTED",\n        "REFUSED",\n        "BLOCKED",\n    ];',
       },
     ],
     expect: [],
