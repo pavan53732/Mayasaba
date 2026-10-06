@@ -79,6 +79,10 @@ const DECISION_REGISTER = "docs/DECISION-REGISTER.md";
 const DATA_MODEL = "docs/DATA-MODEL.md";
 const MANIFEST = "workspace.manifest.json";
 const PAYLOADS = "schemas/tauri-bridge-v1/payloads.json";
+const FAILURE_SCHEMA = "schemas/validation-v1/failure.schema.json";
+const FAILURE_CLASS_POLICIES = "schemas/validation-v1/failure-class-policies.json";
+const RECOVERY_SCHEMA = "schemas/recovery-v1/recovery.schema.json";
+const REPAIR_POLICIES = "schemas/validation-v1/repair-policies.json";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -805,6 +809,151 @@ const MUTATIONS = [
         find: '"atomicity": "one durable write: the contribution row is inserted and read back.',
         replace:
           '"atomicity": "AttachmentService is named here in prose, and the owner field is what the check reads. one durable write: the contribution row is inserted and read back.',
+      },
+    ],
+    expect: [],
+  },
+
+  // --- DEC-109: the failure class vocabulary, the class -> recovery action mapping, and the repair budgets.
+  // Every one of these reintroduces a divergence that was actually possible before the checks existed: a failure
+  // packet carrying a class no registry entry uses, a recovery action naming an operation the contract does not
+  // declare, a class with no stated handling, and an unclassifiable failure recorded as a success.
+  {
+    id: "dec109-a",
+    what: "failure-class-policies.json: a class maps an operation the service registry does not declare",
+    check: GATE,
+    edits: [
+      {
+        file: FAILURE_CLASS_POLICIES,
+        find: '"TIMEOUT":{"action":"TaskService.retry_task"',
+        replace: '"TIMEOUT":{"action":"TaskService.does_not_exist"',
+      },
+    ],
+    expect: [
+      'TIMEOUT maps recovery action "TaskService.does_not_exist", which schemas/service-contracts-v1/registry.json does not declare',
+    ],
+  },
+  {
+    id: "dec109-b",
+    what: "failure-class-policies.json: a class the MCF category enum declares is left with no handling",
+    check: GATE,
+    edits: [{ file: FAILURE_CLASS_POLICIES, find: '"INTERNAL":{', replace: '"INTERNAL_UNMAPPED":{' }],
+    expect: ["maps no recovery action for failure class(es): INTERNAL"],
+  },
+  {
+    id: "dec109-c",
+    what: "failure-class-policies.json: a class the MCF category enum does not declare is invented",
+    check: GATE,
+    edits: [
+      {
+        file: FAILURE_CLASS_POLICIES,
+        find: '"classes":{',
+        replace:
+          '"classes":{"TEXT_CONFLICT":{"action":"RecoveryService.start_recovery","rationale":"invented"},',
+      },
+    ],
+    expect: ["maps class(es) that are not in the MCF category enum: TEXT_CONFLICT"],
+  },
+  {
+    id: "dec109-d",
+    what: "failure-class-policies.json: an unclassifiable failure is recorded as a success (DEC-083)",
+    check: GATE,
+    edits: [{ file: FAILURE_CLASS_POLICIES, find: '"is_success":false', replace: '"is_success":true' }],
+    expect: ["the fallback declares is_success other than false; an unclassified failure is never a success (DEC-083)"],
+  },
+  {
+    id: "dec109-e",
+    what: "failure-class-policies.json: the fallback claims to be a real failure class",
+    check: GATE,
+    edits: [{ file: FAILURE_CLASS_POLICIES, find: '"failure_class":"UNKNOWN"', replace: '"failure_class":"INTERNAL"' }],
+    expect: ['the fallback class is "INTERNAL"', "must be recorded as UNKNOWN (DEC-083)"],
+  },
+  {
+    id: "dec109-f",
+    what: "failure.schema.json: the category enum drops a class the MCF enum declares",
+    check: GATE,
+    edits: [{ file: FAILURE_SCHEMA, find: '"LEASE","WORKSPACE"', replace: '"WORKSPACE"' }],
+    expect: ["is missing failure class(es) the MCF category enum declares: LEASE"],
+  },
+  {
+    id: "dec109-g",
+    what: "failure.schema.json: category goes back to free text, so any class is accepted",
+    check: GATE,
+    edits: [
+      {
+        file: FAILURE_SCHEMA,
+        find: '"category":{"type":"string","enum":["SCHEMA","IDENTITY","AUTHORIZATION","POLICY","CAPABILITY","CONTEXT","LEASE","WORKSPACE","SEQUENCE","IDEMPOTENCY","TIMEOUT","CANCELLATION","PROCESS","ADAPTER","AUTHENTICATION","VERSION","DEAD_LETTER","INTERNAL"]}',
+        replace: '"category":{"type":"string"}',
+      },
+    ],
+    expect: ["declares no `category` enum, so a failure packet can carry a class no registry entry uses"],
+  },
+  {
+    id: "dec109-h",
+    what: "recovery.schema.json: the action enum admits an operation no failure class maps to",
+    check: GATE,
+    edits: [
+      {
+        file: RECOVERY_SCHEMA,
+        find: '"RecoveryService.resolve_recovery"]}',
+        replace: '"RecoveryService.resolve_recovery","LifecycleService.abandon_project"]}',
+      },
+    ],
+    expect: ["declares action(s) no failure class maps to: LifecycleService.abandon_project"],
+  },
+  {
+    id: "dec109-i",
+    what: "recovery.schema.json: an action whose result is unknown has no outcome to record (DEC-083)",
+    check: GATE,
+    edits: [
+      {
+        file: RECOVERY_SCHEMA,
+        find: '"outcome":{"enum":["SUCCEEDED","FAILED","BLOCKED","UNKNOWN"]}',
+        replace: '"outcome":{"enum":["SUCCEEDED","FAILED","BLOCKED"]}',
+      },
+    ],
+    expect: ["the recovery action outcome enum has no UNKNOWN member"],
+  },
+  {
+    id: "dec109-j",
+    what: "repair-policies.json: the budgets are unsatisfiable, tolerating more regressions than attempts",
+    check: GATE,
+    edits: [
+      { file: REPAIR_POLICIES, find: '"max_consecutive_regressions":2', replace: '"max_consecutive_regressions":99' },
+    ],
+    expect: ["tolerates more consecutive regressions than total attempts, which no run can satisfy"],
+  },
+  {
+    id: "dec109-k",
+    what: "repair-policies.json: the rule against deleting a test as a repair is turned off",
+    check: GATE,
+    edits: [
+      {
+        file: REPAIR_POLICIES,
+        find: '"forbid_test_deletion_as_repair":true',
+        replace: '"forbid_test_deletion_as_repair":false',
+      },
+    ],
+    expect: ["does not forbid deleting a test as a repair, which AGENTS.md section 20 forbids unconditionally"],
+  },
+  {
+    id: "dec109-l",
+    what: "repair-policies.json: a repair budget becomes zero, so no repair may ever be attempted",
+    check: GATE,
+    edits: [
+      { file: REPAIR_POLICIES, find: '"max_attempts_per_fingerprint":3', replace: '"max_attempts_per_fingerprint":0' },
+    ],
+    expect: ["declares max_attempts_per_fingerprint as 0; a repair budget must be a positive whole number"],
+  },
+  {
+    id: "control-dec109-prose",
+    what: "failure-class-policies.json: the rule text is reworded, which is prose and not a contract",
+    check: GATE,
+    edits: [
+      {
+        file: FAILURE_CLASS_POLICIES,
+        find: '"rule":"This file owns one thing',
+        replace: '"rule":"This file owns exactly one thing',
       },
     ],
     expect: [],

@@ -1679,6 +1679,108 @@ if(recoveryProblems.length) fail(recoveryProblems.length+" recovery vocabulary p
 const undeclaredRecoveryEvents=(recoveryEventList??[]).filter(e=>!events.includes(e)&&!bridge.properties.event_type.enum.includes(e));
 if(undeclaredRecoveryEvents.length) console.log(`Recovery events declared in neither the MCF event enum nor the Tauri UI event enum (reported, not blocking; registering them is a recovery-subsystem decision): ${undeclaredRecoveryEvents.join(", ")}`);
 
+// --- Failure class -> recovery action (DEC-109), and the repair budgets that were never read.
+// The failure CLASS vocabulary already had exactly one owner: the `category` enum in schemas/mcf-v2/error.schema.json,
+// enforced against schemas/error-v1/registry.json above. What was missing was anything that consumed it.
+// `failure.schema.json` typed its `category` as a bare string, so a failure packet could carry a class no
+// registry entry uses; `recovery.schema.json` typed its `actions` items as bare objects, so a recovery action
+// could name an operation that does not exist; and no file stated what the controller should DO about a failure
+// of a given class, so the mapping lived nowhere and every subsystem was free to invent one.
+//
+// The mapping names operation ids from schemas/service-contracts-v1/registry.json rather than minting a verb
+// vocabulary of its own. A second list of action names would be a second source of truth for what the controller
+// can do, and it would drift from the registry the bridge is generated from - the recurring defect this file
+// exists to catch. UNKNOWN is deliberately not a member of the category enum: the enum is closed, and an
+// unclassifiable failure is recorded as the fallback, which is never a success (DEC-083).
+const failureSchema=read("schemas/validation-v1/failure.schema.json");
+const failureClassPolicies=read("schemas/validation-v1/failure-class-policies.json");
+const failureProblems=[];
+const declaredCategories=[...mcfCategoryEnum];
+const failureCategoryEnum=failureSchema.properties?.category?.enum;
+if(!Array.isArray(failureCategoryEnum)||failureCategoryEnum.length===0) failureProblems.push("schemas/validation-v1/failure.schema.json declares no `category` enum, so a failure packet can carry a class no registry entry uses");
+else {
+  const missing=declaredCategories.filter(c=>!failureCategoryEnum.includes(c));
+  const extra=failureCategoryEnum.filter(c=>!mcfCategoryEnum.has(c));
+  if(missing.length) failureProblems.push(`schemas/validation-v1/failure.schema.json is missing failure class(es) the MCF category enum declares: ${missing.join(", ")}`);
+  if(extra.length) failureProblems.push(`schemas/validation-v1/failure.schema.json declares failure class(es) the MCF category enum does not: ${extra.join(", ")}`);
+}
+if(failureClassPolicies.authority!=="schemas/validation-v1/failure-class-policies.json") failureProblems.push(`schemas/validation-v1/failure-class-policies.json declares authority ${JSON.stringify(failureClassPolicies.authority)}, which is not its own path`);
+const classPolicies=failureClassPolicies.classes;
+if(!classPolicies||typeof classPolicies!=="object"||Array.isArray(classPolicies)) failureProblems.push("schemas/validation-v1/failure-class-policies.json declares no `classes` map");
+else {
+  const mapped=Object.keys(classPolicies);
+  const unmapped=declaredCategories.filter(c=>!mapped.includes(c));
+  const unknown=mapped.filter(c=>!mcfCategoryEnum.has(c));
+  if(unmapped.length) failureProblems.push(`schemas/validation-v1/failure-class-policies.json maps no recovery action for failure class(es): ${unmapped.join(", ")}`);
+  if(unknown.length) failureProblems.push(`schemas/validation-v1/failure-class-policies.json maps class(es) that are not in the MCF category enum: ${unknown.join(", ")}`);
+}
+// The registry declares `services` as service -> operation-name list, so the qualified `Service.operation` form
+// the policy file uses is derived here rather than restated anywhere.
+const declaredOperations=new Set();
+for(const [svc,ops] of Object.entries(serviceRegistry.services??{})) for(const op of (Array.isArray(ops)?ops:[])) declaredOperations.add(`${svc}.${op}`);
+if(declaredOperations.size===0) failureProblems.push("schemas/service-contracts-v1/registry.json declares no operations, so no recovery action can be resolved against it");
+const policyActions=[];
+if(classPolicies&&typeof classPolicies==="object"&&!Array.isArray(classPolicies)) for(const [cls,entry] of Object.entries(classPolicies)){
+  const action=entry?.action;
+  if(typeof action!=="string"||action===""){ failureProblems.push(`${cls} maps no recovery action, so a failure of that class has no stated handling`); continue; }
+  policyActions.push(action);
+  if(!declaredOperations.has(action)) failureProblems.push(`${cls} maps recovery action "${action}", which schemas/service-contracts-v1/registry.json does not declare`);
+  if(typeof entry.rationale!=="string"||entry.rationale.trim()==="") failureProblems.push(`${cls} maps an action with no rationale, so the mapping is a bare choice nothing justifies`);
+}
+const fallback=failureClassPolicies.fallback;
+if(!fallback||typeof fallback!=="object") failureProblems.push("schemas/validation-v1/failure-class-policies.json declares no `fallback`, so an unclassifiable failure has no stated handling");
+else {
+  if(fallback.failure_class!=="UNKNOWN") failureProblems.push(`the fallback class is ${JSON.stringify(fallback.failure_class)}; a failure the controller cannot classify must be recorded as UNKNOWN (DEC-083)`);
+  else if(mcfCategoryEnum.has("UNKNOWN")) failureProblems.push("UNKNOWN has become a member of the MCF category enum; the enum is closed and UNKNOWN is the absence of a class, not a class");
+  if(fallback.is_success!==false) failureProblems.push("the fallback declares is_success other than false; an unclassified failure is never a success (DEC-083)");
+  if(typeof fallback.action!=="string"||!declaredOperations.has(fallback.action)) failureProblems.push(`the fallback maps recovery action ${JSON.stringify(fallback.action)}, which schemas/service-contracts-v1/registry.json does not declare`);
+  else policyActions.push(fallback.action);
+}
+// The recovery record and the policy must name the same actions. Equality rather than containment in both
+// directions: an action the record cannot express is unreachable, and an action no class maps to is vocabulary
+// that exists only to look complete.
+const recoveryActionEnum=recoverySchema.properties?.actions?.items?.properties?.action?.enum;
+if(!Array.isArray(recoveryActionEnum)||recoveryActionEnum.length===0) failureProblems.push("schemas/recovery-v1/recovery.schema.json declares no action enum, so a recorded recovery action is an untyped object");
+else {
+  const fromPolicy=[...new Set(policyActions)];
+  const notInRecord=fromPolicy.filter(a=>!recoveryActionEnum.includes(a));
+  const notInPolicy=recoveryActionEnum.filter(a=>!fromPolicy.includes(a));
+  const undeclaredActions=recoveryActionEnum.filter(a=>!declaredOperations.has(a));
+  if(notInRecord.length) failureProblems.push(`schemas/validation-v1/failure-class-policies.json maps action(s) schemas/recovery-v1/recovery.schema.json cannot record: ${notInRecord.join(", ")}`);
+  if(notInPolicy.length) failureProblems.push(`schemas/recovery-v1/recovery.schema.json declares action(s) no failure class maps to: ${notInPolicy.join(", ")}`);
+  if(undeclaredActions.length) failureProblems.push(`schemas/recovery-v1/recovery.schema.json declares action(s) schemas/service-contracts-v1/registry.json does not: ${undeclaredActions.join(", ")}`);
+}
+const recoveryOutcomeEnum=recoverySchema.properties?.actions?.items?.properties?.outcome?.enum;
+if(!Array.isArray(recoveryOutcomeEnum)||recoveryOutcomeEnum.length===0) failureProblems.push("schemas/recovery-v1/recovery.schema.json declares no action outcome enum, so the result of a recovery action is untyped");
+else {
+  if(!recoveryOutcomeEnum.includes("UNKNOWN")) failureProblems.push("the recovery action outcome enum has no UNKNOWN member, so an action whose result is not known would have to be recorded as one that succeeded (DEC-083)");
+  if(!recoveryOutcomeEnum.includes("SUCCEEDED")) failureProblems.push("the recovery action outcome enum has no SUCCEEDED member, so no outcome can be recorded as success");
+}
+// repair-policies.json was read by nothing. Its budgets are the numbers that decide how many times the
+// controller will retry a repair, and a threshold no check reads is a threshold that is not in force: the file
+// could be edited to any value at all and the gate stayed green. The checks below are shape and satisfiability
+// rather than a restatement of the values, so the numbers stay owned by this one file.
+const repairPolicies=read("schemas/validation-v1/repair-policies.json");
+const repairDefaults=repairPolicies.defaults;
+if(!repairDefaults||typeof repairDefaults!=="object"||Array.isArray(repairDefaults)) failureProblems.push("schemas/validation-v1/repair-policies.json declares no `defaults`, so no repair budget is in force");
+else {
+  for(const key of ["max_attempts_per_fingerprint","max_total_attempts_per_task","max_consecutive_regressions"]){
+    const value=repairDefaults[key];
+    if(!Number.isInteger(value)||value<1) failureProblems.push(`schemas/validation-v1/repair-policies.json declares ${key} as ${JSON.stringify(value)}; a repair budget must be a positive whole number`);
+  }
+  for(const key of ["require_regression_after_repair","forbid_acceptance_weakening","forbid_test_deletion_as_repair"]){
+    if(typeof repairDefaults[key]!=="boolean") failureProblems.push(`schemas/validation-v1/repair-policies.json declares ${key} as ${JSON.stringify(repairDefaults[key])}; the rule is a yes/no and must be a boolean`);
+  }
+  if(Number.isInteger(repairDefaults.max_consecutive_regressions)&&Number.isInteger(repairDefaults.max_total_attempts_per_task)&&repairDefaults.max_consecutive_regressions>repairDefaults.max_total_attempts_per_task)
+    failureProblems.push("schemas/validation-v1/repair-policies.json tolerates more consecutive regressions than total attempts, which no run can satisfy");
+  // AGENTS.md section 20 forbids both unconditionally, so a policy file may not leave either open.
+  if(repairDefaults.forbid_test_deletion_as_repair!==true) failureProblems.push("schemas/validation-v1/repair-policies.json does not forbid deleting a test as a repair, which AGENTS.md section 20 forbids unconditionally");
+  if(repairDefaults.forbid_acceptance_weakening!==true) failureProblems.push("schemas/validation-v1/repair-policies.json does not forbid weakening acceptance as a repair, which AGENTS.md section 20 forbids unconditionally");
+  if(typeof repairPolicies.authority!=="string"||repairPolicies.authority!=="schemas/validation-v1/repair-policies.json") failureProblems.push(`schemas/validation-v1/repair-policies.json declares authority ${JSON.stringify(repairPolicies.authority)}, which is not its own path`);
+  if(typeof repairPolicies.escalation!=="string"||repairPolicies.escalation.trim()==="") failureProblems.push("schemas/validation-v1/repair-policies.json declares no escalation, so an exhausted budget has no stated outcome");
+}
+if(failureProblems.length) fail(failureProblems.length+" failure-class problem(s) (DEC-109):\n  - "+failureProblems.join("\n  - ")+"\nThe failure class vocabulary has one owner (schemas/mcf-v2/error.schema.json), the per-code classification has one owner (schemas/error-v1/registry.json), and the recovery actions are operations schemas/service-contracts-v1/registry.json already declares. Fix the file that drifted, not this check.");
+
 // --- Council decision-quality contracts (DEC-052) against each other and against the DDL.
 // Three vocabularies describe the same closed sets after this decision: the JSON Schemas under
 // schemas/council-v1/, the SQLite CHECK constraints on the six new tables, and the mode plan in
@@ -1940,6 +2042,9 @@ const coverageVerified=new Set([
   "schemas/mcf-v2/identity.schema.json",
   "schemas/recovery-v1/recovery-events.json",
   "schemas/recovery-v1/recovery.schema.json",
+  "schemas/validation-v1/failure.schema.json",
+  "schemas/validation-v1/failure-class-policies.json",
+  "schemas/validation-v1/repair-policies.json",
   "schemas/council-v1/mode-selection.schema.json",
   "schemas/council-v1/council-policies.json",
   "schemas/council-v1/decision-outcome.schema.json",

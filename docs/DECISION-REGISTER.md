@@ -1362,4 +1362,29 @@ Tests affected. 13 tests in `crates/tasks/tests/selection.rs`, alongside the 22 
 
 Known limitations: (1) Promotion is computed over the whole candidate set on every call, so selection reads all of a project's tasks and edges rather than one page; no index was added and the cost is unmeasured. (2) `SchedulableTask` and `select_schedulable_tasks` still have no production caller — selection is exercised only by tests, so two selectors running against one database is reasoned, not observed. (3) The rule inherits a dependent's priority only; `risk`, deadline and lease pressure remain listed as selection inputs in `ORCHESTRATOR-DESIGN.md:95` that nothing implements. (4) `INVALIDATED` is treated as not-waiting by name, so if the task state vocabulary gains another terminal state this rule must be revisited.
 
+### DEC-109 — A failure class has one owner, and the controller's recovery action is mapped from it
+Classification: REFINEMENT of DEC-055 for the class vocabulary, ADDITIVE for the mapping. Supersedes nothing. HARD_LOCK for the class vocabulary and for the mapping's authority.
+
+Decision. The failure **class** vocabulary already had exactly one owner — the `category` enum in `schemas/mcf-v2/error.schema.json`, enforced against `schemas/error-v1/registry.json` by the contract gate — and nothing consumed it. This record makes its three consumers agree with it instead of minting a taxonomy beside it:
+
+- `schemas/validation-v1/failure.schema.json` typed `category` as a bare string, so a failure packet could carry a class no registry entry uses. It now declares the enum, and the gate fails if its members stop equalling the MCF category enum.
+- `schemas/recovery-v1/recovery.schema.json` typed its `actions` items as bare objects, so a recorded recovery action could name anything at all. Its items now carry a closed `action` enum and a closed `outcome` enum.
+- `schemas/validation-v1/failure-class-policies.json` is new and owns one thing: the recovery action the controller takes for a failure of each class.
+
+Reason. The repository had a closed, gate-enforced failure taxonomy and no file that said what to do about a failure of a given class, so every subsystem was free to invent one and none was written down. The class was also unrepresentable in the one record that captures a failure. The gap was therefore not a missing vocabulary but three missing bindings to a vocabulary that already existed.
+
+Actions are existing operation ids, not a new verb list. `schemas/service-contracts-v1/registry.json` already declares what the controller can do, and the bridge is generated from it; a second list of action names would be a second source of truth for the same fact and would drift from the generated surface. The gate resolves every action against that registry, so a mapping cannot name an operation that does not exist.
+
+`UNKNOWN` is not a class. A failure the controller cannot classify is recorded through the mapping's `fallback`, whose class is `UNKNOWN` and whose `is_success` must be `false`. The class enum is closed and the gate fails if `UNKNOWN` ever becomes a member of it, because UNKNOWN is the absence of a classification rather than a classification (DEC-083). Classification is computed by the controller from observed facts; a diagnosis record proposes (`diagnosis.schema.json:proposed_actions`) and the controller decides, so no agent's self-report becomes a failure class or a recovery action.
+
+Repair budgets become enforced. `schemas/validation-v1/repair-policies.json` was read by nothing: its retry limits could be edited to any value at all and the gate stayed green, which is the difference between a threshold and a stated intention. The gate now checks that its budgets are positive whole numbers, that the rules forbidding test deletion and acceptance weakening are still `true` (AGENTS.md section 20 forbids both unconditionally), and that the regression budget cannot exceed the total attempt budget. The values stay owned by that one file: the check is shape and satisfiability, not a restatement of the numbers.
+
+Compatibility impact. REFINEMENT and ADDITIVE, with two tightenings. `failure.schema.json` now rejects a class outside the enum, and `recovery.schema.json` now rejects an action outside its enum and requires `action` and `outcome`. Nothing in the repository produces either record — no Rust struct, no INSERT path and no bridge operation writes a failure packet or a recovery — so no stored data and no caller is affected.
+
+Migration/reconciliation: none. No table, column or index changes, and nothing was ever stored in these shapes.
+
+Tests affected. The contract gate gains a failure-class section, and 13 mutations in `tools/contracts/mutations.mjs` prove each rule fires: a class mapping an undeclared operation, a class left with no handling, an invented class, a fallback claiming success, a fallback claiming to be a real class, a class dropped from the packet enum, the packet enum reverting to free text, an action the recovery record cannot express, an outcome enum without UNKNOWN, an unsatisfiable regression budget, the test-deletion rule turned off, a zero repair budget, and a prose-only control that must stay green.
+
+Known limitations: (1) The mapping is a policy statement and nothing dispatches from it yet — no recovery loop exists, so the actions are declared and unexercised. (2) `diagnosis.schema.json:proposed_actions` remains an array of free strings; binding an agent's proposal to the same action enum is a separate decision, because a proposal is not an action the controller took. (3) `failure.schema.json`'s `scope` is still an untyped object. (4) The class vocabulary has 18 members because the MCF enum has 18; a class this repository needs but the protocol does not have would require an MCF change, which this record does not make.
+
 

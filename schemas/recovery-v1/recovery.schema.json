@@ -8,6 +8,11 @@
     "recovery_id":{"type":"string","format":"uuid"},"scope":{"type":"object","required":["project_id"],"properties":{"project_id":{"type":"string","format":"uuid"},"session_id":{"type":["string","null"],"format":"uuid"},"task_id":{"type":["string","null"],"format":"uuid"}}},
     "state":{"enum":["DETECTED","RECORDING","QUIESCING","VERIFYING_PROCESS","VERIFYING_WORKSPACE","RECONCILING_BUS","RECONCILING_LEASES","REBUILDING_CONTEXT","REASSESSING","RESUMING","REASSIGNING","BLOCKED","RESOLVED"]},
     "started_at":{"type":"string","format":"date-time"},"completed_at":{"type":["string","null"],"format":"date-time"},
-    "failure_refs":{"type":"array","items":{"type":"string","format":"uuid"}},"actions":{"type":"array","items":{"type":"object"}}
+    "failure_refs":{"type":"array","items":{"type":"string","format":"uuid"}},
+    "actions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["action","outcome"],"properties":{
+      "action":{"enum":["ContextService.request_sync","TaskService.retry_task","TaskService.reassign_task","WorkspaceService.rollback_workspace","RepairService.create_repair","PolicyService.approve_action","RecoveryService.replay_event","RecoveryService.replay_dead_letter","RecoveryService.start_recovery","RecoveryService.resolve_recovery"]},
+      "outcome":{"enum":["SUCCEEDED","FAILED","BLOCKED","UNKNOWN"]},
+      "failure_ref":{"type":["string","null"],"format":"uuid"},"detail":{"type":["string","null"]}
+    }}}
   }
 }

@@ -30,6 +30,7 @@ Review findings become repair tasks.
 
 A failure packet captures:
 
+- failure class, from the closed taxonomy owned by `schemas/mcf-v2/error.schema.json`
 - stable failure fingerprint
 - command/execution
 - exit code
@@ -97,7 +98,17 @@ COMPLETE is unreachable by agent declaration. It is a controller-owned terminal 
 
 ## Machine-readable validation contracts
 
-Failure packets, diagnoses, repairs, reviews and controller certification use schemas under schemas/validation-v1/. Repair retry and anti-loop limits are defined by repair-policies.json.
+Failure packets, diagnoses, repairs, reviews and controller certification use schemas under schemas/validation-v1/. Repair retry and anti-loop limits are defined by repair-policies.json; the contract gate checks that its budgets are positive whole numbers and that its rules against test deletion and acceptance weakening are still in force, because a threshold nothing reads is a threshold that is not in force.
+
+### Failure classification and recovery actions
+
+A failure packet's `category` is its **failure class**, and that vocabulary has exactly one owner: the `category` enum in `schemas/mcf-v2/error.schema.json` — the same closed set every code in `schemas/error-v1/registry.json` is classified under. `schemas/validation-v1/failure.schema.json` declares no class of its own and restates no member, and the gate fails if the two lists stop matching.
+
+The class decides what the controller does about the failure. `schemas/validation-v1/failure-class-policies.json` maps each class to one recovery action, and the actions are operation ids that `schemas/service-contracts-v1/registry.json` already declares rather than a second verb vocabulary, so a mapping cannot name an operation that does not exist. `schemas/recovery-v1/recovery.schema.json` records those actions and the outcome each reached, and the gate requires the two files to name the same actions: an action the record cannot express is unreachable, and an action no class maps to exists only to look complete.
+
+Classification is computed by the controller from observed facts — the packet, the exit code and the registry entry — and never from an agent's self-report. A diagnosis record proposes candidate causes and actions (`diagnosis.schema.json:proposed_actions`); the controller decides.
+
+A failure the controller cannot classify is recorded as `UNKNOWN`. `UNKNOWN` is deliberately not a member of the class enum and is not a class: it is the explicit statement that none was determined. It is never treated as success, never silently retried and never counted as a pass (DEC-083).
 
 
 ## Certification provenance and regression locks

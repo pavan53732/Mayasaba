@@ -290,6 +290,32 @@ only thing that can release the priority-100 work.
 31-edge chain, the waiting rule, tie-break preservation, determinism, the limit interaction, cycles and project
 scoping, and the 22 characterization tests that pin the previous ordering still pass unchanged.
 
+## Cross-cutting — Failure classification and recovery actions (DEC-109)
+
+Recorded here rather than under a milestone, for the same reason as the blocks above: a closed failure taxonomy
+already existed and was already enforced against the error registry, and no milestone owned the question of what
+the controller does about a failure of a given class. The class was also unrepresentable in the one record that
+captures a failure, so the gap was three missing bindings rather than a missing vocabulary.
+
+- a failure packet's class is the `category` enum in `schemas/mcf-v2/error.schema.json`, whose members
+  `schemas/error-v1/registry.json` already classifies every error code under
+- `schemas/validation-v1/failure-class-policies.json` maps each of the 18 classes to one recovery action, and the
+  actions are operation ids `schemas/service-contracts-v1/registry.json` already declares rather than a new verb
+  vocabulary, so a mapping cannot name an operation that does not exist
+- `schemas/recovery-v1/recovery.schema.json` records those actions and the outcome each reached, and the gate
+  requires the two files to name the same actions
+- an unclassifiable failure is recorded as `UNKNOWN`, which is deliberately not a member of the class enum and is
+  never a success (DEC-083); the controller computes the class from observed facts, never from an agent's
+  self-report
+- `schemas/validation-v1/repair-policies.json` is no longer inert: its budgets must be positive whole numbers and
+  satisfiable, and its rules against test deletion and acceptance weakening must stay in force
+- **dispatching the mapped action** — no recovery loop exists, so the actions are declared and unexercised — is
+  the remaining work
+
+**Status: the classification, the mapping and the repair budgets are enforced; nothing dispatches them.** The
+contract gate gained a failure-class section, and 13 mutations prove each rule fires, including a prose-only
+control that must stay green.
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

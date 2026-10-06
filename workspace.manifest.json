@@ -184,6 +184,7 @@
     "schemas/agent-adapter-v1/native-event.schema.json",
     "schemas/agent-adapter-v1/native-to-mcf.registry.json",
     "schemas/validation-v1/failure.schema.json",
+    "schemas/validation-v1/failure-class-policies.json",
     "schemas/validation-v1/diagnosis.schema.json",
     "schemas/validation-v1/repair.schema.json",
     "schemas/validation-v1/review.schema.json",

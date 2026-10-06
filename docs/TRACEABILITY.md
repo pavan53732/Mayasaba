@@ -144,6 +144,12 @@ the rows at the end are what does not exist, recorded rather than implied.
 | Effective priority is derived at selection time and is never stored | DEC-108 | `schemas/sqlite-v1/schema.sql` declares no column for it; `crates/storage/src/lib.rs` derives it from `tasks` and `task_dependencies` | VALIDATED |
 | Selection terminates on a cyclic dependency graph and answers identically on every run | DEC-108 | `crates/tasks/tests/selection.rs` cycle and self-dependency cases | VALIDATED |
 | A production caller of `select_schedulable_tasks` | DEC-108 | - | NOT_ADDRESSED |
+| A failure packet's class is a member of the one closed class vocabulary | DEC-109 | `schemas/validation-v1/failure.schema.json` declares the enum; `tools/contracts/verify.mjs` fails when it stops equalling the MCF category enum | VALIDATED |
+| Every failure class maps to a recovery action the contract already declares | DEC-109 | `schemas/validation-v1/failure-class-policies.json`; `tools/contracts/verify.mjs` resolves each action against `schemas/service-contracts-v1/registry.json` | VALIDATED |
+| A recovery record and the class mapping name the same actions | DEC-109 | `schemas/recovery-v1/recovery.schema.json` declares the action and outcome enums; `tools/contracts/verify.mjs` requires set equality with the mapping | VALIDATED |
+| An unclassifiable failure is recorded as `UNKNOWN` and is never a success | DEC-109 | `schemas/validation-v1/failure-class-policies.json` fallback; `tools/contracts/verify.mjs` fails if `is_success` is not `false`, or if `UNKNOWN` becomes a member of the class enum | VALIDATED |
+| Repair budgets are positive whole numbers, satisfiable, and still forbid test deletion and acceptance weakening | DEC-109 | `schemas/validation-v1/repair-policies.json`; `tools/contracts/verify.mjs` | VALIDATED |
+| A recovery loop that dispatches the mapped action | DEC-109 | - | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
@@ -164,6 +170,14 @@ caller is `NOT_ADDRESSED`: the rule is implemented and tested, and the wiring th
 exist. The "never stored" row is `VALIDATED` by the absence of a column rather than by a test, since a schema
 cannot be asked to prove a negative; what the tests do assert is the positive half, that `effective_priority`
 equals `priority` when nothing is waiting on a task.
+
+The failure-class rows are `VALIDATED` against the contract gate rather than against a running recovery loop.
+Each names the check that fails when two files disagree, and each such check is proved by a mutation in
+`tools/contracts/mutations.mjs` that reintroduces the divergence and requires the gate to name it — a check that
+has never been shown to fail is an assertion, not a check. What is not addressed is the loop itself: the mapping
+says what the controller would do about a failure of each class, and nothing dispatches it, which is why that row
+is `NOT_ADDRESSED` rather than `IMPLEMENTED`. The repair-budget row is `VALIDATED` for shape and satisfiability
+only; the numbers themselves stay owned by `repair-policies.json` and no check restates them.
 
 ## Persistence implementation
 
