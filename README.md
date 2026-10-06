@@ -286,13 +286,14 @@ report lines for the current numbers.
 
 What is implemented:
 
-- A working vertical slice through Tauri into SQLite. Four handlers are registered in
-  `apps/desktop/src-tauri/src/main.rs` (`generate_handler!`) and called by the Control Room intake surface:
+- A working vertical slice through Tauri into SQLite. The four handlers the Control Room intake surface calls are
+  registered in `apps/desktop/src-tauri/src/main.rs` (`generate_handler!`):
   `create_project`, `list_projects`, `get_recovery_status` and `validate_workspace`. All four names are
   declared in the bridge contract — `create_project` (a declared command) and `list_projects`,
   `get_recovery_status` and `validate_workspace` (declared queries). The contract also still declares
-  `validate_configuration`, which nothing implements. The remaining 31 declared commands and 24 declared
-  queries have no handler. The gate reads both sides: it parses the `#[tauri::command]` functions and the
+  `validate_configuration`, which nothing implements. Those four are the intake slice, not the whole of what is
+  registered: the gate's report line states how many declared operations are implemented and how many have no
+  handler, and that line is where those figures live. The gate reads both sides: it parses the `#[tauri::command]` functions and the
   `generate_handler![...]` list out of `main.rs`, and the `transport(...)` call sites out of the frontend, so a
   handler or a call that names an undeclared operation fails the gate, while a declared operation that nothing
   implements is reported with its count rather than failed. DEC-053 records the drift this closed. Every field

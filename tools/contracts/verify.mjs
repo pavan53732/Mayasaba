@@ -2657,7 +2657,13 @@ if(optionalFieldsNotAccepted.length) console.log(
   `Declared optional request fields the handler does not accept (reported, not blocking; the contract leads implementation): ${optionalFieldsNotAccepted.join(", ")}`
 );
 // The reported half of the two-way bridge gate. Stated every run, including when it is large, because a gap
-// that is only visible in a document is a gap that drifts; the README figure and this line are the same fact.
+// that is only visible in a document is a gap that drifts. This line is the only place the figure is stated:
+// the gate does not read README.md, so a figure repeated there is a second source of truth that nothing
+// compares against this one, and the two had already drifted apart (the README said four handlers registered
+// and 31 commands and 24 queries unimplemented while this line computed 12, 30 and 21) before the duplicate
+// was removed. An earlier version of this comment claimed "the README figure and this line are the same fact",
+// which described an enforcement that was never implemented - the same failure mode as a document asserting a
+// property no check can see.
 console.log(`Bridge: ${bridgeImplemented.length} of ${declaredOps.size} declared operations implemented; ${bridgeUnimplemented.length} declared with no handler (reported, not blocking)`);
 if(bridgeUnimplemented.length){
   const lines=[];let current="";
