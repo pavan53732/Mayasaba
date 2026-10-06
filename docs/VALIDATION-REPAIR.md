@@ -91,6 +91,8 @@ Required evidence is derived from the task's acceptance criteria and includes ap
 
 Software build, runtime and packaging evidence is not a universal gate for non-software local artifact work.
 
+A passing validation is not yet a certification decision. The interval between the two is recorded as a release candidate: `release_candidates` names the `validation_id` it was cut from and the artifact hashes it would ship, and it is refused unless that validation passed. A certification binding may only be `ASSERTED` against a validation that has an open `PROPOSED` candidate, so certification decides on a nomination rather than on a validation directly (DEC-111). The candidate carries no certification state of its own; the binding is the decision.
+
 ## 10. Completion
 
 COMPLETE is unreachable by agent declaration. It is a controller-owned terminal state after all applicable validation gates are satisfied.

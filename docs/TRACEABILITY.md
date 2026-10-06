@@ -156,6 +156,12 @@ the rows at the end are what does not exist, recorded rather than implied.
 | `TEXT_CONFLICT` is excluded, with the reason recorded and enforced | DEC-110 | `schemas/workspace-v1/integration-conflict-classes.json` `excluded`; `tools/contracts/verify.mjs` fails if the reason is removed or the class is added | VALIDATED |
 | A post-merge attribution may only be cited by an `INTEGRATION_ADMISSION` | DEC-110 | `crates/storage/tests/orchestration_reliability.rs`; `insert_admission` rejects it on a `WORKSPACE_ADMISSION` | VALIDATED |
 | Code that computes a conflict class from observed facts | DEC-110 | - | NOT_ADDRESSED |
+| A release candidate is cut only from a validation that passed | DEC-111 | `crates/storage/tests/orchestration_reliability.rs`; `insert_release_candidate` reads the validation verdict before writing | VALIDATED |
+| An `ASSERTED` certification binding decides on a nominated release candidate | DEC-111 | `crates/storage/tests/orchestration_reliability.rs`; `insert_certification_binding` requires an open `PROPOSED` candidate | VALIDATED |
+| A release candidate cannot record certification itself | DEC-111 | `schemas/sqlite-v1/schema.sql` declares no certification column and the status vocabulary has no `CERTIFIED` member | VALIDATED |
+| A vocabulary declared in Rust and as a SQL CHECK constraint must agree | DEC-111 | `tools/contracts/verify.mjs` compares 18 constants with the constraint that enforces each | VALIDATED |
+| An operation that rejects, supersedes or withdraws a release candidate | DEC-111 | - | NOT_ADDRESSED |
+| A production caller that nominates a release candidate | DEC-111 | - | NOT_ADDRESSED |
 
 The `IMPLEMENTED` rows are the shell wiring, and they are deliberately not `VALIDATED`: `apps/desktop/src/App.tsx`
 has no test, because the desktop suite runs without a DOM. The two `NOT_ADDRESSED` capture rows are the reason
@@ -194,6 +200,17 @@ than only that an error occurred, since the re-evaluation rule would otherwise a
 would pass while proving nothing. The `NOT_ADDRESSED` row is the honest half of the gap: nothing computes a
 conflict class yet, so `insert_admission` validates a classification it is always handed by a test. The vocabulary
 is closed and enforced, and it is not yet derived.
+
+The release-candidate rows are `VALIDATED` against `crates/storage`, because that is where the stage is enforced:
+a schema declares the table, and the two rules that make it a stage rather than a label are the insert checks. The
+"cannot record certification itself" row is `VALIDATED` by absence — no column and no `CERTIFIED` member — since a
+schema cannot be asked to prove a negative; what the tests assert is the positive half, that the candidate's status
+vocabulary is refused for anything outside `PROPOSED` on insert. The vocabulary-pairing row is `VALIDATED` against
+the contract gate, and its evidence is deliberately wider than this decision: the check compares eighteen constants,
+two of which are mutated in `tools/contracts/mutations.mjs` to prove it can fail on a vocabulary that predates the
+change. The two `NOT_ADDRESSED` rows are the reason the stage is enforced and unexercised: nothing nominates a
+candidate outside a test, and nothing moves one out of `PROPOSED`, so `REJECTED`, `SUPERSEDED` and `WITHDRAWN` are
+declared and unreachable.
 
 ## Persistence implementation
 

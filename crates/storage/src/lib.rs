@@ -4256,6 +4256,36 @@ pub struct NewCertificationBinding {
     pub created_at: String,
 }
 
+/// A recorded nomination of a passing validation as a release candidate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseCandidateRecord {
+    pub release_candidate_id: String,
+    pub project_id: String,
+    pub validation_id: String,
+    pub status: String,
+    pub artifact_hashes_json: String,
+    pub reason: Option<String>,
+    pub supersedes_release_candidate_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A release candidate to record: the stage between a passing validation and a certification decision.
+///
+/// The candidate names the validation run rather than restating its inputs, so it cannot disagree with the
+/// evidence that validation was recorded against and cannot be built from a validation that did not pass.
+pub struct NewReleaseCandidate {
+    pub release_candidate_id: String,
+    pub project_id: String,
+    pub validation_id: String,
+    pub status: String,
+    pub artifact_hashes_json: String,
+    pub reason: Option<String>,
+    pub supersedes_release_candidate_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 const TASK_ATTEMPT_STATES: &[&str] = &[
     "CREATED",
     "STARTED",
@@ -4362,6 +4392,14 @@ const RESOURCE_STATES: &[&str] = &["HELD", "RELEASED", "EXPIRED", "LOST"];
 const REVISION_SOURCES: &[&str] = &["CONTROLLER", "AGENT", "USER", "EXTERNAL", "GIT"];
 const REVISION_STATES: &[&str] = &["EXPECTED", "VERIFIED", "DRIFTED", "UNKNOWN"];
 const CERTIFICATION_STATES: &[&str] = &["ASSERTED", "INVALIDATED", "EXPIRED"];
+/// The states a release candidate may be in, checked against the `release_candidates.status` CHECK constraint by
+/// the contract gate so the two declarations of one vocabulary cannot drift.
+///
+/// `PROPOSED` is the only state a new candidate may enter: a candidate is a nomination awaiting a certification
+/// decision, and a record that starts `REJECTED` would be a decision with no nomination behind it. Certification
+/// is deliberately not a state here - it is the `certification_bindings` row that decides on the candidate - so
+/// certification is recorded in exactly one place (DEC-111).
+const RELEASE_CANDIDATE_STATES: &[&str] = &["PROPOSED", "REJECTED", "SUPERSEDED", "WITHDRAWN"];
 
 impl Storage {
     /// Admit and activate one task lease in a single transaction.
@@ -7783,11 +7821,167 @@ impl Storage {
                 column: "certification_bindings.artifact_hashes_json".to_string(),
             });
         }
+        // Certification is the decision a release candidate exists to receive. Without this the stage between
+        // "the tests pass" and "this is certified" is recorded nowhere, and a binding can be asserted straight
+        // from any passing validation (DEC-111). The check is last so that a malformed record is still reported
+        // as malformed rather than as un-nominated.
+        if new.status == "ASSERTED" {
+            let candidate: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT release_candidate_id FROM release_candidates
+                     WHERE project_id=?1 AND validation_id=?2 AND status='PROPOSED'
+                     ORDER BY created_at DESC, release_candidate_id DESC LIMIT 1",
+                    rusqlite::params![new.project_id, new.validation_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(StorageError::Db)?;
+            if candidate.is_none() {
+                return Err(StorageError::Malformed {
+                    column: "certification_bindings.validation_id".to_string(),
+                    detail: format!(
+                        "validation {} has no open PROPOSED release candidate; ASSERTED certification decides on a nominated candidate rather than certifying a validation directly",
+                        new.validation_id
+                    ),
+                });
+            }
+        }
         self.conn.execute(
             "INSERT INTO certification_bindings (certification_binding_id, project_id, task_id, validation_id, workspace_revision_id, environment_snapshot_id, artifact_hashes_json, validator_version, test_suite_version, status, supersedes_binding_id, reason, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             rusqlite::params![new.certification_binding_id,new.project_id,new.task_id,new.validation_id,new.workspace_revision_id,new.environment_snapshot_id,new.artifact_hashes_json,new.validator_version,new.test_suite_version,new.status,new.supersedes_binding_id,new.reason,new.created_at],
         ).map_err(StorageError::Db)?;
         Ok(())
+    }
+
+    /// Records a release candidate: the stage between a passing validation and a certification decision.
+    ///
+    /// A candidate is cut only from a validation that passed, because a candidate is a nomination of validated
+    /// work and nominating a failed validation would record a decision nothing supports. The candidate names the
+    /// validation run rather than copying its inputs, so the two cannot disagree (DEC-082, DEC-111).
+    pub fn insert_release_candidate(&self, new: &NewReleaseCandidate) -> Result<()> {
+        require_vocabulary(
+            "release_candidates.status",
+            &new.status,
+            RELEASE_CANDIDATE_STATES,
+        )?;
+        if new.status != "PROPOSED" {
+            return Err(StorageError::Malformed {
+                column: "release_candidates.status".to_string(),
+                detail: format!(
+                    "a new release candidate enters PROPOSED, not {}; a candidate is a nomination awaiting a certification decision",
+                    new.status
+                ),
+            });
+        }
+        let validation: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT project_id, verdict FROM validation_runs WHERE validation_id = ?1",
+                [new.validation_id.as_str()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(StorageError::Db)?;
+        let (validation_project, validation_verdict) = match validation {
+            Some(v) => v,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "validation run {}",
+                    new.validation_id
+                )))
+            }
+        };
+        if validation_project != new.project_id {
+            return Err(StorageError::Malformed {
+                column: "release_candidates.project_id".to_string(),
+                detail: format!(
+                    "validation {} belongs to project {validation_project}, not {}",
+                    new.validation_id, new.project_id
+                ),
+            });
+        }
+        if validation_verdict != "PASS" {
+            return Err(StorageError::Malformed {
+                column: "release_candidates.validation_id".to_string(),
+                detail: format!(
+                    "validation {} has verdict {validation_verdict}; a release candidate is cut only from a passing validation",
+                    new.validation_id
+                ),
+            });
+        }
+        let hashes_ok: i64 = self
+            .conn
+            .query_row(
+                "SELECT CASE WHEN json_valid(?1) = 1 AND json_type(?1, '$') = 'array' THEN 1 ELSE 0 END",
+                [new.artifact_hashes_json.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(StorageError::Db)?;
+        if hashes_ok != 1 {
+            return Err(StorageError::MalformedJson {
+                column: "release_candidates.artifact_hashes_json".to_string(),
+            });
+        }
+        if let Some(parent_id) = new.supersedes_release_candidate_id.as_deref() {
+            let parent: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT project_id FROM release_candidates WHERE release_candidate_id = ?1",
+                    [parent_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(StorageError::Db)?;
+            match parent {
+                None => {
+                    return Err(StorageError::NotFound(format!(
+                        "release candidate {parent_id}"
+                    )))
+                }
+                Some(project) if project != new.project_id => {
+                    return Err(StorageError::Malformed {
+                        column: "release_candidates.supersedes_release_candidate_id".to_string(),
+                        detail: format!("candidate {parent_id} belongs to another project"),
+                    })
+                }
+                Some(_) => {}
+            }
+        }
+        self.conn.execute(
+            "INSERT INTO release_candidates (release_candidate_id, project_id, validation_id, status, artifact_hashes_json, reason, supersedes_release_candidate_id, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            rusqlite::params![new.release_candidate_id,new.project_id,new.validation_id,new.status,new.artifact_hashes_json,new.reason,new.supersedes_release_candidate_id,new.created_at,new.updated_at],
+        ).map_err(StorageError::Db)?;
+        Ok(())
+    }
+
+    /// The most recent release candidate for a project, which is the one a certification decision is made about.
+    pub fn get_latest_release_candidate(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ReleaseCandidateRecord>> {
+        self.conn
+            .query_row(
+                "SELECT release_candidate_id, project_id, validation_id, status, artifact_hashes_json, reason, supersedes_release_candidate_id, created_at, updated_at
+                 FROM release_candidates WHERE project_id=?1
+                 ORDER BY created_at DESC, release_candidate_id DESC LIMIT 1",
+                [project_id],
+                |r| {
+                    Ok(ReleaseCandidateRecord {
+                        release_candidate_id: r.get(0)?,
+                        project_id: r.get(1)?,
+                        validation_id: r.get(2)?,
+                        status: r.get(3)?,
+                        artifact_hashes_json: r.get(4)?,
+                        reason: r.get(5)?,
+                        supersedes_release_candidate_id: r.get(6)?,
+                        created_at: r.get(7)?,
+                        updated_at: r.get(8)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(StorageError::Db)
     }
 }
 

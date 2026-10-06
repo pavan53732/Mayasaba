@@ -45,6 +45,7 @@ WorkspaceRevision
 ResourceReservation
 EnvironmentSnapshot
 CertificationBinding
+ReleaseCandidate
 Admission
 CommandExecution
 Build

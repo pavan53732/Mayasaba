@@ -344,6 +344,34 @@ field was an array of free strings that nothing inspected.
 storage tests assert the error detail rather than only that an error occurred, and 10 mutations prove each gate
 rule fires, including a prose-only control that must stay green.
 
+## Cross-cutting — Release-candidate stage (DEC-111)
+
+Recorded here rather than under a milestone because no milestone owned the interval between a passing validation
+and a certification decision. `project.PACKAGE` already sits between `FINAL_VALIDATION` and `COMPLETE` in the
+machine-readable project machine, but it is a lifecycle label with no artifact, no hash and no evidence attached,
+and it is not bound to the inputs certification binds — so the repository named the stage and recorded nothing
+about it.
+
+- `release_candidates` is a new table: a candidate names the `validation_id` it is cut from and the artifact hashes
+  it would ship, and it is refused unless that validation passed
+- the candidate names the validation rather than restating its inputs, so it cannot disagree with the evidence the
+  validation was recorded against (DEC-082)
+- `status` is closed to `PROPOSED`, `REJECTED`, `SUPERSEDED`, `WITHDRAWN`, and a new candidate enters `PROPOSED`;
+  certification is deliberately not a state here, because the `certification_bindings` row is the decision and
+  recording it twice is what DEC-084 and DEC-085 forbid
+- `insert_certification_binding` now refuses an `ASSERTED` binding whose validation has no open `PROPOSED`
+  candidate, which is what makes the stage a stage rather than a label
+- the gate gained a Rust/SQLite vocabulary pairing check: 18 constants are compared with the `CHECK` constraint
+  that enforces each, so a vocabulary declared twice cannot drift. Six constraints still have no Rust constant and
+  the gate reports them rather than failing
+- **nominating, rejecting, superseding or withdrawing a candidate** — nothing produces one outside a test, and
+  nothing moves one out of `PROPOSED` — is the remaining work
+
+**Status: the stage is enforced in both directions; nothing enters it in production.** Because `ASSERTED`
+certification now requires a candidate, an `ASSERTED` binding is unreachable in production until something
+nominates one. That is recorded rather than worked around. Five storage tests cover the stage and 7 mutations prove
+the gate rules fire.
+
 ## Release gate
 
 No release is considered production-ready until protocol, adapter, recovery, workspace, execution, validation and certification tests pass.

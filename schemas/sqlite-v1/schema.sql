@@ -713,6 +713,21 @@ CREATE TABLE IF NOT EXISTS certification_bindings (
   FOREIGN KEY(environment_snapshot_id) REFERENCES environment_snapshots(environment_snapshot_id),
   FOREIGN KEY(supersedes_binding_id) REFERENCES certification_bindings(certification_binding_id)
 );
+CREATE TABLE IF NOT EXISTS release_candidates (
+  release_candidate_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  validation_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PROPOSED','REJECTED','SUPERSEDED','WITHDRAWN')),
+  artifact_hashes_json TEXT NOT NULL,
+  reason TEXT,
+  supersedes_release_candidate_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(supersedes_release_candidate_id),
+  FOREIGN KEY(project_id) REFERENCES projects(project_id),
+  FOREIGN KEY(validation_id) REFERENCES validation_runs(validation_id),
+  FOREIGN KEY(supersedes_release_candidate_id) REFERENCES release_candidates(release_candidate_id)
+);
 CREATE TABLE IF NOT EXISTS evidence_links (
   evidence_id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,

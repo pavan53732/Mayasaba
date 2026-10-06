@@ -62,6 +62,35 @@ fn seed_task_lease_workspace(storage: &mut Storage) {
     ).expect("lease");
 }
 
+/// A validation run with the given verdict, so a test states the fact it depends on rather than a SQL string.
+fn add_validation(storage: &Storage, validation_id: &str, verdict: &str) {
+    storage
+        .conn()
+        .execute(
+            &format!(
+                "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('{validation_id}','prj_reliability','task_1','{{}}','{{}}','{verdict}','1')"
+            ),
+            [],
+        )
+        .expect("validation");
+}
+
+/// A release candidate for the seeded project, cut from `validation_id`. Every other field is valid, so a
+/// rejection can only be about what the caller changed.
+fn release_candidate(validation_id: &str) -> mayasaba_storage::NewReleaseCandidate {
+    mayasaba_storage::NewReleaseCandidate {
+        release_candidate_id: "rc_1".into(),
+        project_id: "prj_reliability".into(),
+        validation_id: validation_id.into(),
+        status: "PROPOSED".into(),
+        artifact_hashes_json: "[]".into(),
+        reason: None,
+        supersedes_release_candidate_id: None,
+        created_at: "2".into(),
+        updated_at: "2".into(),
+    }
+}
+
 #[test]
 fn reliability_tables_are_created_and_have_the_declared_guards() {
     let storage = Storage::open_in_memory().expect("open");
@@ -383,9 +412,11 @@ fn certification_binding_supersession_is_append_only() {
     use mayasaba_storage::NewCertificationBinding;
     let mut storage = project_storage();
     seed_task_lease_workspace(&mut storage);
-    storage.conn().execute(
-        "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_1','prj_reliability','task_1','{}','{}','PASS','1')", []
-    ).expect("validation");
+    add_validation(&storage, "val_1", "PASS");
+    // An ASSERTED binding decides on a nominated candidate, so the candidate has to exist first (DEC-111).
+    storage
+        .insert_release_candidate(&release_candidate("val_1"))
+        .expect("release candidate");
     storage
         .insert_certification_binding(&NewCertificationBinding {
             certification_binding_id: "cert_1".into(),
@@ -1160,4 +1191,226 @@ fn a_post_merge_attribution_belongs_only_to_an_integration_record() {
         detail.contains("can only be cited by an INTEGRATION_ADMISSION"),
         "a workspace admission must not attribute a post-merge failure, got: {detail}"
     );
+}
+
+#[test]
+fn a_release_candidate_is_cut_only_from_a_passing_validation() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+    add_validation(&storage, "val_pass", "PASS");
+    add_validation(&storage, "val_fail", "FAIL");
+
+    // A candidate is a nomination of validated work, so nominating a failed validation would record a decision
+    // that nothing supports.
+    let detail = match storage.insert_release_candidate(&release_candidate("val_fail")) {
+        Ok(_) => panic!("a failing validation must not produce a release candidate"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed candidate, got {other:?}"),
+    };
+    assert!(
+        detail.contains("cut only from a passing validation"),
+        "got: {detail}"
+    );
+
+    // A candidate names a recorded validation run; without one it would nominate nothing.
+    assert!(
+        storage
+            .insert_release_candidate(&release_candidate("missing_validation"))
+            .is_err(),
+        "a release candidate must reference a recorded validation"
+    );
+
+    // The candidate and the validation must describe the same project, or the nomination crosses a boundary the
+    // validation never covered.
+    let mut crossed = release_candidate("val_pass");
+    crossed.project_id = "prj_absent".into();
+    let detail = match storage.insert_release_candidate(&crossed) {
+        Ok(_) => panic!("a candidate must not name another project's validation"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed candidate, got {other:?}"),
+    };
+    assert!(detail.contains("belongs to project"), "got: {detail}");
+
+    // The legitimate case still works, so the checks above are not refusing every candidate.
+    storage
+        .insert_release_candidate(&release_candidate("val_pass"))
+        .expect("a passing validation produces a candidate");
+    let stored = storage
+        .get_latest_release_candidate("prj_reliability")
+        .expect("latest")
+        .expect("candidate");
+    assert_eq!(stored.release_candidate_id, "rc_1");
+    assert_eq!(stored.validation_id, "val_pass");
+    assert_eq!(stored.status, "PROPOSED");
+}
+
+#[test]
+fn a_new_release_candidate_enters_proposed() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+    add_validation(&storage, "val_pass", "PASS");
+
+    // A candidate is a nomination awaiting a certification decision, so a record that starts already decided
+    // would be a decision with no nomination behind it.
+    for status in ["REJECTED", "SUPERSEDED", "WITHDRAWN"] {
+        let mut candidate = release_candidate("val_pass");
+        candidate.status = status.into();
+        let detail = match storage.insert_release_candidate(&candidate) {
+            Ok(_) => panic!("a new candidate must not start {status}"),
+            Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+            Err(other) => panic!("expected a malformed candidate, got {other:?}"),
+        };
+        assert!(detail.contains("enters PROPOSED"), "{status}: {detail}");
+    }
+
+    // A status outside the vocabulary is refused by the vocabulary check rather than by the PROPOSED rule, and
+    // the message has to say so or the two rules are indistinguishable to whoever reads the failure.
+    let mut invented = release_candidate("val_pass");
+    invented.status = "SHIPPED".into();
+    let detail = match storage.insert_release_candidate(&invented) {
+        Ok(_) => panic!("an invented status must be refused"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed candidate, got {other:?}"),
+    };
+    assert!(
+        detail.contains("is not one of PROPOSED, REJECTED, SUPERSEDED, WITHDRAWN"),
+        "got: {detail}"
+    );
+}
+
+#[test]
+fn release_candidate_artifact_hashes_must_be_an_array() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+    add_validation(&storage, "val_pass", "PASS");
+    let mut bad = release_candidate("val_pass");
+    bad.artifact_hashes_json = "{}".into();
+    assert!(
+        storage.insert_release_candidate(&bad).is_err(),
+        "artifact hashes must be a JSON array"
+    );
+}
+
+#[test]
+fn release_candidate_supersession_names_a_candidate_in_the_same_project() {
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+    add_validation(&storage, "val_pass", "PASS");
+    storage
+        .insert_release_candidate(&release_candidate("val_pass"))
+        .expect("first candidate");
+
+    // Superseding a candidate that does not exist is a dangling reference rather than a replacement.
+    let mut dangling = release_candidate("val_pass");
+    dangling.release_candidate_id = "rc_dangling".into();
+    dangling.supersedes_release_candidate_id = Some("rc_absent".into());
+    let detail = match storage.insert_release_candidate(&dangling) {
+        Ok(_) => panic!("a supersession must name a recorded candidate"),
+        Err(mayasaba_storage::StorageError::NotFound(what)) => what,
+        Err(other) => panic!("expected a not-found candidate, got {other:?}"),
+    };
+    assert!(detail.contains("rc_absent"), "got: {detail}");
+
+    // A candidate may only replace one from its own project, or the chain crosses a boundary. The parent has to
+    // be real for this to test the boundary rather than the dangling reference above.
+    storage
+        .create_project(&mayasaba_storage::NewProject {
+            project_id: "prj_other".into(),
+            local_path: "C:\\work\\other".into(),
+            brief_id: "brf_other".into(),
+            brief_body: "Other".into(),
+            brief_source: "TEST".into(),
+            event_id: "evt_other".into(),
+            created_at: "1".into(),
+        })
+        .expect("other project");
+    storage.conn().execute(
+        "INSERT INTO validation_runs (validation_id, project_id, task_id, scope_json, checks_json, verdict, created_at) VALUES ('val_other','prj_other',NULL,'{}','{}','PASS','1')", []
+    ).expect("other validation");
+    let mut other = release_candidate("val_other");
+    other.release_candidate_id = "rc_other".into();
+    other.project_id = "prj_other".into();
+    storage
+        .insert_release_candidate(&other)
+        .expect("other candidate");
+
+    let mut crossed = release_candidate("val_pass");
+    crossed.release_candidate_id = "rc_crossed".into();
+    crossed.supersedes_release_candidate_id = Some("rc_other".into());
+    let detail = match storage.insert_release_candidate(&crossed) {
+        Ok(_) => panic!("a supersession must stay inside one project"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed candidate, got {other:?}"),
+    };
+    assert!(
+        detail.contains("belongs to another project"),
+        "got: {detail}"
+    );
+
+    // The legitimate case still works, so the checks above are not refusing every supersession.
+    let mut second = release_candidate("val_pass");
+    second.release_candidate_id = "rc_2".into();
+    second.supersedes_release_candidate_id = Some("rc_1".into());
+    second.created_at = "3".into();
+    second.updated_at = "3".into();
+    storage
+        .insert_release_candidate(&second)
+        .expect("superseding candidate");
+    let latest = storage
+        .get_latest_release_candidate("prj_reliability")
+        .expect("latest")
+        .expect("candidate");
+    assert_eq!(latest.release_candidate_id, "rc_2");
+    assert_eq!(
+        latest.supersedes_release_candidate_id.as_deref(),
+        Some("rc_1")
+    );
+}
+
+#[test]
+fn asserted_certification_decides_on_a_nominated_release_candidate() {
+    use mayasaba_storage::NewCertificationBinding;
+    let mut storage = project_storage();
+    seed_task_lease_workspace(&mut storage);
+    add_validation(&storage, "val_pass", "PASS");
+
+    let binding = |id: &str, status: &str| NewCertificationBinding {
+        certification_binding_id: id.into(),
+        project_id: "prj_reliability".into(),
+        task_id: Some("task_1".into()),
+        validation_id: "val_pass".into(),
+        workspace_revision_id: None,
+        environment_snapshot_id: None,
+        artifact_hashes_json: "[]".into(),
+        validator_version: "v1".into(),
+        test_suite_version: None,
+        status: status.into(),
+        supersedes_binding_id: None,
+        reason: None,
+        created_at: "2".into(),
+    };
+
+    // Before DEC-111 an ASSERTED binding could be written straight from any passing validation, so the stage
+    // between "the tests pass" and "this is certified" was recorded nowhere.
+    let detail = match storage.insert_certification_binding(&binding("cert_early", "ASSERTED")) {
+        Ok(_) => panic!("ASSERTED certification must decide on a nominated candidate"),
+        Err(mayasaba_storage::StorageError::Malformed { detail, .. }) => detail,
+        Err(other) => panic!("expected a malformed binding, got {other:?}"),
+    };
+    assert!(
+        detail.contains("no open PROPOSED release candidate"),
+        "got: {detail}"
+    );
+
+    // A record that does not certify is not a decision about a candidate, so it does not need one.
+    storage
+        .insert_certification_binding(&binding("cert_invalidated", "INVALIDATED"))
+        .expect("an invalidation is not a certification decision");
+
+    storage
+        .insert_release_candidate(&release_candidate("val_pass"))
+        .expect("release candidate");
+    storage
+        .insert_certification_binding(&binding("cert_ok", "ASSERTED"))
+        .expect("a nominated candidate can be certified");
 }

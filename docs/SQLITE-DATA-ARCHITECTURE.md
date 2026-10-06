@@ -48,7 +48,7 @@ command_executions, process_records, builds, test_runs
 failures, diagnoses, repairs, reviews, validation_runs
 
 ### Evidence
-artifacts, evidence, evidence_links
+artifacts, evidence, evidence_links, release_candidates
 
 ### User interaction
 user_questions, user_answers, user_contributions, project_context_attachments
@@ -207,6 +207,8 @@ Retry/recovery identity is persisted separately from task identity in `task_atte
 `workspace_revisions` and `environment_snapshots` capture observed physical state and runtime/toolchain provenance. They are append-oriented records used to prove what was actually inspected or executed.
 
 `certification_bindings` pins certification to validation, artifact hashes, workspace revision, environment snapshot and validator/test-suite versions. A later load-bearing mutation creates a superseding/invalidation record rather than rewriting historical certification.
+
+`release_candidates` records the stage between a passing validation and a certification decision (DEC-111). A candidate names the `validation_id` it is cut from rather than restating that validation's inputs, so the candidate and the evidence it was validated against cannot disagree; `insert_release_candidate` refuses a validation that did not pass, and `insert_certification_binding` refuses to `ASSERT` a binding whose validation has no open `PROPOSED` candidate. The table carries no certification state: certification is the `certification_bindings` row that decides on the candidate, so it is recorded in exactly one place. `status` is closed by a `CHECK` constraint and the same vocabulary is declared in `crates/storage`; the contract gate compares the two.
 
 Safe points do not require another table: `workspace_checkpoints.kind = SAFE_POINT` is the canonical representation.
 

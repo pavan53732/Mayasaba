@@ -1043,6 +1043,72 @@ if(sqliteFkLocalProblems.length) fail(
 );
 console.log(`SQLite schema foreign-key structure: checked ${sqlTablesArr.length} table(s); local/target columns are declared`);
 
+// --- Rust vocabulary constants vs the SQL CHECK constraints that enforce the same vocabulary.
+// Every closed vocabulary in this repository is written down twice: once as a `const ... : &[&str]` that the Rust
+// code checks before writing, and once as a `CHECK(col IN (...))` that SQLite enforces on the way in. Nothing
+// compared them, so the two could disagree and the disagreement was invisible - the constant would accept a value
+// the database then rejected, or (worse) the constant would list a value the database forbids, so the code
+// advertised a vocabulary no row could ever hold. `release_candidates.status` was added with this check rather
+// than as a nineteenth unchecked duplicate, and the pairs below are declared rather than inferred: two different
+// constants can share the same value set, so inferring the pairing from set equality silently attaches a
+// vocabulary to whichever column happens to match.
+const VOCAB_PAIRS = [
+  ["TASK_ATTEMPT_STATES", ["task_attempts.state"]],
+  ["RESOURCE_TYPES", ["resource_reservations.resource_type"]],
+  ["RESOURCE_MODES", ["resource_reservations.mode"]],
+  ["RESOURCE_STATES", ["resource_reservations.state"]],
+  ["REVISION_SOURCES", ["workspace_revisions.source"]],
+  ["REVISION_STATES", ["workspace_revisions.status"]],
+  ["CERTIFICATION_STATES", ["certification_bindings.status"]],
+  ["RELEASE_CANDIDATE_STATES", ["release_candidates.status"]],
+  ["ATTACHMENT_KINDS", ["project_context_attachments.kind"]],
+  ["ATTACHMENT_PROVENANCES", ["project_context_attachments.provenance"]],
+  ["DECISION_CLASS_VOCABULARY", ["council_mode_selections.decision_class", "council_decision_outcomes.decision_class"]],
+  ["MODE_VOCABULARY", ["council_mode_selections.mode", "council_decision_outcomes.mode"]],
+  ["OVERRIDE_SOURCE_VOCABULARY", ["council_mode_selections.override_source"]],
+  ["ROLE_VOCABULARY", ["council_round_roles.role"]],
+  ["CLAIM_GRADE_VOCABULARY", ["council_claim_grades.grade"]],
+  ["BUDGET_KIND_VOCABULARY", ["council_budget_ledger.kind"]],
+  ["BUDGET_AVAILABILITY_VOCABULARY", ["council_budget_ledger.availability"]],
+  ["OUTCOME_STATUS_VOCABULARY", ["council_decision_outcomes.status"]],
+];
+const sqlCheckEnums = new Map();
+for (const m of sqlCode.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+  for (const c of m[2].matchAll(/(\w+)\s+TEXT[^,\n]*CHECK\(\s*\1\s+IN\s*\(([^)]*)\)/g)) {
+    sqlCheckEnums.set(`${m[1]}.${c[1]}`, [...c[2].matchAll(/'([^']*)'/g)].map((x) => x[1]));
+  }
+}
+// Read as text rather than through `read`, which parses JSON, and under a name of its own: the integration
+// conflict section further down reads the same file for a different purpose.
+const storageVocabSource = fs.readFileSync(path.join(root, "crates/storage/src/lib.rs"), "utf8");
+const rustVocabulary = (name) => {
+  const m = new RegExp(`const ${name}: &\\[&str\\] = &\\[([\\s\\S]*?)\\];`).exec(storageVocabSource);
+  return m ? [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]) : null;
+};
+const vocabProblems = [];
+for (const [constant, columns] of VOCAB_PAIRS) {
+  const values = rustVocabulary(constant);
+  if (values === null) {
+    vocabProblems.push(`crates/storage/src/lib.rs declares no \`const ${constant}: &[&str] = &[...];\` for the gate to read, so the vocabulary it enforces is compared with nothing`);
+    continue;
+  }
+  if (values.length === 0) vocabProblems.push(`crates/storage/src/lib.rs ${constant} is empty, so it would accept nothing and the comparison below would be vacuous`);
+  for (const column of columns) {
+    const declared = sqlCheckEnums.get(column);
+    if (!declared) {
+      vocabProblems.push(`schemas/sqlite-v1/schema.sql declares no CHECK(${column.split(".")[1]} IN (...)) on ${column}, so ${constant} has nothing to be compared with; either the constraint was dropped or this pair is stale`);
+      continue;
+    }
+    if (declared.join(",") !== values.join(",")) {
+      vocabProblems.push(`${constant} is [${values.join(", ")}] but schema.sql ${column} allows [${declared.join(", ")}]; the constant the code checks and the constraint the database enforces must agree`);
+    }
+  }
+}
+if (vocabProblems.length) fail(vocabProblems.length+" Rust/SQLite vocabulary divergence(s):\n  - "+vocabProblems.join("\n  - ")+"\nA vocabulary declared twice must be declared identically, or one of the two is a promise the other breaks. Fix whichever drifted; do not remove the pair, because removing it is what let the divergence go unnoticed.");
+const pairedCheckColumns = new Set(VOCAB_PAIRS.flatMap(([,columns]) => columns));
+const unpairedCheckEnums = [...sqlCheckEnums.keys()].filter((c) => !pairedCheckColumns.has(c));
+console.log(`Vocabulary constants: ${VOCAB_PAIRS.length} Rust constant(s) compared with the SQL CHECK that enforces the same vocabulary; ${unpairedCheckEnums.length} CHECK constraint(s) have no Rust constant (reported, not blocking): ${unpairedCheckEnums.join(", ")||"none"}`);
+
 // SQLITE-DATA-ARCHITECTURE.md groups the tables by concern, and that grouping drifted the moment
 // project_briefs and user_contributions were added: the tables existed in schema.sql and in DATA-MODEL.md
 // while the architecture document still listed neither. Nothing compared the two, so an external audit found

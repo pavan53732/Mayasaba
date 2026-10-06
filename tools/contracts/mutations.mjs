@@ -86,6 +86,7 @@ const REPAIR_POLICIES = "schemas/validation-v1/repair-policies.json";
 const CONFLICT_CLASSES = "schemas/workspace-v1/integration-conflict-classes.json";
 const ADMISSION_SCHEMA = "schemas/workspace-v1/admission.schema.json";
 const STORAGE_LIB = "crates/storage/src/lib.rs";
+const SQL_SCHEMA = "schemas/sqlite-v1/schema.sql";
 
 // -----------------------------------------------------------------------------------------------------------
 // The mutations.
@@ -1083,6 +1084,105 @@ const MUTATIONS = [
         file: CONFLICT_CLASSES,
         find: '"meaning": "Two or more candidates in one integration touch the same path.',
         replace: '"meaning": "Reworded by a mutation control. Two or more candidates in one integration touch the same path.',
+      },
+    ],
+    expect: [],
+  },
+
+  // --- DEC-111: the release-candidate stage, and the vocabulary pairing it was added under.
+  // Two of these deliberately break a vocabulary that already existed before this change. The pairing check was
+  // written for `release_candidates.status`; a check that only ever proved the newest vocabulary would leave the
+  // eighteen older ones as unverified as they were, so the older pairs are proved too.
+  {
+    id: "dec111-a",
+    what: "schema.sql: release_candidates.status drops a state the Rust constant still allows",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "status TEXT NOT NULL CHECK(status IN ('PROPOSED','REJECTED','SUPERSEDED','WITHDRAWN')),",
+        replace: "status TEXT NOT NULL CHECK(status IN ('PROPOSED','REJECTED','SUPERSEDED')),",
+      },
+    ],
+    expect: ["RELEASE_CANDIDATE_STATES is [PROPOSED, REJECTED, SUPERSEDED, WITHDRAWN] but schema.sql release_candidates.status allows"],
+  },
+  {
+    id: "dec111-b",
+    what: "crates/storage: the Rust constant renames a state the CHECK constraint still allows",
+    check: GATE,
+    edits: [
+      {
+        file: STORAGE_LIB,
+        find: 'const RELEASE_CANDIDATE_STATES: &[&str] = &["PROPOSED", "REJECTED", "SUPERSEDED", "WITHDRAWN"];',
+        replace:
+          'const RELEASE_CANDIDATE_STATES: &[&str] = &["PROPOSED", "REJECTED", "SUPERSEDED", "ABANDONED"];',
+      },
+    ],
+    expect: ["RELEASE_CANDIDATE_STATES is [PROPOSED, REJECTED, SUPERSEDED, ABANDONED] but schema.sql release_candidates.status allows"],
+  },
+  {
+    id: "dec111-c",
+    what: "schema.sql: a pre-existing vocabulary drifts, certification_bindings.status dropping EXPIRED",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "status TEXT NOT NULL CHECK(status IN ('ASSERTED','INVALIDATED','EXPIRED')),",
+        replace: "status TEXT NOT NULL CHECK(status IN ('ASSERTED','INVALIDATED')),",
+      },
+    ],
+    expect: ["CERTIFICATION_STATES is [ASSERTED, INVALIDATED, EXPIRED] but schema.sql certification_bindings.status allows [ASSERTED, INVALIDATED]"],
+  },
+  {
+    id: "dec111-d",
+    what: "schema.sql: task_attempts.state gains a state no Rust constant declares",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "state TEXT NOT NULL CHECK(state IN ('CREATED','STARTED','RUNNING','CHECKPOINTED','COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN')),",
+        replace:
+          "state TEXT NOT NULL CHECK(state IN ('CREATED','STARTED','RUNNING','CHECKPOINTED','COMPLETED','FAILED','TIMED_OUT','LOST','CANCELLED','UNKNOWN','PAUSED')),",
+      },
+    ],
+    expect: ["TASK_ATTEMPT_STATES is [CREATED, STARTED, RUNNING, CHECKPOINTED, COMPLETED, FAILED, TIMED_OUT, LOST, CANCELLED, UNKNOWN] but schema.sql task_attempts.state allows"],
+  },
+  {
+    id: "dec111-e",
+    what: "schema.sql: the new table loses the CHECK constraint the constant is compared with",
+    check: GATE,
+    edits: [
+      {
+        file: SQL_SCHEMA,
+        find: "status TEXT NOT NULL CHECK(status IN ('PROPOSED','REJECTED','SUPERSEDED','WITHDRAWN')),",
+        replace: "status TEXT NOT NULL,",
+      },
+    ],
+    expect: ["declares no CHECK(status IN (...)) on release_candidates.status, so RELEASE_CANDIDATE_STATES has nothing to be compared with"],
+  },
+  {
+    id: "dec111-f",
+    what: "DATA-MODEL.md: a core entity is declared durable with no table behind it",
+    check: GATE,
+    edits: [
+      {
+        file: DATA_MODEL,
+        find: "CertificationBinding\nReleaseCandidate\n",
+        replace: "CertificationBinding\nReleaseCandidate\nReleaseCandidateAudit\n",
+      },
+    ],
+    expect: ["ReleaseCandidateAudit is documented as a core entity in DATA-MODEL.md but has no table in schema.sql"],
+  },
+  {
+    id: "control-dec111-prose",
+    what: "SQLITE-DATA-ARCHITECTURE.md: the release-candidate paragraph is reworded, which is prose and not a contract",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        file: "docs/SQLITE-DATA-ARCHITECTURE.md",
+        find: "`release_candidates` records the stage between a passing validation",
+        replace: "Reworded by a mutation control. `release_candidates` records the stage between a passing validation",
       },
     ],
     expect: [],
