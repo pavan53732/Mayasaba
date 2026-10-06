@@ -31,15 +31,27 @@ import type { CommandError, ProjectView } from "../../intake/state";
 /** The consumer whose cursor the rail reads. The Control Room is one consumer of the project's event stream. */
 const CONTROL_ROOM_CONSUMER = "control-room";
 
-type Loaded<T> = { kind: "loading" } | { kind: "loaded"; value: T } | { kind: "failed"; error: CommandError };
+type Loaded<T> =
+  /** No project is open, so there is nothing to read. Distinct from `loading`, which means a read is in flight. */
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "loaded"; value: T }
+  | { kind: "failed"; error: CommandError };
 
 export function ContextRail({ project }: { project: ProjectView | null }) {
-  const [health, setHealth] = useState<Loaded<CommunicationHealth>>({ kind: "loading" });
-  const [cursor, setCursor] = useState<Loaded<EventCursor>>({ kind: "loading" });
-  const [agents, setAgents] = useState<Loaded<AgentPerformanceReport[]>>({ kind: "loading" });
+  const [health, setHealth] = useState<Loaded<CommunicationHealth>>({ kind: "idle" });
+  const [cursor, setCursor] = useState<Loaded<EventCursor>>({ kind: "idle" });
+  const [agents, setAgents] = useState<Loaded<AgentPerformanceReport[]>>({ kind: "idle" });
 
   useEffect(() => {
-    if (!project) return;
+    if (!project) {
+      // Every read below is per project, so with none open the rail reports that rather than staying in a
+      // loading state that would read as a read still in flight.
+      setHealth({ kind: "idle" });
+      setCursor({ kind: "idle" });
+      setAgents({ kind: "idle" });
+      return;
+    }
     let cancelled = false;
     setHealth({ kind: "loading" });
     setCursor({ kind: "loading" });
@@ -115,7 +127,9 @@ function Communication({ health }: { health: Loaded<CommunicationHealth> }) {
   return (
     <section aria-label="Communication health">
       <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-subtle">Communication</h3>
-      {health.kind === "loading" ? (
+      {health.kind === "idle" ? (
+        <p className="text-xs text-ink-muted">No project open, so there is nothing to read.</p>
+      ) : health.kind === "loading" ? (
         <p className="text-xs text-ink-subtle">Reading…</p>
       ) : health.kind === "failed" ? (
         <Failure error={health.error} />
@@ -163,7 +177,9 @@ function Cursor({ cursor }: { cursor: Loaded<EventCursor> }) {
           />
         ) : null}
       </div>
-      {cursor.kind === "loading" ? (
+      {cursor.kind === "idle" ? (
+        <p className="text-xs text-ink-muted">No project open, so there is nothing to read.</p>
+      ) : cursor.kind === "loading" ? (
         <p className="text-xs text-ink-subtle">Reading…</p>
       ) : cursor.kind === "failed" ? (
         <Failure error={cursor.error} />
@@ -183,7 +199,9 @@ function Agents({ agents }: { agents: Loaded<AgentPerformanceReport[]> }) {
   return (
     <section aria-label="Agents">
       <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-subtle">Agents</h3>
-      {agents.kind === "loading" ? (
+      {agents.kind === "idle" ? (
+        <p className="text-xs text-ink-muted">No project open, so there is nothing to read.</p>
+      ) : agents.kind === "loading" ? (
         <p className="text-xs text-ink-subtle">Reading…</p>
       ) : agents.kind === "failed" ? (
         <Failure error={agents.error} />
