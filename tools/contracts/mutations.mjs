@@ -672,8 +672,8 @@ const MUTATIONS = [
     edits: [
       {
         file: DECISION_REGISTER,
-        find: "and th\n### DEC-097 — Lease fence rotates only on ownership change",
-        replace: "and th### DEC-097 — Lease fence rotates only on ownership change",
+        find: "guard.\n### DEC-097 — Lease fence rotates only on ownership change",
+        replace: "guard.### DEC-097 — Lease fence rotates only on ownership change",
       },
     ],
     expect: ["carries a DEC heading after other text"],
