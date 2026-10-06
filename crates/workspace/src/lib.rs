@@ -18,7 +18,10 @@ pub use validation::{validate_workspace_candidate, WorkspaceRejection, Workspace
 pub const CRATE_NAME: &str = "mayasaba-workspace";
 
 /// Persist an observed workspace revision through the canonical storage owner.
-pub fn record_revision(storage: &mayasaba_storage::Storage, revision: &mayasaba_storage::NewWorkspaceRevision) -> mayasaba_storage::Result<()> {
+pub fn record_revision(
+    storage: &mayasaba_storage::Storage,
+    revision: &mayasaba_storage::NewWorkspaceRevision,
+) -> mayasaba_storage::Result<()> {
     storage.insert_workspace_revision(revision)
 }
 
@@ -48,11 +51,19 @@ pub fn create_checkpoint(
     created_at: &str,
 ) -> mayasaba_storage::Result<()> {
     storage.checkpoint_workspace(
-        checkpoint_id, project_id, workspace_id, task_id, agent_id, session_id, epoch, kind,
-        repository_head, diff_hash, created_at,
+        checkpoint_id,
+        project_id,
+        workspace_id,
+        task_id,
+        agent_id,
+        session_id,
+        epoch,
+        kind,
+        repository_head,
+        diff_hash,
+        created_at,
     )
 }
-
 
 /// Deterministic Git command specifications. The workspace crate defines Git operation semantics but never
 /// materializes a process; callers execute the returned ProcessSpec through crates/execution.
@@ -90,8 +101,7 @@ pub mod git {
 
     fn is_absolute_windows(value: &str) -> bool {
         let b = value.as_bytes();
-        (b.len() >= 3 && b[1] == b':' && matches!(b[2], b'\\' | b'/'))
-            || value.starts_with(r"\\")
+        (b.len() >= 3 && b[1] == b':' && matches!(b[2], b'\\' | b'/')) || value.starts_with(r"\\")
     }
 
     fn valid_path(value: &str) -> bool {
@@ -105,8 +115,11 @@ pub mod git {
         Ok(ProcessSpec::new(
             "git",
             vec![
-                "-C".into(), repository.into(), "status".into(),
-                "--porcelain=v1".into(), "--untracked-files=all".into(),
+                "-C".into(),
+                repository.into(),
+                "status".into(),
+                "--porcelain=v1".into(),
+                "--untracked-files=all".into(),
             ],
             repository.to_owned(),
         ))
@@ -118,7 +131,12 @@ pub mod git {
         }
         Ok(ProcessSpec::new(
             "git",
-            vec!["-C".into(), repository.into(), "rev-parse".into(), "HEAD".into()],
+            vec![
+                "-C".into(),
+                repository.into(),
+                "rev-parse".into(),
+                "HEAD".into(),
+            ],
             repository.to_owned(),
         ))
     }
@@ -130,7 +148,11 @@ pub mod git {
         Ok(ProcessSpec::new(
             "git",
             vec![
-                "-C".into(), repository.into(), "worktree".into(), "list".into(), "--porcelain".into(),
+                "-C".into(),
+                repository.into(),
+                "worktree".into(),
+                "list".into(),
+                "--porcelain".into(),
             ],
             repository.to_owned(),
         ))
@@ -138,7 +160,9 @@ pub mod git {
 
     pub fn add_worktree_spec(plan: &GitWorktreePlan) -> Result<ProcessSpec, GitWorkspaceError> {
         if !valid_path(&plan.repository) {
-            return Err(GitWorkspaceError::InvalidRepository(plan.repository.clone()));
+            return Err(GitWorkspaceError::InvalidRepository(
+                plan.repository.clone(),
+            ));
         }
         if !valid_path(&plan.worktree) {
             return Err(GitWorkspaceError::InvalidWorktree(plan.worktree.clone()));
@@ -153,9 +177,14 @@ pub mod git {
         Ok(ProcessSpec::new(
             "git",
             vec![
-                "-C".into(), plan.repository.clone(),
-                "worktree".into(), "add".into(), "-b".into(),
-                plan.branch.clone(), plan.worktree.clone(), plan.base_ref.clone(),
+                "-C".into(),
+                plan.repository.clone(),
+                "worktree".into(),
+                "add".into(),
+                "-b".into(),
+                plan.branch.clone(),
+                plan.worktree.clone(),
+                plan.base_ref.clone(),
             ],
             plan.repository.clone(),
         ))
@@ -187,11 +216,20 @@ pub mod git {
             assert_eq!(
                 spec.argv,
                 vec![
-                    "-C", r"C:\repo", "worktree", "add", "-b",
-                    "agent/session-1", r"C:\work\agent-1", "HEAD"
+                    "-C",
+                    r"C:\repo",
+                    "worktree",
+                    "add",
+                    "-b",
+                    "agent/session-1",
+                    r"C:\work\agent-1",
+                    "HEAD"
                 ]
             );
-            assert!(!spec.argv.iter().any(|arg| arg.contains("&&") || arg.contains('|')));
+            assert!(!spec
+                .argv
+                .iter()
+                .any(|arg| arg.contains("&&") || arg.contains('|')));
         }
 
         #[test]

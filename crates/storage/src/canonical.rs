@@ -232,13 +232,19 @@ mod tests {
     #[test]
     fn structured_jcs_sorts_object_keys_and_preserves_array_order() {
         let value = serde_json::json!({"b":2,"a":[3,1],"null":null,"flag":true});
-        assert_eq!(jcs_json(&value).expect("jcs"), r#"{"a":[3,1],"b":2,"flag":true,"null":null}"#);
+        assert_eq!(
+            jcs_json(&value).expect("jcs"),
+            r#"{"a":[3,1],"b":2,"flag":true,"null":null}"#
+        );
     }
 
     #[test]
     fn structured_jcs_rejects_non_integer_numbers() {
         let value = serde_json::json!({"fraction":1.5});
-        assert!(matches!(jcs_json(&value), Err(CanonicalError::UnsupportedNumber(_))));
+        assert!(matches!(
+            jcs_json(&value),
+            Err(CanonicalError::UnsupportedNumber(_))
+        ));
     }
 
     #[test]

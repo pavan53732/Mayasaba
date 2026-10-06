@@ -3,9 +3,7 @@
 //! Task acceptance remains owned by the task domain. This crate composes durable attempt identity, lease fencing,
 //! resource admission and recovery operations without creating a second authority for project state.
 
-use mayasaba_storage::{
-    NewResourceReservation, NewTaskAttempt, NewTaskLease, Result, Storage,
-};
+use mayasaba_storage::{NewResourceReservation, NewTaskAttempt, NewTaskLease, Result, Storage};
 
 pub const CRATE_NAME: &str = "mayasaba-tasks";
 
@@ -19,9 +17,11 @@ pub fn select_schedulable_tasks(
     storage.list_schedulable_tasks(project_id, limit)
 }
 
-
 /// Admit one task lease and atomically advance REQUESTED -> ACTIVE.
-pub fn lease_task(storage: &mut Storage, lease: &NewTaskLease) -> Result<mayasaba_storage::TaskLeaseRecord> {
+pub fn lease_task(
+    storage: &mut Storage,
+    lease: &NewTaskLease,
+) -> Result<mayasaba_storage::TaskLeaseRecord> {
     storage.lease_task(lease)
 }
 
@@ -62,7 +62,11 @@ pub fn expire_leases(storage: &mut Storage, now: &str) -> Result<u64> {
 }
 
 /// Move a lease-expired Task into recovery before physical reconciliation.
-pub fn queue_expired_task_for_recovery(storage: &mut Storage, task_id: &str, now: &str) -> Result<()> {
+pub fn queue_expired_task_for_recovery(
+    storage: &mut Storage,
+    task_id: &str,
+    now: &str,
+) -> Result<()> {
     storage.queue_expired_task_for_recovery(task_id, now)
 }
 
@@ -70,7 +74,6 @@ pub fn queue_expired_task_for_recovery(storage: &mut Storage, task_id: &str, now
 pub fn recover_expired_task(storage: &mut Storage, task_id: &str, now: &str) -> Result<()> {
     storage.recover_expired_task(task_id, now)
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AttemptAuthorization {
@@ -118,15 +121,17 @@ pub fn reserve_child_slot(
     expires_at: &str,
 ) -> Result<String> {
     storage.reserve_child_slot(
-        reservation_id, task_id, lease_id, lease_version, issued_at, expires_at,
+        reservation_id,
+        task_id,
+        lease_id,
+        lease_version,
+        issued_at,
+        expires_at,
     )
 }
 
 /// Reserve a scarce local resource under the current task lease.
-pub fn reserve_resource(
-    storage: &Storage,
-    reservation: &NewResourceReservation,
-) -> Result<()> {
+pub fn reserve_resource(storage: &Storage, reservation: &NewResourceReservation) -> Result<()> {
     storage.insert_resource_reservation(reservation)
 }
 
@@ -152,7 +157,6 @@ pub fn recoverable_attempts(
 ) -> Result<Vec<mayasaba_storage::RecoverableAttempt>> {
     storage.list_recoverable_attempts(project_id)
 }
-
 
 /// Refresh the durable heartbeat under the current lease fence.
 pub fn heartbeat_attempt(

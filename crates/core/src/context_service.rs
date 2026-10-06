@@ -3,9 +3,7 @@
 //! Context snapshots are inputs to work, never mutable shared state. A project epoch change invalidates old
 //! snapshots; historical rows remain intact for audit and replay.
 
-use mayasaba_storage::{
-    ContextSnapshotRecord, NewContextSnapshot, Result, Storage,
-};
+use mayasaba_storage::{ContextSnapshotRecord, NewContextSnapshot, Result, Storage};
 
 pub struct ContextService {
     storage: Storage,
@@ -48,28 +46,17 @@ impl ContextService {
         epoch: i64,
         state_digest: &str,
     ) -> Result<bool> {
-        self.storage.validate_context_fresh(
-            context_snapshot_id,
-            project_id,
-            epoch,
-            state_digest,
-        )
+        self.storage
+            .validate_context_fresh(context_snapshot_id, project_id, epoch, state_digest)
     }
 
-    pub fn supersede(
-        &mut self,
-        context_snapshot_id: &str,
-        at: &str,
-    ) -> Result<()> {
-        self.storage.supersede_context_snapshot(context_snapshot_id, at)
+    pub fn supersede(&mut self, context_snapshot_id: &str, at: &str) -> Result<()> {
+        self.storage
+            .supersede_context_snapshot(context_snapshot_id, at)
     }
 
-    pub fn invalidate(
-        &mut self,
-        context_snapshot_id: &str,
-        at: &str,
-    ) -> Result<()> {
-        self.storage.invalidate_context_snapshot(context_snapshot_id, at)
+    pub fn invalidate(&mut self, context_snapshot_id: &str, at: &str) -> Result<()> {
+        self.storage
+            .invalidate_context_snapshot(context_snapshot_id, at)
     }
-
 }

@@ -13,7 +13,8 @@ fn storage() -> Storage {
         brief_source: "TEST".into(),
         event_id: "evt_recovery".into(),
         created_at: "1".into(),
-    }).expect("project");
+    })
+    .expect("project");
     s.conn().execute(
         "INSERT INTO agents (agent_id, agent_type, executable, created_at, updated_at) VALUES ('agent_1','HERMES_AGENT','hermes','1','1')", []
     ).expect("agent");
@@ -56,16 +57,20 @@ fn attempt(s: &Storage, state: &str) {
         heartbeat_at: Some("1".into()),
         ended_at: None,
         created_at: "1".into(),
-    }).expect("attempt");
+    })
+    .expect("attempt");
 }
 
 #[test]
 fn recovery_plan_classifies_stale_attempts_and_expires_due_resources() {
     let s = storage();
     attempt(&s, "RUNNING");
-    s.conn().execute(
-        "UPDATE task_leases SET lease_version = 8 WHERE lease_id = 'lease_1'", []
-    ).expect("roll lease");
+    s.conn()
+        .execute(
+            "UPDATE task_leases SET lease_version = 8 WHERE lease_id = 'lease_1'",
+            [],
+        )
+        .expect("roll lease");
     s.insert_resource_reservation(&NewResourceReservation {
         reservation_id: "res_1".into(),
         project_id: "prj_recovery".into(),
@@ -81,14 +86,23 @@ fn recovery_plan_classifies_stale_attempts_and_expires_due_resources() {
         expires_at: "5".into(),
         released_at: None,
         created_at: "1".into(),
-    }).expect("reservation");
+    })
+    .expect("reservation");
     let plan = build_runtime_recovery_plan(&s, "prj_recovery", "10").expect("plan");
     assert_eq!(plan.expired_resource_reservations, 1);
     assert_eq!(plan.candidates.len(), 1);
-    assert_eq!(plan.candidates[0].action, RuntimeRecoveryAction::RecoverStaleFence);
-    let state: String = s.conn().query_row(
-        "SELECT state FROM resource_reservations WHERE reservation_id = 'res_1'", [], |r| r.get(0)
-    ).expect("state");
+    assert_eq!(
+        plan.candidates[0].action,
+        RuntimeRecoveryAction::RecoverStaleFence
+    );
+    let state: String = s
+        .conn()
+        .query_row(
+            "SELECT state FROM resource_reservations WHERE reservation_id = 'res_1'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("state");
     assert_eq!(state, "EXPIRED");
 }
 
@@ -97,9 +111,11 @@ fn unknown_attempts_require_inspection() {
     let s = storage();
     attempt(&s, "UNKNOWN");
     let plan = build_runtime_recovery_plan(&s, "prj_recovery", "1").expect("plan");
-    assert_eq!(plan.candidates[0].action, RuntimeRecoveryAction::InspectUnknown);
+    assert_eq!(
+        plan.candidates[0].action,
+        RuntimeRecoveryAction::InspectUnknown
+    );
 }
-
 
 #[test]
 fn recovery_plan_classifies_unknown_execution_process_as_inspection() {
@@ -125,7 +141,8 @@ fn recovery_plan_classifies_unknown_execution_process_as_inspection() {
         timeout_seconds: 30,
         stdout_artifact_id: None,
         stderr_artifact_id: None,
-    }).expect("execution");
+    })
+    .expect("execution");
     s.insert_process_record(&NewProcessRecord {
         process_record_id: "proc_unknown_exec".into(),
         execution_id: "exec_unknown".into(),
@@ -133,11 +150,15 @@ fn recovery_plan_classifies_unknown_execution_process_as_inspection() {
         parent_pid: Some(1111),
         state: "UNKNOWN".into(),
         observed_at: "3".into(),
-    }).expect("process");
+    })
+    .expect("process");
     let plan = build_runtime_recovery_plan(&s, "prj_recovery", "4").expect("plan");
     assert_eq!(plan.execution_candidates.len(), 1);
     assert_eq!(plan.execution_candidates[0].execution_id, "exec_unknown");
-    assert_eq!(plan.execution_candidates[0].action, RuntimeRecoveryAction::InspectUnknown);
+    assert_eq!(
+        plan.execution_candidates[0].action,
+        RuntimeRecoveryAction::InspectUnknown
+    );
 }
 
 #[test]
@@ -164,8 +185,12 @@ fn recovery_plan_requires_physical_verification_for_unobserved_starting_executio
         timeout_seconds: 30,
         stdout_artifact_id: None,
         stderr_artifact_id: None,
-    }).expect("execution");
+    })
+    .expect("execution");
     let plan = build_runtime_recovery_plan(&s, "prj_recovery", "4").expect("plan");
     assert_eq!(plan.execution_candidates.len(), 1);
-    assert_eq!(plan.execution_candidates[0].action, RuntimeRecoveryAction::VerifyProcess);
+    assert_eq!(
+        plan.execution_candidates[0].action,
+        RuntimeRecoveryAction::VerifyProcess
+    );
 }
