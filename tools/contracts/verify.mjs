@@ -306,14 +306,51 @@ for(const e of bridge.properties.event_type.enum) if(!payloadRegistry.events?.[e
 // Named distinctly from the simpler `stripComments` used later for this gate's own text, which must keep its
 // existing behaviour. Regex literals are not modelled; none of the scanned files (Rust, or the frontend's
 // non-generated TypeScript) contains one, and a desynchronized scan fails loudly rather than passing quietly.
-const stripCommentsForScan=(src)=>{
+const stripCommentsForScan=(src,what="the scanned source")=>{
+  // Rust raw strings: r"...", r#"..."#, r##"..."##, and the byte forms br"..." and br#"..."#. Their delimiters are
+  // not string syntax to a scanner that only knows quotes, so `r#"{"a":"b"}"#` opened a plain string, closed it at
+  // the first inner quote, and left the file desynchronized from there on. Returns the index just past the raw
+  // string, or -1 when this position does not start one.
+  const rawStringEnd=(k)=>{
+    if(k>0&&/[A-Za-z0-9_]/.test(src[k-1])) return -1; // the `r` of an identifier, not a raw string
+    let j=k;
+    if(src[j]==="b"&&src[j+1]==="r") j+=2;
+    else if(src[j]==="r") j+=1;
+    else return -1;
+    let hashes=0;
+    while(src[j]==="#"){hashes++;j++;}
+    if(src[j]!=='"') return -1;
+    const closer='"'.repeat(1)+"#".repeat(hashes);
+    const end=src.indexOf(closer,j+1);
+    return end<0?src.length:end+closer.length;
+  };
   let out="",state="code",i=0;
   while(i<src.length){
     const c=src[i],n=src[i+1];
     if(state==="code"){
       if(c==="/"&&n==="/"){state="line";i+=2;continue;}
       if(c==="/"&&n==="*"){state="block";i+=2;continue;}
-      if(c==="'"||c==='"'||c==="`"){state=c;out+=c;i++;continue;}
+      const rawEnd=rawStringEnd(i);
+      if(rawEnd>=0){out+=src.slice(i,rawEnd);i=rawEnd;continue;}
+      if(c==="'"||c==='"'||c==="`"){
+        // A straight apostrophe is overloaded. It opens a string or a character literal, it forms an English
+        // possessive, and in Rust it introduces a lifetime. Guessing wrong in the opening direction desynchronizes
+        // the scanner, and every result after that point is wrong while still looking like a plausible string, so
+        // both directions are decided before a string is opened. An apostrophe preceded by a letter or a digit is
+        // text ("the project's recorded references", "isn't"). Otherwise it is a literal only when a closing
+        // apostrophe follows on the same line - which a lifetime ('static, 'a, '_) does not have, and which
+        // 'a' and 'hello world' both do.
+        if(c==="'"){
+          const prev=i>0?src[i-1]:"";
+          let closes=false;
+          for(let j=i+1;j<src.length&&src[j]!=="\n";j++){
+            if(src[j]==="\\"){j++;continue;}
+            if(src[j]==="'"){closes=true;break;}
+          }
+          if(/[A-Za-z0-9]/.test(prev)||!closes){out+=c;i++;continue;}
+        }
+        state=c;out+=c;i++;continue;
+      }
       out+=c;i++;continue;
     }
     if(state==="line"){ if(c==="\n"){state="code";out+=c;} i++; continue; }
@@ -322,6 +359,13 @@ const stripCommentsForScan=(src)=>{
     if(c===state){state="code";out+=c;i++;continue;}
     out+=c;i++;
   }
+  // Ending inside a line comment is ordinary: a file may end without a trailing newline. Ending inside a string or
+  // a block comment means the scanner lost track of what is code, and every result it produced after that point is
+  // wrong while still looking like a plausible string. A desynchronized scanner is the one failure a scan must not
+  // have, because it reports findings about text that is not code and misses findings about text that is, so it is
+  // raised here rather than returned.
+  if(state==="block"||state==="'"||state==='"'||state==="`")
+    fail(`the comment scanner lost track of the code in ${what}: it ended inside ${state==="block"?"a block comment":`a string opened by ${state}`}. Every scan result after that point would be wrong, so the scan is refused rather than trusted.`);
   return out;
 };
 
@@ -346,7 +390,7 @@ for(const q of bridge.properties.query.enum) declaredOps.set(q,"query");
 const bridgeProblems=[];
 
 // --- Rust side: which handlers are registered, and which functions are actually commands.
-const rustCode=stripCommentsForScan(readText(BRIDGE_RUST));
+const rustCode=stripCommentsForScan(readText(BRIDGE_RUST),BRIDGE_RUST);
 // The macro name also appears inside string literals in this file - the shell's own tests name it in their
 // assertion messages - and `stripCommentsForScan` deliberately preserves string literals, so a single
 // first-match lookup can read a phantom list out of quoted prose. Every candidate is therefore collected and
@@ -403,7 +447,7 @@ const frontendFiles=walkFiles("apps/desktop/src")
   .filter(f=>!/\.test\.(ts|tsx)$/.test(f));
 const transportCalls=[];
 for(const file of frontendFiles){
-  const code=stripCommentsForScan(readText(file));
+  const code=stripCommentsForScan(readText(file),file);
   for(const m of code.matchAll(/(?<![A-Za-z0-9_$])transport\s*\(/g)){
     const literal=/^\s*(["'])([^"']*)\1/.exec(code.slice(m.index+m[0].length));
     if(!literal){
@@ -1366,7 +1410,7 @@ for(const [key,entry] of Object.entries(errorCodes)){
 const scanFiles=walkFiles("crates").concat(walkFiles("apps/desktop/src"),walkFiles("apps/desktop/src-tauri/src"))
   .filter(f=>/\.(rs|ts|tsx)$/.test(f))
   .filter(f=>!/\/generated\//.test(f));
-const scannedText=new Map(scanFiles.map(f=>[f,stripCommentsForScan(readText(f))]));
+const scannedText=new Map(scanFiles.map(f=>[f,stripCommentsForScan(readText(f),f)]));
 const emitted=new Map();
 const recordEmitted=(code,file)=>{ if(!emitted.has(code)) emitted.set(code,file); };
 for(const [file,src] of scannedText){

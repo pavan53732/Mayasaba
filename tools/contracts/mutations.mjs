@@ -94,8 +94,9 @@ const MUTATIONS = [
       },
       {
         file: MAIN,
-        find: "            get_event_cursor\n        ])",
-        replace: "            get_event_cursor,\n            ghost_undeclared\n        ])",
+        find: "        .invoke_handler(tauri::generate_handler![\n            create_project,",
+        replace:
+          "        .invoke_handler(tauri::generate_handler![\n            ghost_undeclared,\n            create_project,",
       },
     ],
     expect: [
@@ -220,7 +221,13 @@ const MUTATIONS = [
     id: "dec055-f",
     what: "crates/workspace: the error-code mapping this check scans is renamed away",
     check: GATE,
-    edits: [{ file: VALIDATION_RS, find: "pub fn code(self)", replace: "pub fn rejection_code(self)" }],
+    edits: [
+      {
+        file: VALIDATION_RS,
+        find: "impl WorkspaceRejection {\n    pub fn code(self)",
+        replace: "impl WorkspaceRejection {\n    pub fn rejection_code(self)",
+      },
+    ],
     expect: ["could not find the error-code mapping this check scans"],
   },
   {
@@ -378,8 +385,9 @@ const MUTATIONS = [
     edits: [
       {
         file: MAIN,
-        find: '        "get_event_cursor",\n    ];',
-        replace: '        "get_event_cursor",\n        "ghost_operation",\n    ];',
+        find: 'const COVERED_OPERATIONS: &[&str] = &[\n        "create_project",',
+        replace:
+          'const COVERED_OPERATIONS: &[&str] = &[\n        "ghost_operation",\n        "create_project",',
       },
     ],
     expect: ["which generate_handler![...] does not register"],
@@ -665,6 +673,18 @@ const MUTATIONS = [
       },
     ],
     expect: ["carries a DEC heading after other text"],
+  },
+  // --- The comment scanner. Every frontend and Rust scan in the gate reads code with comments removed, so a
+  // scanner that loses track of where the code is makes all of those scans wrong while still returning a
+  // plausible string. It was wrong in two ways, and both were silent until the guard existed: an apostrophe in
+  // JSX text opened a string that never closed, and a Rust raw string was read as a plain one. The guard is
+  // proven here so that the next construct it cannot read fails loudly instead of quietly.
+  {
+    id: "scanner-a",
+    what: "a frontend file with an unterminated string, so the comment scanner cannot tell code from text",
+    check: GATE,
+    edits: [{ file: APP_TSX, append: "\nconst probe = 'unterminated\n" }],
+    expect: ["the comment scanner lost track of the code"],
   },
   {
     id: "control-trace-prose",
