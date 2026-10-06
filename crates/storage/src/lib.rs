@@ -6406,7 +6406,19 @@ fn is_sha256_hex(value: &str) -> bool {
 
     pub fn insert_build(&self, new: &NewBuild) -> Result<()> {
         require_vocabulary("builds.status", &new.status, BUILD_STATUSES)?;
-        if let Some(task_id) = new.task_id.as_deref() { self.ensure_task_project(task_id, &new.project_id)?; }
+        if let Some(task_id) = new.task_id.as_deref() {
+            let matches: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                rusqlite::params![task_id, new.project_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if matches != 1 {
+                return Err(StorageError::Malformed {
+                    column: "task_id".to_string(),
+                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                });
+            }
+        }
         if let Some(execution_id) = new.command_execution_id.as_deref() {
             let project_id: String = self.conn.query_row(
                 "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
@@ -6429,7 +6441,19 @@ fn is_sha256_hex(value: &str) -> bool {
 
     pub fn insert_test_run(&self, new: &NewTestRun) -> Result<()> {
         require_vocabulary("test_runs.status", &new.status, TEST_RUN_STATUSES)?;
-        if let Some(task_id) = new.task_id.as_deref() { self.ensure_task_project(task_id, &new.project_id)?; }
+        if let Some(task_id) = new.task_id.as_deref() {
+            let matches: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                rusqlite::params![task_id, new.project_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if matches != 1 {
+                return Err(StorageError::Malformed {
+                    column: "task_id".to_string(),
+                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                });
+            }
+        }
         if let Some(execution_id) = new.command_execution_id.as_deref() {
             let project_id: String = self.conn.query_row(
                 "SELECT project_id FROM command_executions WHERE execution_id=?1", [execution_id],
@@ -6465,7 +6489,17 @@ fn is_sha256_hex(value: &str) -> bool {
             return Err(StorageError::Malformed { column:"validation_runs.checks_json".to_string(), detail:"checks_json must be a JSON array".to_string() });
         }
         if let Some(task_id)=new.task_id.as_deref() {
-            self.ensure_task_project(task_id,&new.project_id)?;
+            let matches: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_id=?1 AND project_id=?2",
+                rusqlite::params![task_id, new.project_id],
+                |r| r.get(0),
+            ).map_err(StorageError::Db)?;
+            if matches != 1 {
+                return Err(StorageError::Malformed {
+                    column: "task_id".to_string(),
+                    detail: format!("task {task_id} does not belong to project {}", new.project_id),
+                });
+            }
             if scope.get("task_id").and_then(serde_json::Value::as_str) != Some(task_id) {
                 return Err(StorageError::Malformed { column:"validation_runs.scope_json".to_string(), detail:"scope.task_id must match validation task_id".to_string() });
             }
@@ -6490,7 +6524,7 @@ fn is_sha256_hex(value: &str) -> bool {
         if new.size_bytes.is_some_and(|n| n<0) {
             return Err(StorageError::Malformed { column:"artifacts.size_bytes".to_string(), detail:"size_bytes cannot be negative".to_string() });
         }
-        self.ensure_project(&new.project_id)?;
+        if !project_exists(&self.conn, &new.project_id)? { return Err(StorageError::UnknownProject { project_id: new.project_id.clone() }); }
         self.conn.execute(
             "INSERT INTO artifacts(artifact_id,project_id,kind,path,sha256,size_bytes,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
             rusqlite::params![new.artifact_id,new.project_id,new.kind,new.path,new.sha256,new.size_bytes,new.created_at],
@@ -6514,7 +6548,7 @@ fn is_sha256_hex(value: &str) -> bool {
                 return Err(StorageError::Malformed { column:"evidence.sha256".to_string(), detail:"sha256 must be exactly 64 hexadecimal characters".to_string() });
             }
         }
-        self.ensure_project(&new.project_id)?;
+        if !project_exists(&self.conn, &new.project_id)? { return Err(StorageError::UnknownProject { project_id: new.project_id.clone() }); }
         self.conn.execute(
             "INSERT INTO evidence(evidence_id,project_id,kind,source_json,sha256,created_at) VALUES(?1,?2,?3,?4,?5,?6)",
             rusqlite::params![new.evidence_id,new.project_id,new.kind,new.source_json,new.sha256,new.created_at],
