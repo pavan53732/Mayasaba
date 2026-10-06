@@ -1027,8 +1027,13 @@ if(undocumented.length) fail(`Table(s) in schema.sql are absent from docs/SQLITE
 // --- docs/TRACEABILITY.md is the only document that records what is implemented, what is validated and what
 // proves it. Nothing read it, so every row was prose: a state word could claim VALIDATED with no test behind
 // it, an evidence path could be renamed out from under it, and a cited decision could have no register entry.
-// The last of those had already happened before this check existed - DEC-059 is cited by this document, by four
-// later decisions and by crates/storage/src/lib.rs:1308, and the register has no entry for it at all.
+//
+// That third check then reported DEC-059 as a decision with no register entry, and it was wrong: the register
+// carried the entry the whole time. Eleven index rows had lost their newlines and been concatenated onto one
+// 6663 character line, and the pattern was anchored to the start of a line, so it could not see an entry that
+// was present. The pattern is unanchored now, and the register's structure is enforced separately, because a
+// gate that fails on a correct file gets switched off rather than fixed - which is the failure this note exists
+// to keep from being repeated.
 //
 // Four properties are enforced, each one a claim the document could otherwise make falsely:
 //   1. every state word is a member of the closed vocabulary the document declares;
