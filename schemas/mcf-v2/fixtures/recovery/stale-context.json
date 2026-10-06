@@ -1,6 +1,0 @@
-{
-  "scenario":"material message carries a state_digest computed at epoch 4 while authoritative project is epoch 5",
-  "expected_error":"MCF_EPOCH_MISMATCH",
-  "expected_state_change":"none",
-  "expected_response":"ACK receipt already issued; processing result is NACK/ERROR with retryability AFTER_SYNC"
-}

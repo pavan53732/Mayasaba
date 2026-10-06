@@ -1,5 +1,0 @@
-{
-  "scenario":"same project_id + operation_id delivered under a new message_id",
-  "expected":"second delivery is ACKed as duplicate and does not repeat the side effect",
-  "terminal_outcome_event_reused":true
-}

@@ -1,7 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "schema_version":"1.0.0",
-  "authority":"schemas/recovery-v1/recovery-events.json",
-  "rule":"This file owns the recovery subsystem's EVENT vocabulary only. The recovery STATE vocabulary has exactly one owner, the state enum in schemas/recovery-v1/recovery.schema.json. A `states` list here would be a second canonical declaration of the same vocabulary, which DEC-017 prohibits; verify.mjs fails if one is re-added.",
-  "events":["RECOVERY_STARTED","RECOVERY_STEP_CHANGED","RECOVERY_BLOCKED","RECOVERY_COMPLETED"]
-}

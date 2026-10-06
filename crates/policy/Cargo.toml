@@ -1,7 +1,0 @@
-[package]
-name = "mayasaba-policy"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-mayasaba-storage = { path = "../storage" }
