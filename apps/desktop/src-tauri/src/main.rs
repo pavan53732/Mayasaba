@@ -17,7 +17,7 @@ mod bus_shell;
 
 use std::sync::Mutex;
 
-use mayasaba_agents::{AgentPerformanceReport, AgentReportError, AgentService, AgentStateCount};
+use mayasaba_agents::{AgentPerformanceReport, AgentReportError, AgentService};
 use mayasaba_core::attachment_service::{
     AttachRequest, AttachmentError, AttachmentProvenance, AttachmentResolution, AttachmentService,
 };
@@ -866,6 +866,9 @@ fn main() {
 #[cfg(test)]
 mod wire_shape_tests {
     use super::*;
+    // Imported here rather than at the top of the file: this module is the only place it is used, and a
+    // top-level import for a test-only name is an unused import in the shipped build.
+    use mayasaba_agents::AgentStateCount;
     use serde::Serialize;
     use serde_json::Value;
 
