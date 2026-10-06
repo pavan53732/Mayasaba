@@ -1189,3 +1189,6 @@ Classification: REFINEMENT. Agent capability validation accepts only probe-deriv
 
 ### DEC-099 — Agent health changes are canonical service events
 Classification: REFINEMENT. `AGENT_HEALTH_CHANGED` is a canonical MCF service event emitted by AgentService and projected to the Tauri `AGENT_HEALTH_CHANGED` UI event. Health records independently observed runtime health for an existing AgentSession; it does not create a new state machine or authority.
+
+### DEC-101 — Git worktree operations are workspace-defined and execution-mediated
+Classification: ADDITIVE. `crates/workspace` defines deterministic Git repository/status/HEAD/worktree command specifications and validates Windows path/ref inputs. `crates/execution` remains the sole material process authority. Existing workspace, revision and admission records remain authoritative; no new worktree table is introduced.
