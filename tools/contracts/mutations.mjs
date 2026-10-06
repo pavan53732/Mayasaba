@@ -949,6 +949,7 @@ const MUTATIONS = [
     id: "control-dec109-prose",
     what: "failure-class-policies.json: the rule text is reworded, which is prose and not a contract",
     check: GATE,
+    control: true,
     edits: [
       {
         file: FAILURE_CLASS_POLICIES,
