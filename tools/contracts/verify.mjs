@@ -1788,31 +1788,40 @@ const unverified=canonicalList.filter(f=>!coverageVerified.has(f));
 gateCoverage={verified:verifiedInCanonical.length,canonical:canonicalList.length,unverified:unverified.length,parsed:canonicalList.length};
 
 // -----------------------------------------------------------------------------------------------------------
-// Hosted CI is permanently banned. DEC-036 made contract verification a gate on the user's own Windows PC and
-// abandoned GitHub Actions; DEC-105 makes that ban permanent and enforced. The repository already lives on that
-// Windows PC, so there is nothing for a hosted runner to add and a great deal for it to break: a workflow moves
-// build and test execution off the user's machine, which is the boundary itself rather than a detail of it.
+// GitHub Actions is permanently banned. DEC-036 made contract verification a gate on the user's own Windows PC
+// and abandoned GitHub Actions; DEC-105 makes that ban permanent and enforced. The repository already lives on
+// that Windows PC, so there is nothing for a hosted runner to add and a great deal for it to break: a workflow
+// moves build and test execution off the user's machine, which is the boundary itself rather than a detail.
 //
-// This check exists because a ban nothing enforces is a preference. It fails on any file under .github/, not
-// only on workflow files: DEC-036's migration step was to delete the .github/ tree outright, and GitHub-side
-// automation that is not a workflow (Dependabot, for instance) leaves the same boundary. Re-adding any of it
-// has to be a deliberate decision that changes this check, not an accident that slips past it.
+// This check exists because a ban nothing enforces is a preference. Its scope is .github/workflows/ and nothing
+// else, because that is the only path GitHub reads a workflow from, and a workflow is the only thing that
+// executes. Other .github/ content - an issue template, a pull-request template, CODEOWNERS - is inert metadata
+// that GitHub displays and never runs, so it leaves the boundary intact and is permitted. DEC-105 records that
+// narrowing as the user's explicit choice.
+//
+// Control mutation dec105-b holds the scope narrow: it adds .github/ISSUE_TEMPLATE/bug.md and requires this
+// check to stay green. If the check ever widens back to the whole .github/ tree, that control turns red and
+// says so, rather than the widening passing unnoticed.
 // -----------------------------------------------------------------------------------------------------------
 const hostedCiProblems=[];
-const githubRoot=path.join(root,".github");
-if(fs.existsSync(githubRoot)){
-  const found=[];
-  const walkGithub=(dir)=>{
-    for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
-      const full=path.join(dir,entry.name);
-      if(entry.isDirectory()) walkGithub(full);
-      else found.push(path.relative(root,full).split(path.sep).join("/"));
-    }
-  };
-  walkGithub(githubRoot);
-  found.sort();
-  if(found.length===0) hostedCiProblems.push(".github/ exists as an empty directory");
-  else for(const file of found) hostedCiProblems.push("hosted CI artifact present: "+file);
+const workflowsRoot=path.join(root,".github","workflows");
+if(fs.existsSync(workflowsRoot)){
+  if(!fs.statSync(workflowsRoot).isDirectory()){
+    hostedCiProblems.push("hosted CI artifact present: .github/workflows is a file, where GitHub reads workflows from a directory");
+  } else {
+    const found=[];
+    const walkWorkflows=(dir)=>{
+      for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
+        const full=path.join(dir,entry.name);
+        if(entry.isDirectory()) walkWorkflows(full);
+        else found.push(path.relative(root,full).split(path.sep).join("/"));
+      }
+    };
+    walkWorkflows(workflowsRoot);
+    found.sort();
+    if(found.length===0) hostedCiProblems.push(".github/workflows/ exists as an empty directory");
+    else for(const file of found) hostedCiProblems.push("hosted CI artifact present: "+file);
+  }
 }
 if(hostedCiProblems.length) fail(
   hostedCiProblems.length+" hosted-CI violation(s):\n  - "+hostedCiProblems.join("\n  - ")+"\n"+

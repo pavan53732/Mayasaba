@@ -562,6 +562,25 @@ const MUTATIONS = [
     ],
     expect: ["hosted CI artifact present: .github/workflows/probe.yml"],
   },
+
+  // --- DEC-105: the ban is scoped to workflows/ only, and this control holds that scope in place. An issue
+  // template is inert metadata GitHub displays and never executes, so it must NOT fail the gate. If the check
+  // ever widens back to the whole .github/ tree, this control turns red instead of the widening passing
+  // unnoticed - which is the failure mode that produced the original problem.
+  {
+    id: "dec105-b",
+    what: ".github/ISSUE_TEMPLATE: a non-workflow .github/ file does not fail the gate",
+    check: GATE,
+    control: true,
+    edits: [
+      {
+        create: true,
+        file: ".github/ISSUE_TEMPLATE/bug.md",
+        content: "---\nname: Bug report\nabout: Something is wrong\n---\n\nDescribe it.\n",
+      },
+    ],
+    expect: [],
+  },
 ];
 
 // -----------------------------------------------------------------------------------------------------------
