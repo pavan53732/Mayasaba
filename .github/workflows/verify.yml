@@ -1,0 +1,73 @@
+name: verify
+
+# The repository previously had no CI at all. The local contract gate (`npm run verify:contracts`,
+# wired to the pre-commit hook in .githooks/) validates schemas, spine edges, event emitters and the
+# SQLite documentation grouping, but it never compiles or tests Rust. That blind spot is how a broken
+# workspace reached main: the gate reported success while `cargo build` failed with 104 errors.
+#
+# This workflow closes that gap by running the same commands a contributor runs locally, on the same
+# platform the product targets. Every command here was verified green on Windows with rustc 1.99.0.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust workspace build and test
+    # Mayasaba is Windows-only (AGENTS.md section 3), so the matrix runs on Windows rather than Linux.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The contract gate reads repository history, so a shallow clone is not sufficient.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Build workspace (all targets)
+        run: cargo build --workspace --all-targets
+
+      - name: Test workspace
+        run: cargo test --workspace
+
+  contracts:
+    name: Contract gate and frontend tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The gate script imports only node: builtins, so the repository root needs no install step.
+      - name: Contract gate
+        run: npm run verify:contracts
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: apps/desktop
+        run: npm test
