@@ -523,6 +523,33 @@ Any mismatch the gate detects is a verification failure, not a warning.
 
 There is no hosted CI; see the DEC-036 record in `docs/DECISION-REGISTER.md`. Running the gate before handoff and commit is required, not optional.
 
+## Historical documentation integrity audit (`npm run verify:integrity`)
+
+`npm run verify:integrity` runs `tools/verify/integrity.mjs`. It is **read-only**: it inspects the current text of every tracked Markdown document together with the reachable history of each, and reports candidates. It never writes, and it never repairs.
+
+It exists because of a corruption the structural gate cannot see. `docs/DECISION-REGISTER.md` lost newlines in three places, and one of them destroyed text rather than only structure: commit `a0b7c5e` added DEC-097 by writing its heading over the tail of DEC-096's paragraph, so the sentence ended mid-word at `and th` and the remainder — `e partial unique index is the final concurrent ownership guard.` — was gone from the file. The gate now rejects a heading that does not start a line, which is what that corruption produced, and that check is mutation-proven. It cannot reject silent text loss that leaves no structural trace, because there is nothing left to look at. This audit is the check for that case, and it is the only check here that reads history rather than the tree.
+
+A line is reported only when all four of these hold:
+
+1. some revision of the same file contains a line that begins with it;
+2. the line's last character and the next character in that historical line are both word characters, so the cut landed **inside a word** rather than between two;
+3. at least three characters are missing; and
+4. that historical line does not itself appear anywhere in the audited text.
+
+Condition 4 is what separates a finding from a false positive, and it was added after a false positive was observed: `docs/DATA-MODEL.md` lists `CouncilRound` and `CouncilRoundRole` as two separate types, and the first is a prefix of the second, so an earlier version of this check reported a type name as severed prose. A prefix match is not corruption; only a prefix match whose continuation is gone is.
+
+Each candidate is reported with the revision that still contains the missing text, and that revision's subject, so recovery is a lookup rather than a reconstruction. The audit does not perform the recovery, and it is diagnostic evidence rather than a source of truth: `docs/DECISION-REGISTER.md` remains authoritative for what the decisions say, and this audit only reports whether a document's current text has, or has not, suffered detectable historical corruption.
+
+It **fails rather than passes** when it cannot do its job. A shallow clone holds truncated history, and zero revisions compared means nothing was read; either would otherwise produce a clean result meaning only that the audit had less to look at. Exit codes are `0` no candidates, `1` candidates found, `2` the audit could not be performed.
+
+The default source is the working tree, so corruption is visible before it is committed and the check is mutation-testable; `--source HEAD` audits the committed text instead, and `--file <path>` narrows the scope.
+
+It is deliberately **not** part of `npm run verify:contracts` and **not** wired to the pre-commit hook: it reads the whole reachable history of every document, which is far too slow for a commit gate, and its result depends on history being present rather than on the tree alone. The three tiers are therefore `verify:contracts` (fast deterministic contract gate), `verify:local` (Windows-local build, test and desktop validation), and `verify:integrity` (explicit deep historical audit).
+
+Two mutations carry its proof (DEC-057): `integrity-a` truncates a document line mid-word and requires the audit to see it, and `control-integrity-prefix` introduces a line that is a mid-word prefix of a longer line still present in full and requires the audit to stay quiet.
+
+Recorded result on this repository: **35 Markdown files, 417 revisions compared, 0 severed-line candidates.**
+
 ## Mutation tests for the checks themselves (DEC-057)
 
 A check that has never been shown to fail is an assertion, not a check. `npm run verify:contracts:mutations` runs `tools/contracts/mutations.mjs`, which reintroduces the drift each check exists to catch — one mutation at a time, applied to the working tree, run, and restored — and requires the check to fail **and to name the specific disagreement the mutation introduced**. Exiting non-zero is not enough on its own: that would also accept a crash, a mistyped anchor, or an unrelated failure, so each mutation declares the substrings its failure must contain, quoted from the check's own messages. A reworded message fails the mutation suite until the mutation is re-read rather than being matched by something vaguer.
