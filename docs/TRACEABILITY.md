@@ -80,7 +80,7 @@ that exists once each tranche lands. **Tranches 1 to 4 are validated** (`cd27580
 | --- | --- | --- | --- |
 | A reported ordering gap is visible to the operator | DEC-069 | `open_sequence_gaps` derives holes from `messages`; a test asserts `SEQUENCE_GAP` with session, channel, expected and found | VALIDATED (T2) |
 | A gap is not repaired by discarding the arrival | DEC-069 | The derivation only reads `messages`; the same test asserts `total_changes` is unchanged across both diagnostics, so no arrival was removed | VALIDATED (T2) |
-| Resynchronisation is not claimed | DEC-069 | `request_event_resync` remains declared with no handler; the gate reports 6 of 59 implemented and it is not one of them | VALIDATED (T2) |
+| Resynchronisation is not claimed | DEC-069 | `request_event_resync` remains declared with no handler; the gate reports it among the declared operations that have no handler, so it is not among the implemented ones | VALIDATED (T2) |
 | Capacity refusal is transient to the caller | DEC-070 | `retry_on_capacity` stops at its bound and returns the last refusal; a test asserts exactly `max_attempts` calls | VALIDATED (T1) |
 | Capacity is not rendered as failure | DEC-070 | UI renders queued/busy; the code is never mapped to a non-backoff registry code | DECIDED |
 | Replay cannot bypass authorization | DEC-071 | Material-action replay is refused with `AUTHORIZATION_NOT_IMPLEMENTED`; a test asserts nothing is enqueued and the source keeps its state | VALIDATED (T3) |
