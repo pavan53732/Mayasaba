@@ -65,7 +65,7 @@ PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS
 
 ## 3. Frontend and UI/UX
 
-The frontend is the native WinUI 3 Control Room. A **blocking three-CLI readiness check precedes the Chat UI on every app launch**. After all three pass, **one persistent chat interface and composer are the sole entry point for user project intent, conversations, clarifications, requests, answers and file attachments through delivery.** The same chat experience includes the local workspace picker for project creation; it does not send the user to a separate intake form or project-intent editor. Council, requirements, tasks, decisions and evidence remain inspectable through structured views in the same Control Room, with controller-authorized controls for specific actions. Users do not manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
+The frontend is the native WinUI 3 Control Room. A **blocking three-CLI readiness check precedes the Chat UI on every app launch**. After all three pass, **one persistent chat interface and composer are the sole entry point for user project intent, conversations, clarifications, requests, answers and file attachments through delivery.** The Chat navigation rail has **Open Folder** at its bottom-left for project selection; the single composer is reserved for project intent and ongoing messages, without a separate intake form or editor. Council, requirements, tasks, decisions and evidence remain inspectable through structured views in the same Control Room, with controller-authorized controls for specific actions. Users do not manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
 
 ### Startup prerequisite gate — before Chat
 
@@ -129,6 +129,27 @@ These sections are views over the existing authoritative services and records. T
 
 The Control Room has **one Chat interface and one consistent composer** after the three-CLI gate. Project selection is a separate **Open Folder** control at the bottom-left of the same Chat navigation rail, not a separate project-intent editor. The composer owns only draft presentation state.
 
+~~~text
+Three CLIs ready -> Chat UI
+                     |
+          Open Folder (bottom-left)
+                     |
+        Selected Windows project root
+                     |
+        Project opened / created
+                     |
+           First Chat idea -> ProjectBrief v1
+                     |
+             FULL council + task planning
+                     |
+      Hermes / Kilo / OpenCode
+       isolated task workspaces
+                     |
+     Mayasaba verifies and integrates
+                     |
+      Selected Windows project folder
+~~~
+
 | State | What the user does | Persisted controller result |
 | --- | --- | --- |
 | **No folder selected** | Click **Open Folder** at the bottom-left, choose a local Windows directory; a draft message may be typed but not sent. | No project is created until the folder passes authorization checks. |
@@ -152,7 +173,7 @@ The Control Room has **one Chat interface and one consistent composer** after th
 | **Analysis context snapshot** | Context service |
 | **Deliberation over the frozen context** | Council service |
 
-The composer writes no requirement, decision or epoch directly. After project creation, a contribution is recorded with advisory classification and routed to the responsible service to identify whether the user has proposed a material change, answered a question or simply commented. **A new feature proposed through chat is registered as a pending, traceable requirement/scope-change proposal; the controller opens a FULL-council decision point under trigger category 4 before it can become an authorized task.** The proposal is shown as *proposed*, never *approved*. The council evaluates its implications against approved requirements and locked decisions, while the user retains authority over changes requiring approval. The owning service commits a new brief or requirement version only after those gates succeed. If accepted, the controller advances the epoch where material, invalidates affected plans, regenerates context and schedules revised planning. If rejected, still awaiting approval or found to be commentary, the previous approved scope remains in force. All questions, approval requests and outcomes appear in the same Chat interface.
+The composer writes no requirement, decision or epoch directly. **For a new folder-bound project, the first accepted Chat message becomes `ProjectBrief` v1, not an advisory `UserContribution`.** Once a brief exists, later messages are recorded as advisory contributions and routed to the responsible service to identify whether the user has proposed a material change, answered a question or simply commented. **A new feature proposed through chat is registered as a pending, traceable requirement/scope-change proposal; the controller opens a FULL-council decision point under trigger category 4 before it can become an authorized task.** The proposal is shown as *proposed*, never *approved*. The council evaluates its implications against approved requirements and locked decisions, while the user retains authority over changes requiring approval. The owning service commits a new brief or requirement version only after those gates succeed. If accepted, the controller advances the epoch where material, invalidates affected plans, regenerates context and schedules revised planning. If rejected, still awaiting approval or found to be commentary, the previous approved scope remains in force. All questions, approval requests and outcomes appear in the same Chat interface.
 
 **Folder and Chat submission states are separate.** Folder selection shows opening, opened and rejected outcomes from the Project service and Workspace Manager, with path validation and a stable project ID before a brief exists. The Chat composer separately shows **draft**, **submitting**, **brief created** (first accepted submission) and **rejected** states, retaining failed drafts and attachments. No submission can reach an agent without a bound project root; reopening a registered folder restores the existing brief rather than creating a second project.
 
