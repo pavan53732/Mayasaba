@@ -17,7 +17,7 @@ Mayasaba is a fully native, Windows-only desktop control plane built in C++20, w
 
 ## 1. What Mayasaba is
 
-Mayasaba is a native C++20 application and the deterministic control plane between a user and three coding agents. After the three-CLI readiness gate, the user opens an existing Windows directory using **Open Folder** at the bottom-left of the Chat navigation rail. That directory becomes the authorized project root. The user then describes the task through the single Chat composer. The agents reason and write inside separately authorized task workspaces; Mayasaba coordinates, verifies and integrates accepted changes into the selected project folder.
+Mayasaba is a native C++20 application and the deterministic control plane between a user and three coding agents. After the three-CLI readiness gate, the user opens an **existing Windows directory, either empty or already containing files**, using **Open Folder** at the bottom-left of the Chat navigation rail. That directory becomes the authorized project root. The user then describes the task through the single Chat composer. The agents reason and write inside separately authorized task workspaces; Mayasaba coordinates, verifies and integrates accepted changes into the selected project folder.
 
 **The three agents.** Hermes Agent CLI, Kilo Code CLI and OpenCode CLI, and no others. Mayasaba does not replace them or add a model of its own. **The user configures the model, model-provider account and authentication separately inside each CLI; Mayasaba always uses that CLI's existing selection and never chooses, changes or overrides a model or provider.** Each CLI retains its own native model configuration, tools, login, session and reasoning. All three submit separately attributed proposals; Mayasaba validates their claims against independently observed evidence rather than treating agent agreement as proof.
 
@@ -25,12 +25,12 @@ Mayasaba is a native C++20 application and the deterministic control plane betwe
 
 **Hard boundaries**
 
-- Windows only. All controlled execution happens on the user's own PC: no cloud machine, hosted workspace or remote executor, and no account or login.
+- Windows only. All controlled execution happens on the user's own PC: no hosted machine, workspace or remote executor and **no separate Mayasaba application account or login**. Each externally installed CLI retains its own user-managed model-provider account/authentication and may contact its own provider.
 - The folder the user picks, plus task-specific allowed paths, is the filesystem boundary. A typed path is only a candidate until Mayasaba confirms it exists, is local and is allowed. It never scans the whole PC.
-- No outside side effects: it does not send messages, publish, submit forms, buy things, change accounts or control unrelated applications.
+- No unrelated outside side effects: Mayasaba does not send emails/messages, publish, submit forms, buy things, change accounts or control unrelated applications. Only explicitly policy-authorized read-only public-page fetches are allowed for research under the separate local controller boundary.
 - It installs from an MSI package and keeps all of its state in a local SQLite database.
 
-**What it refuses to be.** Not a fifth AI model, a cloud IDE, a chat wrapper, an agent marketplace, or a system where an agent has the final word. An agent saying "done" never completes a task.
+**What it refuses to be.** Not an AI model or inference provider, a cloud IDE, a chat wrapper, an agent marketplace, or a system where an agent has the final word. An agent saying "done" never completes a task.
 
 **Core principle: one project reality, three separate agent sessions.** Mayasaba holds the facts: requirements, decisions, task ownership, context versions, workspace scope, evidence and validation state. The agents never share a hidden brain, and nothing an agent claims becomes true until Mayasaba confirms it.
 
@@ -295,7 +295,7 @@ Diagnostic detail may expose relevant technical records in a read-only inspectio
 
 ### Feedback, accessibility and acceptance
 
-The interface displays progress from observed controller records. It does not invent completion percentages, token totals, capabilities or successful cancellation. When an outcome is unknown, it says so and shows the recovery state. After restart, it renders persisted state while reconciliation is pending rather than pretending that interrupted work completed.
+The interface displays progress from observed controller records. It does not invent completion percentages, **model-usage token counts**, capabilities or successful cancellation. **Authentication tokens** are secret credentials never displayed or logged; **usage-token counts** are operational metrics displayed only when reliably reported by a CLI. When an outcome is unknown, the interface says so and shows recovery status. After restart, it renders persisted state during reconciliation instead of assuming interrupted work completed.
 
 All main flows support keyboard use, visible focus, screen-reader labels, high contrast, DPI scaling and reduced motion. Large conversation, task and evidence lists remain responsive during sustained event streaming. Success and failure are communicated with text as well as visual styling.
 
@@ -305,7 +305,7 @@ Local desktop acceptance covers bottom-left **Open Folder**, continuous uniform 
 
 ### Layer ownership
 
-The WinUI 3 UI talks to C++ application services through a typed command/query boundary. The services drive thirteen layers, and each layer has exactly one owner.
+The WinUI 3 UI calls typed commands/queries on C++ controller application services and renders immutable projections. The system has **thirteen functional layers**; controller-domain authority services occupy the existing layer 2 alongside the Orchestrator, but each authoritative record has exactly one service owner. Layer 1 is the UI, not a service driven by a backend; layers 2–13 implement the controlled behaviors.
 
 | # | Layer | What it owns |
 | --- | --- | --- |
@@ -323,6 +323,29 @@ The WinUI 3 UI talks to C++ application services through a typed command/query b
 | 12 | Policy Engine | Authorization of every material action. |
 | 13 | SQLite Storage | The only component that writes SQL. |
 
+**Authoritative record-to-owner mapping.** Layers are implementation/dependency boundaries; services inside a layer own specific durable records and commands. Distinct services may reside in layer 2 but never co-own a record. The Orchestrator coordinates transitions without directly editing another service's state, and layer 13 physically stores owner-authorized transactions without becoming an alternative authority.
+
+| Record or controlled effect | Single canonical authority owner | Existing layer |
+| --- | --- | --- |
+| Project ID, canonical folder binding, rolling authorized `ProjectIntent` | Project service | 2 — controller application services |
+| Requirements, amendments and requirement approval record | Requirement service | 2 — controller application services |
+| Immutable `UserContribution` and message/question/attachment links | Message/Contribution service | 2 — controller application services |
+| `WorkRequest`, its routing/authorization record and pending change proposal | Work-request authority service | 2 — controller application services |
+| Authoritative decision, lock, disposition and supersession | Decision service | 2 — controller application services |
+| Cross-service orchestration, registered decision trigger, project phase scheduling | Orchestrator | 2 — Orchestrator |
+| Council points, provisional positions, critiques, rounds and syntheses | Council Engine | 5 — Council Engine |
+| Protocol envelopes, delivery, inbox/outbox, retry and acknowledgement | MCF-v2 Fabric | 3 — MCF-v2 |
+| CLI session identity, health and adapter-translated native traffic | Agent Gateway | 4 — Agent Gateway |
+| Snapshot, context version and digest | Context Synchronizer | 6 — Context Synchronizer |
+| Task DAG, attempts and active lease/fencing version | Task/DAG Engine | 7 — Task/DAG Engine |
+| Approved workspace view, isolated staging and final integration | Workspace Manager | 8 — Workspace Manager |
+| Process/tool launch, cancellation and observed execution outcome | Local Execution Kernel | 9 — Local Execution Kernel |
+| Validation verdict, failures and bounded repair disposition | Validation/Repair Engine | 10 — Validation/Repair Engine |
+| Evidence, content/source hashes, research source and citation provenance | Evidence Engine | 11 — Evidence Engine |
+| Material-action authorization, research-fetch permit and deny reasons | Policy Engine | 12 — Policy Engine |
+| SQLite connections, migrations, serialization and persisted bytes | SQLite Storage | 13 — SQLite Storage |
+
+**Authority transitions.** Workspace Manager and Policy Engine validate the chosen root; Project service alone binds project identity. Message/Contribution service alone records incoming Chat and does not approve work. Work-request authority service routes each scoped action through typed owner commands; Requirement service alone approves and commits requirements and Project service projects accepted scope into `ProjectIntent`. Council Engine owns *proposals and deliberation*, while **Decision service alone persists binding decisions and locks**, after verified council/evidence/policy/user-approval gates. The Orchestrator schedules but may not directly write these records. MCF receipts are delivery, not user contributions or decisions; SQLite persists transactions but cannot originate authority. This map adds no new functional layer or authoritative state machine.
 ### Dependency and interface boundaries
 
 **Ownership rules.** Every layer has one canonical owner and no second copy of its truth. Lower layers never depend on higher ones. The protocol layer depends on no agent or domain implementation. Storage depends on no higher-level layer. The agent layer never lets one adapter depend on another. The orchestrator is the only cross-subsystem orchestration owner. Layers publish typed events across the bus boundary; they do not create ad-hoc callbacks. The typed native application boundary is a command/query interface, **not** a domain layer. UI dispatch and view-model notifications carry projections only and do not create a second orchestration channel. Anything that looks like a "mission", "worker" or "supervisor" is only a view assembled from these records, never a competing source of truth.
@@ -521,8 +544,8 @@ Every agent is reached through its own adapter, which can detect the CLI, read i
 | Agent | Transport | Notable controls |
 | --- | --- | --- |
 | Hermes Agent CLI | Streamed JSON over standard I/O, the only transport | Its default injection of rule files, memory and skills is suppressed so no instruction file outside the workspace can steer it. Its update check must be off. Approval-bypass switches are forbidden in every spelling, including environment variables. Outbound messaging, credential and service commands are never used. |
-| Kilo Code CLI | JSON event stream; ACP optional | Run with an absolute working directory. Cloud, remote, share, plugin and import surfaces are disabled, and every way a session can be shared is closed. A restrictive permission map is **injected and then proven by reading back the resolved configuration**; it is default-deny with an explicit allow-list, not a list of specific denies, because several privileged tools are governed by no named permission key at all and only the wildcard rule closes them. Codebase indexing is switched off because it uploads code embeddings to a remote vector store — a second, independent egress path that disabling session sharing does not close. |
-| OpenCode CLI | JSON event stream; ACP optional only for validated 1.x support | **Only positively validated supported OpenCode 1.x versions are currently admitted. All OpenCode 2.x and unclassified versions are rejected before session launch**, even when executable/version probing succeeds. Each admitted 1.x version requires its own verified launch, environment, transport, effective-permission and configuration controls. Future 2.x admission requires a separately proved, fail-closed adapter profile: isolated standalone execution without a shared background service, safe configuration discovery and effective policy proof. Those are **future admission prerequisites**, not permission to run 2.x today. Autonomous-approval flags and network-server, import, credential-export and plugin-install subcommands are forbidden. |
+| Kilo Code CLI | JSON event stream; ACP optional only as verified local controller↔agent transport | Run with an absolute working directory. Cloud, remote, publicly shared sessions, plugin and import surfaces are disabled. ACP is a **local client↔agent transport**, not external session sharing; its isolated local endpoint and controller ownership must be verified or native JSON streaming is used. A restrictive default-deny permission map is injected and read back from the effective session. Codebase indexing is disabled because it could upload code embeddings remotely. |
+| OpenCode CLI | JSON event stream; ACP optional only for admitted 1.x when its isolated local controller endpoint is verified | **Only positively validated supported OpenCode 1.x versions are currently admitted. All OpenCode 2.x and unclassified versions are rejected before session launch**, even when executable/version probing succeeds. Each admitted 1.x version requires its own verified launch, environment, transport, effective-permission and configuration controls. Future 2.x admission requires a separately proved, fail-closed adapter profile: isolated standalone execution without a shared background service, safe configuration discovery and effective policy proof. These are **future admission prerequisites**, not permission to run 2.x today. Autonomous-approval flags and network-server, import, credential-export and plugin-install subcommands are forbidden. |
 
 ### Policy-gated read-only public web research
 
@@ -556,7 +579,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 
 - Windows desktop, the one target platform. The supported Windows versions and processor architectures are declared and verified before a release.
 - Win32 for direct process, filesystem, handle and security operations; C++/WinRT for modern Windows Runtime APIs.
-- MSI distribution, as the only way the product is installed. Missing external CLIs do not fail installation; a post-install application startup gate blocks Chat until all three are ready.
+- **MSI is the mandatory end-user installation format**, authored using WiX. The WinUI 3 application may be **unpackaged** (no MSIX identity) with self-contained Windows App SDK dependencies; that is an application deployment detail, not an alternative to the MSI. The proposed deployment is subject to a local packaging prototype. External CLIs remain user-installed and missing CLIs do not fail MSI installation; startup blocks Chat until all three are ready.
 
 ### Native application and resource ownership
 
@@ -643,7 +666,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 - MSVC and the Windows SDK for native compilation and debugging. Toolchain and dependency versions are pinned and recorded with verification results.
 - MSBuild and the Windows App SDK/C++/WinRT build tooling for the WinUI desktop target; CMake and CTest for the independent core and its tests.
 - NuGet for Windows App SDK, C++/WinRT and WIL build dependencies; a pinned dependency manifest for other native libraries. Build-time dependencies do not imply a package manager requirement on the user's PC.
-- WiX for MSI authoring. The initial deployment design is an unpackaged desktop app with self-contained Windows App SDK dependencies, subject to the local packaging prototype.
+- WiX authors the required MSI. The proposed unpackaged, self-contained Windows App SDK runtime layout remains subject to local installation, upgrade and dependency-loading prototypes; failure requires revisiting runtime deployment without silently changing the MSI distribution requirement.
 - The installer carries the required native runtime dependencies and assets. A native application is not assumed to be one dependency-free executable. Self-contained SDK components must receive servicing updates through Mayasaba releases.
 - Installation, upgrade, uninstall, signing and dependency availability are checked on the declared Windows support matrix. Application state is stored separately from installed binaries and is handled by an explicit migration and retention policy.
 
