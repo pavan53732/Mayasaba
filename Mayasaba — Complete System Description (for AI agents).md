@@ -5,13 +5,13 @@ Mayasaba is a fully native, Windows-only desktop control plane built in C++20, w
 ## Contents
 
 1. [What Mayasaba is](#1-what-mayasaba-is)
-2. [Frontend and UI/UX](#2-frontend-and-uiux)
-3. [Project lifecycle](#3-project-lifecycle)
+2. [Project lifecycle](#2-project-lifecycle)
+3. [Frontend and UI/UX](#3-frontend-and-uiux)
 4. [Architecture and authoritative state](#4-architecture-and-authoritative-state)
-5. [Technology stack](#5-technology-stack)
-6. [Agent integration and controls](#6-agent-integration-and-controls)
-7. [MCF-v2 communication fabric](#7-mcf-v2-communication-fabric)
-8. [Council deliberation and user decisions](#8-council-deliberation-and-user-decisions)
+5. [Council deliberation and user decisions](#5-council-deliberation-and-user-decisions)
+6. [MCF-v2 communication fabric](#6-mcf-v2-communication-fabric)
+7. [Agent integration and controls](#7-agent-integration-and-controls)
+8. [Technology stack](#8-technology-stack)
 9. [Contracts, verification and governance](#9-contracts-verification-and-governance)
 10. [Technical references](#10-technical-references)
 
