@@ -2,6 +2,19 @@
 
 Mayasaba is a fully native, Windows-only desktop control plane built in C++20, with a WinUI 3 interface and a deterministic local core. A user points it at a folder on their own PC and states a request. Three coding agents deliberate and carry the work out in isolated workspaces, and Mayasaba declares the result done only after it has verified the work itself, with evidence. The agents supply the intelligence; Mayasaba supplies state, authority, safety and proof.
 
+## Contents
+
+1. [What Mayasaba is](#1-what-mayasaba-is)
+2. [Frontend and UI/UX](#2-frontend-and-uiux)
+3. [Project lifecycle](#3-project-lifecycle)
+4. [Architecture and authoritative state](#4-architecture-and-authoritative-state)
+5. [Technology stack](#5-technology-stack)
+6. [Agent integration and controls](#6-agent-integration-and-controls)
+7. [MCF-v2 communication fabric](#7-mcf-v2-communication-fabric)
+8. [Council deliberation and user decisions](#8-council-deliberation-and-user-decisions)
+9. [Contracts, verification and governance](#9-contracts-verification-and-governance)
+10. [Technical references](#10-technical-references)
+
 ## 1. What Mayasaba is
 
 Mayasaba is a native C++20 application and the deterministic control plane between a user and three coding agents. Its WinUI 3 Control Room presents controller-owned state through typed application commands and queries. The user chooses a local workspace folder and describes the work. Mayasaba plans, coordinates, authorizes, executes and verifies. The agents reason and write.
@@ -21,34 +34,31 @@ Mayasaba is a native C++20 application and the deterministic control plane betwe
 
 **Core principle: one project reality, three separate agent sessions.** Mayasaba holds the facts: requirements, decisions, task ownership, context versions, workspace scope, evidence and validation state. The agents never share a hidden brain, and nothing an agent claims becomes true until Mayasaba confirms it.
 
-## 2. The journey, end to end
+## 2. Frontend and UI/UX
 
-A software project passes through these stages. Other local-file tasks run only the stages that apply to their acceptance criteria, so a report never needs a build step. A document, research or data task is validated by the checks its own acceptance criteria require — structure, source and citation validity, record counts, invariants or integrity — never by a software gate that does not apply to it.
+The frontend is the native WinUI 3 Control Room. It presents the project through chat, structured views and inspectable results. Users operate Mayasaba through this interface; they do not need to manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
 
-1. **Intake.** Project creation happens in the Control Room's **Initial Intake Composer** — the text box shown when creating a new project, which is a different surface from the Chat section of the navigation. It takes exactly two required inputs: the **local workspace folder**, chosen with the native Windows folder picker (a typed path is only a candidate until existence, locality and authorization are separately checked), and the **project intent**, free text describing what the user wants Mayasaba to accomplish. Until submission that text is local draft state only. On submission it becomes version 1 of a **project brief**, which is durable project truth — the persisted artifact is the brief record, not a transcript entry, and the chat transcript is never treated as project truth. Attached files are kept as supporting context with their source recorded; attaching a file does not make it truth. The project's display name comes from the workspace folder name, and its identity is a separate opaque id, so two projects with the same folder name never collide.
-2. **Discovery.** Mayasaba establishes the brief baseline and objective facts about the workspace: path, repository type, existing files, available toolchain and constraints. It decides whether the brief is complete enough to start. The brief version current at that moment becomes the fixed anchor for the whole analysis.
-3. **Independent analysis and proposals.** Every agent receives the same snapshot of the project and analyzes it on its own, without seeing the others, then submits a proposal. This avoids anchoring on whoever speaks first.
-4. **Cross-critique, rebuttal and revision.** Mayasaba assigns each agent which proposals to review. Reviewers critique with evidence, authors answer and revise.
-5. **Disagreement resolution and user interview.** Material disagreements stay visible. They are settled by evidence, by revision, or by the user. Agents' questions are collected, merged and checked against the workspace first; the user is asked only what is still unresolved, in one batch.
-6. **Design and architecture.** Product and UX design, a technology-choice debate and an architecture review end in a **locked architecture**: recorded decisions with rationale, evidence and alternatives.
-7. **Task planning.** The work becomes a graph of tasks. Each task has an objective, allowed paths, dependencies, required outputs, acceptance criteria and a validation method.
-8. **Implementation.** Agents work on leased tasks, each in an isolated workspace.
-9. **Integration, build, test and end-to-end checks.** Mayasaba merges accepted work in a workspace it controls, then builds, tests and exercises the running application. Agents also review each other's work. These are separate results, not one: building successfully, launching a process successfully and behaving correctly at runtime are three different things, and only the last of them is runtime correctness. A process starting up proves nothing about whether the application works.
-10. **Repair.** Failures are diagnosed and turned into bounded repair tasks, followed by targeted and regression tests.
-11. **Final validation, packaging and certification.** The project is complete only when Mayasaba certifies it from evidence.
+### What the user sees
 
-The canonical phase sequence beneath these stages — the software-engineering lifecycle — is:
+**Before a project exists.** The entry surface lets the user create a project or reopen a persisted one. Project creation shows the Initial Intake Composer with the native workspace-folder picker, project-intent text box, optional file attachments and a create action. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
 
-~~~text
-PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS
-→ CROSS_CRITIQUE → REBUTTAL_AND_REVISION → DISAGREEMENT_RESOLUTION
-→ USER_INTERVIEW → PRODUCT_AND_UX_DESIGN → TECH_STACK_DEBATE
-→ ARCHITECTURE_REVIEW → ARCHITECTURE_LOCKED → TASK_PLANNING
-→ IMPLEMENTATION → INTEGRATION → BUILD → TEST → E2E
-→ CROSS_AGENT_REVIEW → REPAIR (when needed) → FINAL_VALIDATION → PACKAGE → COMPLETE
-~~~
+**Inside a project.** A persistent header identifies the project, authorized workspace, lifecycle phase and operational condition. It shows agent readiness and whether work is running, waiting for the user, blocked, paused, stopped or recovering. Phase and condition are separate fields. Pause and stop remain reachable while background work is active.
 
-`REPAIR` is entered only when required. `COMPLETE` is controller-owned and evidence-backed. Global conditions include `PAUSED`, `STOPPED`, `BLOCKED` and `RECOVERING`; these are orthogonal conditions on the lifecycle, not phases. User interruption has the highest operational priority. A material change to a requirement, a locked decision, the architecture or a contract **invalidates the affected plans**: work already queued under the old plan is recomputed rather than allowed to keep executing it. The Control Room shows every message, conclusion, action, artifact and piece of evidence, never an agent's private chain of thought.
+A side rail provides project navigation. The central pane displays the selected section, and an optional details pane exposes the selected message, task, decision, file or evidence record. This layout adapts to window size and DPI; smaller windows collapse secondary panes without hiding essential controls.
+
+| Surface | What the user sees and can do |
+| --- | --- |
+| Chat | Read user contributions, agent-attributed responses and controller outcomes; type in the Ongoing Chat Composer; attach files; inspect linked work and answer a pending question. |
+| Council | Inspect independent proposals, assigned critiques, rebuttals, revisions, evidence grades, competing positions, round progress and unresolved questions. Concise rationales are visible; private chain of thought is excluded. |
+| Requirements | Inspect the current brief, structured requirements, approval state and links to the decisions, tasks and checks that satisfy them. |
+| Architecture and decisions | Inspect recorded choices, alternatives, lock status and affected requirements; submit an explicit reopening request through the declared command flow. |
+| Tasks | Inspect dependencies, ownership, attempts, current progress, blockers and required acceptance checks. Retry or reassignment is available only through controller-authorized actions. |
+| Files and evidence | Inspect authorized project artifacts, submitted attachments, supported previews, source/provenance records, content hashes and links to producing tasks or commands. Internal storage is not presented as a second editable source of truth. |
+| Validation and repair | Inspect build, test, runtime, review and packaging results separately; see failures, supporting evidence, repair attempts and the remaining gates. |
+| Delivery | Inspect the requested local deliverables, their locations, certification evidence and any unmet acceptance criteria. Completion is shown only when the controller has certified it. |
+| Settings and agent readiness | Inspect application/project configuration and detected CLI versions, capability status and health. Missing or unsupported prerequisites have actionable messages. Provider credentials remain with the agent CLIs. |
+
+These sections are views over the existing authoritative services and records. They do not introduce separate project, task or decision owners.
 
 ### Where the user actually types
 
@@ -103,32 +113,6 @@ An attachment is supporting material, not an approved requirement, decision or v
 
 **Desktop acceptance.** Local UI tests cover both composers, native file selection and drag-and-drop, removing draft attachments, mixed valid/rejected files, retained drafts after failure, supported previews and fallback cards, durable attachment retrieval after restart, keyboard and screen-reader operation, and streaming responsiveness. Controller tests cover attachment scope, immutable content and provenance, context-version changes and accurate delivery/synchronization projections.
 
-## 3. Frontend and UI/UX — the user experience and background work
-
-The frontend is the native WinUI 3 Control Room. It presents the project through chat, structured views and inspectable results. Users operate Mayasaba through this interface; they do not need to manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
-
-### What the user sees
-
-**Before a project exists.** The entry surface lets the user create a project or reopen a persisted one. Project creation shows the Initial Intake Composer with the native workspace-folder picker, project-intent text box, optional file attachments and a create action. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
-
-**Inside a project.** A persistent header identifies the project, authorized workspace, lifecycle phase and operational condition. It shows agent readiness and whether work is running, waiting for the user, blocked, paused, stopped or recovering. Phase and condition are separate fields. Pause and stop remain reachable while background work is active.
-
-A side rail provides project navigation. The central pane displays the selected section, and an optional details pane exposes the selected message, task, decision, file or evidence record. This layout adapts to window size and DPI; smaller windows collapse secondary panes without hiding essential controls.
-
-| Surface | What the user sees and can do |
-| --- | --- |
-| Chat | Read user contributions, agent-attributed responses and controller outcomes; type in the Ongoing Chat Composer; attach files; inspect linked work and answer a pending question. |
-| Council | Inspect independent proposals, assigned critiques, rebuttals, revisions, evidence grades, competing positions, round progress and unresolved questions. Concise rationales are visible; private chain of thought is excluded. |
-| Requirements | Inspect the current brief, structured requirements, approval state and links to the decisions, tasks and checks that satisfy them. |
-| Architecture and decisions | Inspect recorded choices, alternatives, lock status and affected requirements; submit an explicit reopening request through the declared command flow. |
-| Tasks | Inspect dependencies, ownership, attempts, current progress, blockers and required acceptance checks. Retry or reassignment is available only through controller-authorized actions. |
-| Files and evidence | Inspect authorized project artifacts, submitted attachments, supported previews, source/provenance records, content hashes and links to producing tasks or commands. Internal storage is not presented as a second editable source of truth. |
-| Validation and repair | Inspect build, test, runtime, review and packaging results separately; see failures, supporting evidence, repair attempts and the remaining gates. |
-| Delivery | Inspect the requested local deliverables, their locations, certification evidence and any unmet acceptance criteria. Completion is shown only when the controller has certified it. |
-| Settings and agent readiness | Inspect application/project configuration and detected CLI versions, capability status and health. Missing or unsupported prerequisites have actionable messages. Provider credentials remain with the agent CLIs. |
-
-These sections are views over the existing authoritative services and records. They do not introduce separate project, task or decision owners.
-
 ### Chat and interaction behavior
 
 Chat is the primary interaction surface after creation. A submitted item shows who produced it, when it was recorded, its submission outcome and links to relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
@@ -171,132 +155,38 @@ All main flows support keyboard use, visible focus, screen-reader labels, high c
 
 Local desktop acceptance covers creating and reopening projects, both composers and attachments, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
 
+## 3. Project lifecycle
 
-## 4. Technology stack
+A software project passes through these stages. Other local-file tasks run only the stages that apply to their acceptance criteria, so a report never needs a build step. A document, research or data task is validated by the checks its own acceptance criteria require — structure, source and citation validity, record counts, invariants or integrity — never by a software gate that does not apply to it.
 
-Mayasaba is a fully native Windows desktop application implemented in modern C++20, with a WinUI 3 Control Room and a deterministic C++ core. It has no hosted component. XAML describes the native interface; the application does not render its Control Room through HTML, JavaScript or a browser engine. This stack describes Mayasaba itself: the three external agent CLIs retain their own implementations, runtimes and provider connections.
+1. **Intake.** Project creation happens in the Control Room's **Initial Intake Composer** — the text box shown when creating a new project, which is a different surface from the Chat section of the navigation. It takes exactly two required inputs: the **local workspace folder**, chosen with the native Windows folder picker (a typed path is only a candidate until existence, locality and authorization are separately checked), and the **project intent**, free text describing what the user wants Mayasaba to accomplish. Until submission that text is local draft state only. On submission it becomes version 1 of a **project brief**, which is durable project truth — the persisted artifact is the brief record, not a transcript entry, and the chat transcript is never treated as project truth. Attached files are kept as supporting context with their source recorded; attaching a file does not make it truth. The project's display name comes from the workspace folder name, and its identity is a separate opaque id, so two projects with the same folder name never collide.
+2. **Discovery.** Mayasaba establishes the brief baseline and objective facts about the workspace: path, repository type, existing files, available toolchain and constraints. It decides whether the brief is complete enough to start. The brief version current at that moment becomes the fixed anchor for the whole analysis.
+3. **Independent analysis and proposals.** Every agent receives the same snapshot of the project and analyzes it on its own, without seeing the others, then submits a proposal. This avoids anchoring on whoever speaks first.
+4. **Cross-critique, rebuttal and revision.** Mayasaba assigns each agent which proposals to review. Reviewers critique with evidence, authors answer and revise.
+5. **Disagreement resolution and user interview.** Material disagreements stay visible. They are settled by evidence, by revision, or by the user. Agents' questions are collected, merged and checked against the workspace first; the user is asked only what is still unresolved, in one batch.
+6. **Design and architecture.** Product and UX design, a technology-choice debate and an architecture review end in a **locked architecture**: recorded decisions with rationale, evidence and alternatives.
+7. **Task planning.** The work becomes a graph of tasks. Each task has an objective, allowed paths, dependencies, required outputs, acceptance criteria and a validation method.
+8. **Implementation.** Agents work on leased tasks, each in an isolated workspace.
+9. **Integration, build, test and end-to-end checks.** Mayasaba merges accepted work in a workspace it controls, then builds, tests and exercises the running application. Agents also review each other's work. These are separate results, not one: building successfully, launching a process successfully and behaving correctly at runtime are three different things, and only the last of them is runtime correctness. A process starting up proves nothing about whether the application works.
+10. **Repair.** Failures are diagnosed and turned into bounded repair tasks, followed by targeted and regression tests.
+11. **Final validation, packaging and certification.** The project is complete only when Mayasaba certifies it from evidence.
 
-**Platform**
+The canonical phase sequence beneath these stages — the software-engineering lifecycle — is:
 
-- Windows desktop, the one target platform. The supported Windows versions and processor architectures are declared and verified before a release.
-- Win32 for direct process, filesystem, handle and security operations; C++/WinRT for modern Windows Runtime APIs.
-- MSI distribution, as the only way the product is installed.
+~~~text
+PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS
+→ CROSS_CRITIQUE → REBUTTAL_AND_REVISION → DISAGREEMENT_RESOLUTION
+→ USER_INTERVIEW → PRODUCT_AND_UX_DESIGN → TECH_STACK_DEBATE
+→ ARCHITECTURE_REVIEW → ARCHITECTURE_LOCKED → TASK_PLANNING
+→ IMPLEMENTATION → INTEGRATION → BUILD → TEST → E2E
+→ CROSS_AGENT_REVIEW → REPAIR (when needed) → FINAL_VALIDATION → PACKAGE → COMPLETE
+~~~
 
-**Native application and resource ownership**
+`REPAIR` is entered only when required. `COMPLETE` is controller-owned and evidence-backed. Global conditions include `PAUSED`, `STOPPED`, `BLOCKED` and `RECOVERING`; these are orthogonal conditions on the lifecycle, not phases. User interruption has the highest operational priority. A material change to a requirement, a locked decision, the architecture or a contract **invalidates the affected plans**: work already queued under the old plan is recomputed rather than allowed to keep executing it. The Control Room shows every message, conclusion, action, artifact and piece of evidence, never an agent's private chain of thought.
 
-- C++20 as the implementation language of the controller, protocol, bus, council logic, task engine, application services and native UI code.
-- WinUI 3, supplied by the Windows App SDK, as the native desktop UI framework. C++/WinRT is its C++ API projection; XAML is presentation markup, not a separate application runtime.
-- A core library independent of WinUI, so orchestration, persistence and contract logic can be exercised without creating a window.
-- RAII and explicit ownership for every resource. Microsoft WIL supplies Windows resource wrappers; standard C++ ownership types manage application objects. Owning raw pointers and manual handle cleanup are excluded from ordinary service code.
-- Explicit error results at service boundaries. Exceptions from platform or library calls are translated into registered errors at those boundaries and never silently discarded.
-- Static analysis, sanitizer runs, bounded parsers and lifetime review are required C++ engineering controls. These controls do not constitute a proof of memory safety.
+## 4. Architecture and authoritative state
 
-**Concurrency and process supervision**
-
-- Win32 overlapped I/O and I/O completion ports for asynchronous subprocess streams where supported, plus a bounded worker pool for blocking operations. Timers, cancellation and queue limits are explicit; background work never blocks the UI thread.
-- Windows Job Objects for process lifecycle control: every agent and tool process is created suspended, assigned to a controller-owned job, and only then resumed. Assignment failure rejects the launch. Handle inheritance is restricted, breakaway is disallowed for controlled children, and termination and crash cleanup are verified.
-- Process handles, stream completion and observed events are tracked separately. Cancellation has a deadline and an escalation path; requesting cancellation is never reported as proof that a process stopped.
-- Job Objects contain process lifecycles and apply resource limits. They do not by themselves enforce filesystem permissions, network policy or controller mediation of tool calls. Those controls belong to the execution and policy boundaries below.
-
-**Persistence**
-
-- SQLite, embedded in the application, as the sole source of truth, with no separately installed database service.
-- The storage layer owns connections, prepared statements, migrations and transaction boundaries. Writes are serialized through that owner; the UI and other layers never issue SQL.
-- Transactional persistence: a state change, its event and its outbound record commit together.
-- An append-only event history that is never rewritten.
-- SHA-256 integrity hashing over that history, per project. Windows CNG supplies the hashing primitive; canonical bytes, chain ordering and provenance are contract-defined. The chain detects corruption, deletion and reordering but is not keyed and does not resist a deliberate full recompute.
-- Startup recovery reconciles persisted intent with observed filesystem and process outcomes. A database commit is not proof that an external command succeeded, and a crash between a side effect and its recorded result is handled as unknown until reconciled.
-
-**Serialization and contracts**
-
-- JSON for all agent-facing messages, contracts and stored payloads, decoded through typed C++ contract codecs and a pinned JSON parser dependency.
-- JSON Schema as the versioned, machine-readable contract format. The schema dialect, parser and validator versions are declared; unsupported vocabulary is rejected.
-- An explicitly specified canonical serialization profile for hashing, with test vectors for key ordering, numbers, Unicode and rejected input. Ordinary JSON serialization is not assumed to be canonical.
-- A declared definition for every message type, event, payload, state machine, error code and application command or query.
-- Generated C++ contract types and validation bindings where applicable, with drift checks against the registry. Compile-time types do not replace validation of untrusted input.
-- Parser limits cover input bytes, nesting, collection sizes and stream buffering. Invalid or oversized input produces a recorded error rather than unbounded allocation.
-
-**Presentation**
-
-- WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
-- Native chat composers, attachment chips/cards, drag-and-drop and Windows file-picker integration for intake and ongoing project chat. Read-only previews and conversation rendering stay within the native UI; authoritative attachment handling remains in application services.
-- A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
-- Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
-- Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
-- A typed C++ application boundary connects the Control Room to application services. View models submit declared commands and queries and render immutable projections returned by those services.
-- The UI owns drafts, selections and presentation state only. It never writes SQL, launches processes, changes authoritative state machines or communicates directly with an agent.
-
-**Agent integration**
-
-- Hermes Agent CLI, Kilo Code CLI and OpenCode CLI, and no others.
-- One adapter per agent, and each adapter is the only place that CLI's native protocol exists.
-- Streamed JSON from each CLI's own process as the transport; native formats never leave the adapter.
-- Runtime capability probing, so only probe-confirmed facts are admitted as capabilities. The native implementation does not make an unverified CLI permission or containment mechanism trustworthy.
-
-**Execution and workspace authority**
-
-- A single local execution kernel: the only place in the system where a command or process is started.
-- Policy-authorized launch vectors, explicit working directories, restricted inherited handles and controlled environment construction.
-- Workspace authorization: the selected folder and task-specific allowed paths define the boundary. Existing locality and authorization checks remain mandatory; Windows path handling must also account for reparse points, junctions, aliases and changes between validation and use.
-- Controller-mediated material operations recheck the project epoch, attempt and current lease fencing token before committing a side effect. The validity check and operation must be protected against concurrent revocation.
-- A database lease cannot revoke direct filesystem access already held by a running CLI. The admitted execution mode must either mediate material writes through the controller or enforce an operating-system restriction and revocation mechanism that prevents stale or out-of-scope writes. Configuration and prompt instructions alone are not an operating-system sandbox.
-- Windows token, ACL and AppContainer mechanisms are evaluated where compatible with each CLI and its required tools. No mechanism is declared effective until a local compatibility and denial test proves it. If a required boundary cannot be enforced, that execution mode is blocked.
-- Isolated workspaces prevent concurrent editing of the same working tree; they do not replace filesystem authorization. Work is accepted into the controller-owned integration workspace only after lease, scope and validation checks.
-
-**Version-controlled engineering**
-
-- Git for version-controlled and worktree-capable work.
-- Git worktrees, so each concurrent agent works on its own isolated branch.
-- A controller-controlled integration workspace where accepted work is merged.
-- Git subprocesses pass through the same execution kernel and policy gates as other controlled commands.
-
-**Orchestration and control**
-
-- A deterministic orchestrator rather than a model.
-- The MCF-v2 communication fabric, which carries all agent traffic.
-- The council engine for structured deliberation.
-- Context synchronization, versions and digests.
-- The task graph and its scheduler.
-- Validation and bounded repair.
-- The evidence engine behind every claim.
-- The policy engine that authorizes every material action.
-- The thirteen ownership layers and twelve authoritative state machines remain the architectural foundation.
-
-**Build, dependencies and distribution**
-
-- MSVC and the Windows SDK for native compilation and debugging. Toolchain and dependency versions are pinned and recorded with verification results.
-- MSBuild and the Windows App SDK/C++/WinRT build tooling for the WinUI desktop target; CMake and CTest for the independent core and its tests.
-- NuGet for Windows App SDK, C++/WinRT and WIL build dependencies; a pinned dependency manifest for other native libraries. Build-time dependencies do not imply a package manager requirement on the user's PC.
-- WiX for MSI authoring. The initial deployment design is an unpackaged desktop app with self-contained Windows App SDK dependencies, subject to the local packaging prototype.
-- The installer carries the required native runtime dependencies and assets. A native application is not assumed to be one dependency-free executable. Self-contained SDK components must receive servicing updates through Mayasaba releases.
-- Installation, upgrade, uninstall, signing and dependency availability are checked on the declared Windows support matrix. Application state is stored separately from installed binaries and is handled by an explicit migration and retention policy.
-
-**Quality and correctness**
-
-- Contract validation, format and static-analysis checks, compilation, core tests, desktop tests, runtime checks and end-to-end validation.
-- AddressSanitizer runs for supported native test targets and fuzzing of untrusted JSON, adapter streams and contract decoders. Sanitizer coverage and platform limitations are recorded; a clean run is not a proof of memory safety.
-- Local fault-injection tests for crash recovery, cancellation, queue saturation, duplicate delivery, stale contexts, stale leases and rejected workspace access.
-- Evidence-backed certification, which is the only thing that can declare work complete.
-- Local-only verification: there is no hosted pipeline, because verification belongs on the user's own machine.
-
-### Native validation requirements
-
-Before implementation relies on this stack, three bounded local Windows prototypes must produce evidence: a responsive WinUI Control Room under sustained CLI/event streaming; process launch, cancellation and crash cleanup across an owned process tree; and enforceable workspace access plus rejection of stale writes for each admitted agent mode. Build success or a window opening does not satisfy these checks.
-
-### What is deliberately absent
-
-No cloud service, remote database, hosted component, application account, managed .NET application runtime, embedded browser UI or JavaScript application runtime inside Mayasaba. The external agent CLIs keep their own runtime dependencies and credentials. The only permitted network traffic remains each CLI's own model-provider traffic and user-requested read-only research. All build and verification work remains on the user's own Windows machine.
-
-**Primary technical references**
-
-- [Microsoft: WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)
-- [Microsoft: C++/WinRT](https://learn.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/intro-to-using-cpp-with-winrt)
-- [Microsoft: Windows Implementation Library](https://github.com/microsoft/wil)
-- [Microsoft: Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
-- [Microsoft: Windows app packaging and deployment](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/)
-- [Microsoft: AddressSanitizer](https://learn.microsoft.com/en-us/cpp/sanitizers/asan?view=msvc-170)
-
-## 5. Architecture
+### Layer ownership
 
 The WinUI 3 UI talks to C++ application services through a typed command/query boundary. The services drive thirteen layers, and each layer has exactly one owner.
 
@@ -316,7 +206,11 @@ The WinUI 3 UI talks to C++ application services through a typed command/query b
 | 12 | Policy Engine | Authorization of every material action. |
 | 13 | SQLite Storage | The only component that writes SQL. |
 
+### Dependency and interface boundaries
+
 **Ownership rules.** Every layer has one canonical owner and no second copy of its truth. Lower layers never depend on higher ones. The protocol layer depends on no agent or domain implementation. Storage depends on no higher-level layer. The agent layer never lets one adapter depend on another. The orchestrator is the only cross-subsystem orchestration owner. Layers publish typed events across the bus boundary; they do not create ad-hoc callbacks. The typed native application boundary is a command/query interface, **not** a domain layer. UI dispatch and view-model notifications carry projections only and do not create a second orchestration channel. Anything that looks like a "mission", "worker" or "supervisor" is only a view assembled from these records, never a competing source of truth.
+
+### Authoritative state machines
 
 **State is never one giant status field.** Twelve independent state machines are each authoritative for one concern:
 
@@ -337,7 +231,11 @@ Each has an ordered main path and explicitly declared side branches, and every t
 
 Three cross-cutting rules govern the state machines: a **cross-machine rule** for how machines interact, a **fail-closed rule** so that unverifiable state cannot satisfy a positive gate, and a **recovery rule**. The whole system separates what Mayasaba intends to happen, what an agent reports and what is physically observed on the machine. Where the physical outcome cannot yet be established, execution and attempt state may be recorded as **unknown** — which is neither a soft failure nor a success: it does not silently consume a retry, and nothing stable and resource-available is allowed to sit running forever unobserved.
 
+### Tasks, attempts and lease fencing
+
 **Work is identified separately from its execution.** A task is the stable unit of acceptance and keeps its identity across retries; each retry or reassignment is a separate **attempt** under it. A task is assigned through a **lease**, and the active lease version is the single fencing token for material actions derived from that lease — there is no second fencing authority. Every material side effect must confirm that the acting attempt still holds the current lease version, and a stale one is rejected *before* any side effect occurs. This is what prevents a superseded agent from writing into work that has already moved on. This guarantee requires an enforceable write boundary: a lease record alone cannot stop a CLI with direct filesystem access. Mediated writes and any admitted operating-system restriction must be tested for revocation and out-of-scope denial; work is blocked when the required enforcement cannot be established.
+
+### Truth precedence and traceability
 
 **What wins when sources disagree**, strongest first:
 
@@ -351,11 +249,114 @@ Three cross-cutting rules govern the state machines: a **cross-machine rule** fo
 
 Conflicts between these are recorded explicitly and traced, never resolved silently. Every material requirement is traceable from the user's intent through requirement, decision, architecture, task and attempt, to the evidence, validation and certification that support it; a requirement with no task, work with no owning task, or a certification claim with no evidence is detectable as an orphan.
 
+### Configuration
+
 **Configuration is layered, and the nearest layer wins:** project configuration over user configuration over application defaults. Configuration is versioned and schema-validated, and secrets are referenced rather than copied into ordinary state, messages or logs.
 
-## 6. The agents and the communication fabric
+## 5. Technology stack
 
-### The agents and their adapters
+Mayasaba is a fully native Windows desktop application implemented in modern C++20, with a WinUI 3 Control Room and a deterministic C++ core. It has no hosted component. XAML describes the native interface; the application does not render its Control Room through HTML, JavaScript or a browser engine. This stack describes Mayasaba itself: the three external agent CLIs retain their own implementations, runtimes and provider connections.
+
+### Platform
+
+- Windows desktop, the one target platform. The supported Windows versions and processor architectures are declared and verified before a release.
+- Win32 for direct process, filesystem, handle and security operations; C++/WinRT for modern Windows Runtime APIs.
+- MSI distribution, as the only way the product is installed.
+
+### Native application and resource ownership
+
+- C++20 as the implementation language of the controller, protocol, bus, council logic, task engine, application services and native UI code.
+- WinUI 3, supplied by the Windows App SDK, as the native desktop UI framework. C++/WinRT is its C++ API projection; XAML is presentation markup, not a separate application runtime.
+- A core library independent of WinUI, so orchestration, persistence and contract logic can be exercised without creating a window.
+- RAII and explicit ownership for every resource. Microsoft WIL supplies Windows resource wrappers; standard C++ ownership types manage application objects. Owning raw pointers and manual handle cleanup are excluded from ordinary service code.
+- Explicit error results at service boundaries. Exceptions from platform or library calls are translated into registered errors at those boundaries and never silently discarded.
+- Static analysis, sanitizer runs, bounded parsers and lifetime review are required C++ engineering controls. These controls do not constitute a proof of memory safety.
+
+### Concurrency and process supervision
+
+- Win32 overlapped I/O and I/O completion ports for asynchronous subprocess streams where supported, plus a bounded worker pool for blocking operations. Timers, cancellation and queue limits are explicit; background work never blocks the UI thread.
+- Windows Job Objects for process lifecycle control: every agent and tool process is created suspended, assigned to a controller-owned job, and only then resumed. Assignment failure rejects the launch. Handle inheritance is restricted, breakaway is disallowed for controlled children, and termination and crash cleanup are verified.
+- Process handles, stream completion and observed events are tracked separately. Cancellation has a deadline and an escalation path; requesting cancellation is never reported as proof that a process stopped.
+- Job Objects contain process lifecycles and apply resource limits. They do not by themselves enforce filesystem permissions, network policy or controller mediation of tool calls. Those controls belong to the execution and policy boundaries below.
+
+### Persistence
+
+- SQLite, embedded in the application, as the sole source of truth, with no separately installed database service.
+- The storage layer owns connections, prepared statements, migrations and transaction boundaries. Writes are serialized through that owner; the UI and other layers never issue SQL.
+- Transactional persistence: a state change, its event and its outbound record commit together.
+- An append-only event history that is never rewritten.
+- SHA-256 integrity hashing over that history, per project. Windows CNG supplies the hashing primitive; canonical bytes, chain ordering and provenance are contract-defined. The chain detects corruption, deletion and reordering but is not keyed and does not resist a deliberate full recompute.
+- Startup recovery reconciles persisted intent with observed filesystem and process outcomes. A database commit is not proof that an external command succeeded, and a crash between a side effect and its recorded result is handled as unknown until reconciled.
+
+### Serialization and contracts
+
+- JSON for all agent-facing messages, contracts and stored payloads, decoded through typed C++ contract codecs and a pinned JSON parser dependency.
+- JSON Schema as the versioned, machine-readable contract format. The schema dialect, parser and validator versions are declared; unsupported vocabulary is rejected.
+- An explicitly specified canonical serialization profile for hashing, with test vectors for key ordering, numbers, Unicode and rejected input. Ordinary JSON serialization is not assumed to be canonical.
+- A declared definition for every message type, event, payload, state machine, error code and application command or query.
+- Generated C++ contract types and validation bindings where applicable, with drift checks against the registry. Compile-time types do not replace validation of untrusted input.
+- Parser limits cover input bytes, nesting, collection sizes and stream buffering. Invalid or oversized input produces a recorded error rather than unbounded allocation.
+
+### Presentation
+
+- WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
+- Native chat composers, attachment chips/cards, drag-and-drop and Windows file-picker integration for intake and ongoing project chat. Read-only previews and conversation rendering stay within the native UI; authoritative attachment handling remains in application services.
+- A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
+- Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
+- Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
+- A typed C++ application boundary connects the Control Room to application services. View models submit declared commands and queries and render immutable projections returned by those services.
+- The UI owns drafts, selections and presentation state only. It never writes SQL, launches processes, changes authoritative state machines or communicates directly with an agent.
+
+### Agent integration
+
+- Hermes Agent CLI, Kilo Code CLI and OpenCode CLI, and no others.
+- One adapter per agent, and each adapter is the only place that CLI's native protocol exists.
+- Streamed JSON from each CLI's own process as the transport; native formats never leave the adapter.
+- Runtime capability probing, so only probe-confirmed facts are admitted as capabilities. The native implementation does not make an unverified CLI permission or containment mechanism trustworthy.
+
+### Execution and workspace authority
+
+- A single local execution kernel: the only place in the system where a command or process is started.
+- Policy-authorized launch vectors, explicit working directories, restricted inherited handles and controlled environment construction.
+- Workspace authorization: the selected folder and task-specific allowed paths define the boundary. Existing locality and authorization checks remain mandatory; Windows path handling must also account for reparse points, junctions, aliases and changes between validation and use.
+- Controller-mediated material operations recheck the project epoch, attempt and current lease fencing token before committing a side effect. The validity check and operation must be protected against concurrent revocation.
+- A database lease cannot revoke direct filesystem access already held by a running CLI. The admitted execution mode must either mediate material writes through the controller or enforce an operating-system restriction and revocation mechanism that prevents stale or out-of-scope writes. Configuration and prompt instructions alone are not an operating-system sandbox.
+- Windows token, ACL and AppContainer mechanisms are evaluated where compatible with each CLI and its required tools. No mechanism is declared effective until a local compatibility and denial test proves it. If a required boundary cannot be enforced, that execution mode is blocked.
+- Isolated workspaces prevent concurrent editing of the same working tree; they do not replace filesystem authorization. Work is accepted into the controller-owned integration workspace only after lease, scope and validation checks.
+
+### Version-controlled engineering
+
+- Git for version-controlled and worktree-capable work.
+- Git worktrees, so each concurrent agent works on its own isolated branch.
+- A controller-controlled integration workspace where accepted work is merged.
+- Git subprocesses pass through the same execution kernel and policy gates as other controlled commands.
+
+### Orchestration and control
+
+- A deterministic orchestrator rather than a model.
+- The MCF-v2 communication fabric, which carries all agent traffic.
+- The council engine for structured deliberation.
+- Context synchronization, versions and digests.
+- The task graph and its scheduler.
+- Validation and bounded repair.
+- The evidence engine behind every claim.
+- The policy engine that authorizes every material action.
+- The thirteen ownership layers and twelve authoritative state machines remain the architectural foundation.
+
+### Build, dependencies and distribution
+
+- MSVC and the Windows SDK for native compilation and debugging. Toolchain and dependency versions are pinned and recorded with verification results.
+- MSBuild and the Windows App SDK/C++/WinRT build tooling for the WinUI desktop target; CMake and CTest for the independent core and its tests.
+- NuGet for Windows App SDK, C++/WinRT and WIL build dependencies; a pinned dependency manifest for other native libraries. Build-time dependencies do not imply a package manager requirement on the user's PC.
+- WiX for MSI authoring. The initial deployment design is an unpackaged desktop app with self-contained Windows App SDK dependencies, subject to the local packaging prototype.
+- The installer carries the required native runtime dependencies and assets. A native application is not assumed to be one dependency-free executable. Self-contained SDK components must receive servicing updates through Mayasaba releases.
+- Installation, upgrade, uninstall, signing and dependency availability are checked on the declared Windows support matrix. Application state is stored separately from installed binaries and is handled by an explicit migration and retention policy.
+
+### What is deliberately absent
+
+No cloud service, remote database, hosted component, application account, managed .NET application runtime, embedded browser UI or JavaScript application runtime inside Mayasaba. The external agent CLIs keep their own runtime dependencies and credentials. The only permitted network traffic remains each CLI's own model-provider traffic and user-requested read-only research. All build and verification work remains on the user's own Windows machine.
+
+## 6. Agent integration and controls
 
 Every agent is reached through its own adapter, which can detect the CLI, read its version, report capabilities, check health, launch it, send input, stream output, interrupt, resume, stop, and collect changes and evidence. The adapter is the only place a CLI's native protocol exists. What the installed CLI actually does is found by **probing it at runtime**, and only probe-confirmed facts are admitted as capabilities.
 
@@ -379,7 +380,7 @@ Rules common to all three:
 - **A permission check must be answered by a server the adapter started itself**, with a credential the caller chose — never by the CLI's own configuration-inspection commands. On the 2.x line those commands are answered by the persistent background service and ignore the invoking process's environment, so a gate that trusts them can certify a permission map the agent will never actually apply.
 - **Configuration discovery is not confined to the authorized workspace.** On the 2.x line, discovery walks up from the agent's working directory, so a configuration file in a parent of the authorized workspace — or outside it entirely — can still contribute configuration. The adapter must enforce the boundary itself rather than assume discovery stops at the workspace.
 
-### The communication fabric
+## 7. MCF-v2 communication fabric
 
 All coordination travels over one protocol, MCF-v2. **There is no direct agent-to-agent channel.** A message always goes agent, adapter, bus, controller service, bus, adapter, agent.
 
@@ -393,7 +394,7 @@ All coordination travels over one protocol, MCF-v2. **There is no direct agent-t
 - **Bad traffic is refused explicitly, never absorbed.** Malformed, unauthorized, oversized and cross-project messages are rejected with a recorded reason.
 - **History is immutable.** Events are append-only and chained with SHA-256 per project, so corruption, deletion or reordering is detectable. The chain is not keyed, so it does not resist a deliberate full recompute — a limitation the design records rather than hides.
 
-## 7. The council
+## 8. Council deliberation and user decisions
 
 The council lets the three agents deliberate as a virtual council **without becoming one shared mind**. A controller-side council service owns the process. Agents contribute through ordinary messages on a dedicated council channel, and they never touch the council's records directly.
 
@@ -452,16 +453,45 @@ Agents' questions are normalized, clustered and de-duplicated, checked against t
 
 An answer is saved as an immutable record and sent only to the affected agents, never broadcast to unrelated agents. If it changes material truth, the project epoch advances and a new immutable context snapshot goes out as a context update. A linked continuation round then opens. An answer is not automatically a requirement, a decision or a permission, and it does not bypass any mediated command. Redistribution is tracked as delivery and synchronization separately from transport acknowledgement, so an answer is not reported as applied until the affected agents have resumed from the current context. No answer, timeout or silence is ever converted into assent.
 
-## 8. Contracts, correctness and governance
+## 9. Contracts, verification and governance
+
+### Machine-readable contracts
 
 A structural promise runs through the whole design: **the machine-readable contract is the product.** Every message type, event, payload, state machine, error code and bridge operation has a declared, versioned definition, and the definitions are checked against each other and against the implementation rather than kept in prose beside it. The contract is versioned and machine-readable, covering messages, events, payloads, state machines, error codes and bridge operations. It is described by kind rather than by count, because the vocabulary grows as the system evolves.
+
+### Local verification
 
 **Verification is local, and deliberately so.** Everything that checks Mayasaba runs on the user's own Windows machine: there is no hosted continuous integration, and no cloud runner is used even when an equivalent hosted one exists. This follows from the same boundary that shapes the rest of the product — execution belongs on the user's PC, so moving verification to a hosted machine would violate the boundary rather than satisfy it. The rule is enforced rather than merely stated: a proposed change that reintroduces a hosted pipeline is rejected.
 
 Correctness is layered rather than assumed. A contract check proves the definitions agree with each other and with the implementation; it does not compile or run anything, so it can pass while the build is broken. A separate verification pass covers format, compilation, build, the full test suite and the desktop tests, and stops at the first failure. For the native C++ implementation, this pass also covers static analysis, supported AddressSanitizer targets, parser fuzzing, native UI responsiveness and accessibility, process-tree cleanup, workspace access denial and stale-write rejection, crash recovery, and MSI lifecycle checks. Beyond those, the checks themselves are tested: known drift is reintroduced one case at a time, and the corresponding check must fail and name the specific disagreement it exists to catch.
 
+### Native verification gates
+
+**Quality and correctness**
+
+- Contract validation, format and static-analysis checks, compilation, core tests, desktop tests, runtime checks and end-to-end validation.
+- AddressSanitizer runs for supported native test targets and fuzzing of untrusted JSON, adapter streams and contract decoders. Sanitizer coverage and platform limitations are recorded; a clean run is not a proof of memory safety.
+- Local fault-injection tests for crash recovery, cancellation, queue saturation, duplicate delivery, stale contexts, stale leases and rejected workspace access.
+- Evidence-backed certification, which is the only thing that can declare work complete.
+- Local-only verification: there is no hosted pipeline, because verification belongs on the user's own machine.
+
+Before implementation relies on this stack, three bounded local Windows prototypes must produce evidence: a responsive WinUI Control Room under sustained CLI/event streaming; process launch, cancellation and crash cleanup across an owned process tree; and enforceable workspace access plus rejection of stale writes for each admitted agent mode. Build success or a window opening does not satisfy these checks.
+
+### Validation provenance and completion
+
 **A validation result is bound to what produced it.** It is always about particular artifacts, a particular workspace, a particular environment and a particular version of the validator or test suite, so a run records the environment snapshot alongside the artifact hashes it was produced against.
+
+**Evidence-backed completion** is the point of all of it. Until that evidence exists, a completion claim is **untrusted** — not a pending fact and not a partial success. A feature is not complete because code was written, and not because an agent said so: completion requires the requested local artifact, the checks appropriate to the task, and the evidence that connects the two. Evidence carries immutable provenance and a content hash, so a bare file path can never be cited as evidence, and capturing it never widens the workspace boundary it was taken from.
+
+### Architectural governance
 
 **Change discipline.** Every material architectural change is classified as one of four kinds — additive, refinement, replacement or deprecation — and recorded with its previous behaviour, new behaviour, reason, compatibility impact, migration path and affected tests. Existing terms, ownership and sources of truth must not be silently redefined. Historical records are never erased to make the current state look tidier; a superseded decision is superseded *explicitly*, with traceability preserved. When two sources genuinely conflict, the conflict is recorded and traced rather than resolved quietly.
 
-**Evidence-backed completion** is the point of all of it. Until that evidence exists, a completion claim is **untrusted** — not a pending fact and not a partial success. A feature is not complete because code was written, and not because an agent said so: completion requires the requested local artifact, the checks appropriate to the task, and the evidence that connects the two. Evidence carries immutable provenance and a content hash, so a bare file path can never be cited as evidence, and capturing it never widens the workspace boundary it was taken from.
+## 10. Technical references
+
+- [Microsoft: WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)
+- [Microsoft: C++/WinRT](https://learn.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/intro-to-using-cpp-with-winrt)
+- [Microsoft: Windows Implementation Library](https://github.com/microsoft/wil)
+- [Microsoft: Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+- [Microsoft: Windows app packaging and deployment](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/)
+- [Microsoft: AddressSanitizer](https://learn.microsoft.com/en-us/cpp/sanitizers/asan?view=msvc-170)
