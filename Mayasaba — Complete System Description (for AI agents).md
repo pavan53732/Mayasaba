@@ -98,7 +98,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 - A core library independent of WinUI, so orchestration, persistence and contract logic can be exercised without creating a window.
 - RAII and explicit ownership for every resource. Microsoft WIL supplies Windows resource wrappers; standard C++ ownership types manage application objects. Owning raw pointers and manual handle cleanup are excluded from ordinary service code.
 - Explicit error results at service boundaries. Exceptions from platform or library calls are translated into registered errors at those boundaries and never silently discarded.
-- C++ does not provide Rust's compile-time ownership guarantees. Static analysis, sanitizer runs, bounded parsers and lifetime review are required engineering controls, not claims that C++ is automatically memory-safe.
+- Static analysis, sanitizer runs, bounded parsers and lifetime review are required C++ engineering controls. These controls do not constitute a proof of memory safety.
 
 **Concurrency and process supervision**
 
@@ -131,7 +131,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 - A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
 - Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
 - Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
-- A typed C++ application boundary replaces the former webview bridge. View models submit declared commands and queries and render immutable projections returned by application services.
+- A typed C++ application boundary connects the Control Room to application services. View models submit declared commands and queries and render immutable projections returned by those services.
 - The UI owns drafts, selections and presentation state only. It never writes SQL, launches processes, changes authoritative state machines or communicates directly with an agent.
 
 **Agent integration**
@@ -187,32 +187,13 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 - Evidence-backed certification, which is the only thing that can declare work complete.
 - Local-only verification: there is no hosted pipeline, because verification belongs on the user's own machine.
 
-### Why this stack
+### Native validation requirements
 
-**A native Windows interface and one implementation language.** Mayasaba targets Windows only. WinUI 3 supplies native controls and presentation, while C++/WinRT and Win32 expose modern Windows APIs and low-level process and filesystem primitives. The controller and native UI code use C++20. This removes the web presentation toolchain; it does not remove Windows framework dependencies or the external CLIs' runtimes.
-
-**A thin presentation layer with a durable contract.** The Control Room calls declared commands and queries through typed C++ interfaces and renders controller-owned projections. The same-language call boundary still needs versioned definitions and drift checks. Authority remains in the deterministic core: mode selection, evidence grading, corroboration, fail-closed transitions, lease fencing and certification do not move into view models.
-
-**Explicit control over lifetimes and execution.** C++ permits direct integration with Windows resource ownership, asynchronous I/O and native UI. That choice carries a memory-correctness cost compared with Rust. RAII, WIL, explicit error boundaries, static analysis, sanitizers and fault-injection tests are mandatory controls. Changing languages does not itself strengthen filesystem isolation or agent mediation.
-
-**Native behavior must be demonstrated.** Before implementation relies on this stack, three bounded local Windows prototypes must produce evidence: a responsive WinUI Control Room under sustained CLI/event streaming; process launch, cancellation and crash cleanup across an owned process tree; and enforceable workspace access plus rejection of stale writes for each admitted agent mode. Build success or a window opening does not satisfy these checks.
+Before implementation relies on this stack, three bounded local Windows prototypes must produce evidence: a responsive WinUI Control Room under sustained CLI/event streaming; process launch, cancellation and crash cleanup across an owned process tree; and enforceable workspace access plus rejection of stale writes for each admitted agent mode. Build success or a window opening does not satisfy these checks.
 
 ### What is deliberately absent
 
 No cloud service, remote database, hosted component, application account, managed .NET application runtime, embedded browser UI or JavaScript application runtime inside Mayasaba. The external agent CLIs keep their own runtime dependencies and credentials. The only permitted network traffic remains each CLI's own model-provider traffic and user-requested read-only research. All build and verification work remains on the user's own Windows machine.
-
-### Architectural replacement record — 2026-10-09
-
-- **Classification:** replacement.
-- **Previous design:** Rust controller, Tokio supervision, serde codecs and a Tauri 2 shell with React/TypeScript, Vite, Tailwind CSS, shadcn/ui and WebView2 presentation.
-- **New design:** C++20 controller, Win32 asynchronous supervision, typed JSON contract codecs and a WinUI 3/XAML interface through C++/WinRT, with RAII/WIL resource ownership.
-- **Reason:** the user selected a fully native Windows interface and C++ implementation throughout Mayasaba.
-- **Compatibility impact:** the implementation language, UI framework, concurrency mechanisms, codecs, application call boundary, build tooling and deployment dependencies change. C++ memory-correctness controls are added. Process lifecycle containment is explicitly distinguished from filesystem and tool authorization.
-- **Migration path:** this repository currently contains the design document rather than an application implementation. Establish the native prototypes first, then implement the core and interface against the existing contracts. No database, message or event format is implicitly migrated by this decision; any later format change requires its own versioned migration.
-- **Preserved authority:** local-only execution and verification, MSI distribution, SQLite truth, MCF-v2, the three agent adapters, thirteen ownership layers, twelve state machines, the council lifecycle and evidence-backed certification.
-- **Affected verification:** native build and static analysis, JSON/schema/canonicalization checks, memory and parser tests, UI accessibility and streaming responsiveness, process cleanup, workspace denial and lease revocation, SQLite recovery, and MSI installation/upgrade/uninstall.
-- **Evidence status:** this is an approved design direction, not a claim of implemented or locally verified behavior. Prototype and release gates remain unsatisfied until their evidence exists.
-- **History:** the previous stack is superseded explicitly by this record and remains available in Git history.
 
 **Primary technical references**
 
