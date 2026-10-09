@@ -50,6 +50,48 @@ A software project passes through these stages. Other local-file tasks run only 
 10. **Repair.** Failures are diagnosed and turned into bounded repair tasks, followed by targeted and regression tests.
 11. **Final validation, packaging and certification.** The project is complete only when Mayasaba certifies it from evidence.
 
+### Coding and file changes — from Chat request to the opened Windows folder
+
+The following flow shows how **Mayasaba turns agent output into verified project files**. The three agents take part in every registered FULL-council decision; implementation tasks are assigned individually to whichever agent or agents hold valid task leases. An agent's text reply is not a file change or proof of completion.
+
+```mermaid
+flowchart TD
+    U["User opens Windows project folder and requests code work in Chat"] --> V["Mayasaba records UserContribution and validates scoped WorkRequest"]
+    V --> Q{"Missing necessary information or authorization?"}
+    Q -- "Yes" --> Ask["Ask or obtain scoped approval in the same Chat"]
+    Ask --> V
+    Q -- "No" --> D{"Registered FULL council decision required?"}
+    D -- "Yes" --> C["FULL council via MCF-v2: Hermes, Kilo Code and OpenCode independently propose and critique"]
+    C --> A{"Controller-authorized decision and approvals?"}
+    A -- "No" --> Hold["Wait, escalate or reject; no coding authorization"]
+    A -- "Yes" --> P["Task/DAG Engine: approved plan, allowed paths, acceptance checks and leases"]
+    D -- "No new decision point" --> P
+    P --> Assign["Assign each coding task only to its selected agent or agents"]
+    subgraph W["Separate, controlled working areas derived from the selected project"]
+        H["Hermes CLI: write permitted task files"]
+        K["Kilo Code CLI: write permitted task files"]
+        O["OpenCode CLI: write permitted task files"]
+    end
+    Assign -. "If assigned" .-> H
+    Assign -. "If assigned" .-> K
+    Assign -. "If assigned" .-> O
+    H --> Changes["Adapters and MCF-v2 deliver change sets plus evidence to Mayasaba"]
+    K --> Changes
+    O --> Changes
+    Changes --> Verify["Controller checks current lease, file scope, hashes, conflicts and candidate validation"]
+    Verify --> Accepted{"Acceptable change set?"}
+    Accepted -- "No" --> Repair["Record failure; authorize bounded repair or new task"]
+    Repair --> P
+    Accepted -- "Yes" --> Integrate["Mayasaba integrates accepted changes into the original Windows project folder"]
+    Integrate --> Test["Controller runs applicable build, tests, runtime and end-to-end checks"]
+    Test --> Passed{"Evidence-backed checks pass?"}
+    Passed -- "No" --> Repair
+    Passed -- "Yes" --> Done["Report verified changed files and evidence in Chat, Tasks and Files views"]
+```
+
+**Folder boundary.** The destination is the **same Windows folder opened in Mayasaba**, never a CLI-selected alternative. Agents work against task-scoped worktrees or staged copies, not concurrently against the user's original writable root. The Workspace Manager and Execution Kernel enforce file access; the controller alone accepts and publishes changes to that root.
+
+**Response versus implementation.** Agent proposals and chat answers travel through adapters and MCF-v2; actual coding requires an authorized task, a current lease and observed file changes. Mayasaba examines each submitted change set, rejects conflicts or unpermitted/stale writes, and integrates only accepted work. Build, test and runtime outcomes remain separate evidence records. Failed checks produce controlled repair/re-planning; neither an agent saying "done" nor a process exiting successfully certifies completion. The user sees the resulting changes and their validation in the **same Chat and project views**, not separate CLI terminal windows.
 ### Continuous Chat and per-request authorization
 
 **There is no single global project goal-completion checkpoint.** The user may keep describing, exploring, refining, correcting or changing the project through one Chat for its entire life. Folder selection establishes the workspace and project identity; it does not start a special intake conversation. The same composer and `SubmitUserContribution` contract apply from the first message onward. Neither a message count, an agent's confidence nor a one-off user summary unlocks all future work.
