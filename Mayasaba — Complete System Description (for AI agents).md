@@ -1,10 +1,10 @@
 # Mayasaba — Complete End-to-End Description
 
-Mayasaba is a Windows desktop control plane. A user points it at a folder on their own PC and states a request. Three coding agents deliberate and carry the work out in isolated workspaces, and Mayasaba declares the result done only after it has verified the work itself, with evidence. The agents supply the intelligence; Mayasaba supplies state, authority, safety and proof.
+Mayasaba is a fully native, Windows-only desktop control plane built in C++20, with a WinUI 3 interface and a deterministic local core. A user points it at a folder on their own PC and states a request. Three coding agents deliberate and carry the work out in isolated workspaces, and Mayasaba declares the result done only after it has verified the work itself, with evidence. The agents supply the intelligence; Mayasaba supplies state, authority, safety and proof.
 
 ## 1. What Mayasaba is
 
-Mayasaba is the deterministic control plane between a user and three coding agents. The user chooses a local workspace folder and describes the work. Mayasaba plans, coordinates, authorizes, executes and verifies. The agents reason and write.
+Mayasaba is a native C++20 application and the deterministic control plane between a user and three coding agents. Its WinUI 3 Control Room presents controller-owned state through typed application commands and queries. The user chooses a local workspace folder and describes the work. Mayasaba plans, coordinates, authorizes, executes and verifies. The agents reason and write.
 
 **The three agents.** Hermes Agent CLI, Kilo Code CLI and OpenCode CLI, and no others. Mayasaba does not replace them or add a model of its own. Each keeps its own model and provider choice, tools, login, session and reasoning. Mayasaba counts independent agreement by **lineage**, not by agent count, because two of the three share a codebase — Kilo Code is a fork of OpenCode — so those two corroborate each other as **one**, never two.
 
@@ -83,61 +83,80 @@ The intake submission surface must also make four states distinguishable, and ne
 
 ## 3. Technology stack
 
-Mayasaba is a single native Windows desktop application with one Rust core and no hosted component. The stack below is the complete technical surface, described by capability rather than by file.
+Mayasaba is a fully native Windows desktop application implemented in modern C++20, with a WinUI 3 Control Room and a deterministic C++ core. It has no hosted component. XAML describes the native interface; the application does not render its Control Room through HTML, JavaScript or a browser engine. This stack describes Mayasaba itself: the three external agent CLIs retain their own implementations, runtimes and provider connections.
 
 **Platform**
 
-- Windows desktop, the one target platform.
-- Native Windows process and filesystem primitives.
+- Windows desktop, the one target platform. The supported Windows versions and processor architectures are declared and verified before a release.
+- Win32 for direct process, filesystem, handle and security operations; C++/WinRT for modern Windows Runtime APIs.
 - MSI distribution, as the only way the product is installed.
 
-**Native application**
+**Native application and resource ownership**
 
-- Rust as the only language of the core: the controller, protocol, bus, council logic, task engine and every service. Memory safety and a single native binary suit a long-running local control plane.
-- Tauri 2 as the desktop shell, so the shell and the authoritative core are the same language and the same runtime and no interop layer sits between them.
-- Tokio for concurrent supervision of agent processes, timers, streams and subprocess I/O.
-- Windows Job Objects for process control: every agent and tool process is created suspended, assigned to a private job object, and only then resumed, so its whole process tree can be stopped.
+- C++20 as the implementation language of the controller, protocol, bus, council logic, task engine, application services and native UI code.
+- WinUI 3, supplied by the Windows App SDK, as the native desktop UI framework. C++/WinRT is its C++ API projection; XAML is presentation markup, not a separate application runtime.
+- A core library independent of WinUI, so orchestration, persistence and contract logic can be exercised without creating a window.
+- RAII and explicit ownership for every resource. Microsoft WIL supplies Windows resource wrappers; standard C++ ownership types manage application objects. Owning raw pointers and manual handle cleanup are excluded from ordinary service code.
+- Explicit error results at service boundaries. Exceptions from platform or library calls are translated into registered errors at those boundaries and never silently discarded.
+- C++ does not provide Rust's compile-time ownership guarantees. Static analysis, sanitizer runs, bounded parsers and lifetime review are required engineering controls, not claims that C++ is automatically memory-safe.
+
+**Concurrency and process supervision**
+
+- Win32 overlapped I/O and I/O completion ports for asynchronous subprocess streams where supported, plus a bounded worker pool for blocking operations. Timers, cancellation and queue limits are explicit; background work never blocks the UI thread.
+- Windows Job Objects for process lifecycle control: every agent and tool process is created suspended, assigned to a controller-owned job, and only then resumed. Assignment failure rejects the launch. Handle inheritance is restricted, breakaway is disallowed for controlled children, and termination and crash cleanup are verified.
+- Process handles, stream completion and observed events are tracked separately. Cancellation has a deadline and an escalation path; requesting cancellation is never reported as proof that a process stopped.
+- Job Objects contain process lifecycles and apply resource limits. They do not by themselves enforce filesystem permissions, network policy or controller mediation of tool calls. Those controls belong to the execution and policy boundaries below.
 
 **Persistence**
 
-- SQLite, compiled into the binary, as the sole source of truth. Nothing is installed system-wide, so the installer carries no database dependency.
+- SQLite, embedded in the application, as the sole source of truth, with no separately installed database service.
+- The storage layer owns connections, prepared statements, migrations and transaction boundaries. Writes are serialized through that owner; the UI and other layers never issue SQL.
 - Transactional persistence: a state change, its event and its outbound record commit together.
 - An append-only event history that is never rewritten.
-- Integrity hashing over that history, per project, so corruption, deletion and reordering are detectable. The hash chain is not keyed, so it does not resist a deliberate full recompute.
+- SHA-256 integrity hashing over that history, per project. Windows CNG supplies the hashing primitive; canonical bytes, chain ordering and provenance are contract-defined. The chain detects corruption, deletion and reordering but is not keyed and does not resist a deliberate full recompute.
+- Startup recovery reconciles persisted intent with observed filesystem and process outcomes. A database commit is not proof that an external command succeeded, and a crash between a side effect and its recorded result is handled as unknown until reconciled.
 
 **Serialization and contracts**
 
-- serde and JSON for all messages, contracts and stored payloads.
-- Canonical serialization, so a digest over the same content is always the same value.
-- JSON Schema as the format of the versioned, machine-readable contract.
-- A declared definition for every message type, event, payload, state machine, error code and bridge operation.
+- JSON for all agent-facing messages, contracts and stored payloads, decoded through typed C++ contract codecs and a pinned JSON parser dependency.
+- JSON Schema as the versioned, machine-readable contract format. The schema dialect, parser and validator versions are declared; unsupported vocabulary is rejected.
+- An explicitly specified canonical serialization profile for hashing, with test vectors for key ordering, numbers, Unicode and rejected input. Ordinary JSON serialization is not assumed to be canonical.
+- A declared definition for every message type, event, payload, state machine, error code and application command or query.
+- Generated C++ contract types and validation bindings where applicable, with drift checks against the registry. Compile-time types do not replace validation of untrusted input.
+- Parser limits cover input bytes, nesting, collection sizes and stream buffering. Invalid or oversized input produces a recorded error rather than unbounded allocation.
 
 **Presentation**
 
-- React 19 and TypeScript, built with Vite.
-- Tailwind CSS and shadcn/ui for the visual language: minimal and functional, with a bento-grid layout and restrained frosted-glass accents.
-- WebView2, the operating system's own webview engine, as the renderer. Nothing bundles a browser engine, so the installer carries no browser payload and the rendering engine receives security fixes independently of Mayasaba releases.
+- WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
+- A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
+- Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
+- Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
+- A typed C++ application boundary replaces the former webview bridge. View models submit declared commands and queries and render immutable projections returned by application services.
+- The UI owns drafts, selections and presentation state only. It never writes SQL, launches processes, changes authoritative state machines or communicates directly with an agent.
 
 **Agent integration**
 
 - Hermes Agent CLI, Kilo Code CLI and OpenCode CLI, and no others.
 - One adapter per agent, and each adapter is the only place that CLI's native protocol exists.
 - Streamed JSON from each CLI's own process as the transport; native formats never leave the adapter.
-- Runtime capability probing, so only probe-confirmed facts are admitted as capabilities.
+- Runtime capability probing, so only probe-confirmed facts are admitted as capabilities. The native implementation does not make an unverified CLI permission or containment mechanism trustworthy.
 
-**Execution**
+**Execution and workspace authority**
 
 - A single local execution kernel: the only place in the system where a command or process is started.
-- Windows process containment, so nothing escapes the controller's lifecycle.
-- Workspace authorization: the folder the user selects is the filesystem boundary, and task-scoped allowed paths constrain it further.
-- Task leases, so ownership of work is explicit and a stale owner cannot write.
-- Isolated workspaces, so concurrent agents do not edit the same working tree.
+- Policy-authorized launch vectors, explicit working directories, restricted inherited handles and controlled environment construction.
+- Workspace authorization: the selected folder and task-specific allowed paths define the boundary. Existing locality and authorization checks remain mandatory; Windows path handling must also account for reparse points, junctions, aliases and changes between validation and use.
+- Controller-mediated material operations recheck the project epoch, attempt and current lease fencing token before committing a side effect. The validity check and operation must be protected against concurrent revocation.
+- A database lease cannot revoke direct filesystem access already held by a running CLI. The admitted execution mode must either mediate material writes through the controller or enforce an operating-system restriction and revocation mechanism that prevents stale or out-of-scope writes. Configuration and prompt instructions alone are not an operating-system sandbox.
+- Windows token, ACL and AppContainer mechanisms are evaluated where compatible with each CLI and its required tools. No mechanism is declared effective until a local compatibility and denial test proves it. If a required boundary cannot be enforced, that execution mode is blocked.
+- Isolated workspaces prevent concurrent editing of the same working tree; they do not replace filesystem authorization. Work is accepted into the controller-owned integration workspace only after lease, scope and validation checks.
 
 **Version-controlled engineering**
 
 - Git for version-controlled and worktree-capable work.
 - Git worktrees, so each concurrent agent works on its own isolated branch.
 - A controller-controlled integration workspace where accepted work is merged.
+- Git subprocesses pass through the same execution kernel and policy gates as other controlled commands.
 
 **Orchestration and control**
 
@@ -149,32 +168,64 @@ Mayasaba is a single native Windows desktop application with one Rust core and n
 - Validation and bounded repair.
 - The evidence engine behind every claim.
 - The policy engine that authorizes every material action.
+- The thirteen ownership layers and twelve authoritative state machines remain the architectural foundation.
+
+**Build, dependencies and distribution**
+
+- MSVC and the Windows SDK for native compilation and debugging. Toolchain and dependency versions are pinned and recorded with verification results.
+- MSBuild and the Windows App SDK/C++/WinRT build tooling for the WinUI desktop target; CMake and CTest for the independent core and its tests.
+- NuGet for Windows App SDK, C++/WinRT and WIL build dependencies; a pinned dependency manifest for other native libraries. Build-time dependencies do not imply a package manager requirement on the user's PC.
+- WiX for MSI authoring. The initial deployment design is an unpackaged desktop app with self-contained Windows App SDK dependencies, subject to the local packaging prototype.
+- The installer carries the required native runtime dependencies and assets. A native application is not assumed to be one dependency-free executable. Self-contained SDK components must receive servicing updates through Mayasaba releases.
+- Installation, upgrade, uninstall, signing and dependency availability are checked on the declared Windows support matrix. Application state is stored separately from installed binaries and is handled by an explicit migration and retention policy.
 
 **Quality and correctness**
 
-- Contract validation, build validation, automated test validation, and runtime and end-to-end validation.
+- Contract validation, format and static-analysis checks, compilation, core tests, desktop tests, runtime checks and end-to-end validation.
+- AddressSanitizer runs for supported native test targets and fuzzing of untrusted JSON, adapter streams and contract decoders. Sanitizer coverage and platform limitations are recorded; a clean run is not a proof of memory safety.
+- Local fault-injection tests for crash recovery, cancellation, queue saturation, duplicate delivery, stale contexts, stale leases and rejected workspace access.
 - Evidence-backed certification, which is the only thing that can declare work complete.
 - Local-only verification: there is no hosted pipeline, because verification belongs on the user's own machine.
 
 ### Why this stack
 
-The choice follows from three constraints, and would change only if one of them changed.
+**A native Windows interface and one implementation language.** Mayasaba targets Windows only. WinUI 3 supplies native controls and presentation, while C++/WinRT and Win32 expose modern Windows APIs and low-level process and filesystem primitives. The controller and native UI code use C++20. This removes the web presentation toolchain; it does not remove Windows framework dependencies or the external CLIs' runtimes.
 
-**One runtime.** The controller, the protocol, the bus, the task engine and every service are Rust, and the desktop shell is Rust too. There is no second language runtime and no garbage collector anywhere in the control path, and no interop boundary between the shell and the authoritative core that must be kept in step by hand. Where a shell in another language would put a translation layer between the UI and the truth, there is instead a generated, checkable contract.
+**A thin presentation layer with a durable contract.** The Control Room calls declared commands and queries through typed C++ interfaces and renders controller-owned projections. The same-language call boundary still needs versioned definitions and drift checks. Authority remains in the deterministic core: mode selection, evidence grading, corroboration, fail-closed transitions, lease fencing and certification do not move into view models.
 
-**A deliberately thin presentation layer.** The Control Room owns presentation and local interaction state, never project truth. It cannot touch the database, start a process or decide anything; it calls declared operations and renders what the controller returns. The strength of the product therefore does not live in the UI toolkit — it lives in the deterministic Rust layers beneath it, where mode selection, evidence grading, corroboration, fail-closed state machines, lease fencing and certification actually happen. A change of UI toolkit could not make Mayasaba more or less correct, and this is intentional.
+**Explicit control over lifetimes and execution.** C++ permits direct integration with Windows resource ownership, asynchronous I/O and native UI. That choice carries a memory-correctness cost compared with Rust. RAII, WIL, explicit error boundaries, static analysis, sanitizers and fault-injection tests are mandatory controls. Changing languages does not itself strengthen filesystem isolation or agent mediation.
 
-**Windows-only makes a system webview safe.** The usual objection to rendering through an operating-system webview is that you must support whatever engine each machine happens to have. That objection does not apply here: there is exactly one target platform, and its webview is evergreen and serviced by the operating system itself rather than by Mayasaba. Bundling a browser engine would add a large payload and a second update channel to buy portability the product does not want.
-
-Two further properties are worth naming. Dense machine-state presentation — an event stream, a context rail, twelve concurrent state machines, evidence chains — is what web rendering and its accessibility model are strongest at, and that model (keyboard navigation, visible focus, screen-reader support) is the most mature available. And the operations that genuinely need to be native **are** native: process containment uses Job Objects, workspace selection uses the native Windows folder flow, and distribution is an MSI.
+**Native behavior must be demonstrated.** Before implementation relies on this stack, three bounded local Windows prototypes must produce evidence: a responsive WinUI Control Room under sustained CLI/event streaming; process launch, cancellation and crash cleanup across an owned process tree; and enforceable workspace access plus rejection of stale writes for each admitted agent mode. Build success or a window opening does not satisfy these checks.
 
 ### What is deliberately absent
 
-No cloud service, no remote database, no hosted component, no second language runtime, no bundled browser engine, and no account. The only network traffic is what each agent CLI itself sends to its own model provider, and user-requested read-only research. The design also uses no hosted build or verification service: everything that checks Mayasaba runs on the user's own machine, because moving execution off that machine would violate the same boundary the product exists to enforce.
+No cloud service, remote database, hosted component, application account, managed .NET application runtime, embedded browser UI or JavaScript application runtime inside Mayasaba. The external agent CLIs keep their own runtime dependencies and credentials. The only permitted network traffic remains each CLI's own model-provider traffic and user-requested read-only research. All build and verification work remains on the user's own Windows machine.
+
+### Architectural replacement record — 2026-10-09
+
+- **Classification:** replacement.
+- **Previous design:** Rust controller, Tokio supervision, serde codecs and a Tauri 2 shell with React/TypeScript, Vite, Tailwind CSS, shadcn/ui and WebView2 presentation.
+- **New design:** C++20 controller, Win32 asynchronous supervision, typed JSON contract codecs and a WinUI 3/XAML interface through C++/WinRT, with RAII/WIL resource ownership.
+- **Reason:** the user selected a fully native Windows interface and C++ implementation throughout Mayasaba.
+- **Compatibility impact:** the implementation language, UI framework, concurrency mechanisms, codecs, application call boundary, build tooling and deployment dependencies change. C++ memory-correctness controls are added. Process lifecycle containment is explicitly distinguished from filesystem and tool authorization.
+- **Migration path:** this repository currently contains the design document rather than an application implementation. Establish the native prototypes first, then implement the core and interface against the existing contracts. No database, message or event format is implicitly migrated by this decision; any later format change requires its own versioned migration.
+- **Preserved authority:** local-only execution and verification, MSI distribution, SQLite truth, MCF-v2, the three agent adapters, thirteen ownership layers, twelve state machines, the council lifecycle and evidence-backed certification.
+- **Affected verification:** native build and static analysis, JSON/schema/canonicalization checks, memory and parser tests, UI accessibility and streaming responsiveness, process cleanup, workspace denial and lease revocation, SQLite recovery, and MSI installation/upgrade/uninstall.
+- **Evidence status:** this is an approved design direction, not a claim of implemented or locally verified behavior. Prototype and release gates remain unsatisfied until their evidence exists.
+- **History:** the previous stack is superseded explicitly by this record and remains available in Git history.
+
+**Primary technical references**
+
+- [Microsoft: WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)
+- [Microsoft: C++/WinRT](https://learn.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/intro-to-using-cpp-with-winrt)
+- [Microsoft: Windows Implementation Library](https://github.com/microsoft/wil)
+- [Microsoft: Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+- [Microsoft: Windows app packaging and deployment](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/)
+- [Microsoft: AddressSanitizer](https://learn.microsoft.com/en-us/cpp/sanitizers/asan?view=msvc-170)
 
 ## 4. Architecture
 
-The UI talks to Rust application services through a typed bridge. The services drive thirteen layers, and each layer has exactly one owner.
+The WinUI 3 UI talks to C++ application services through a typed command/query boundary. The services drive thirteen layers, and each layer has exactly one owner.
 
 | # | Layer | What it owns |
 | --- | --- | --- |
@@ -192,7 +243,7 @@ The UI talks to Rust application services through a typed bridge. The services d
 | 12 | Policy Engine | Authorization of every material action. |
 | 13 | SQLite Storage | The only component that writes SQL. |
 
-**Ownership rules.** Every layer has one canonical owner and no second copy of its truth. Lower layers never depend on higher ones. The protocol layer depends on no agent or domain implementation. Storage depends on no higher-level layer. The agent layer never lets one adapter depend on another. The orchestrator is the only cross-subsystem orchestration owner. Layers publish typed events across the bus boundary; they do not create ad-hoc callbacks. The Tauri bridge is an application transport, **not** a domain layer. Anything that looks like a "mission", "worker" or "supervisor" is only a view assembled from these records, never a competing source of truth.
+**Ownership rules.** Every layer has one canonical owner and no second copy of its truth. Lower layers never depend on higher ones. The protocol layer depends on no agent or domain implementation. Storage depends on no higher-level layer. The agent layer never lets one adapter depend on another. The orchestrator is the only cross-subsystem orchestration owner. Layers publish typed events across the bus boundary; they do not create ad-hoc callbacks. The typed native application boundary is a command/query interface, **not** a domain layer. UI dispatch and view-model notifications carry projections only and do not create a second orchestration channel. Anything that looks like a "mission", "worker" or "supervisor" is only a view assembled from these records, never a competing source of truth.
 
 **State is never one giant status field.** Twelve independent state machines are each authoritative for one concern:
 
@@ -213,7 +264,7 @@ Each has an ordered main path and explicitly declared side branches, and every t
 
 Three cross-cutting rules govern the state machines: a **cross-machine rule** for how machines interact, a **fail-closed rule** so that unverifiable state cannot satisfy a positive gate, and a **recovery rule**. The whole system separates what Mayasaba intends to happen, what an agent reports and what is physically observed on the machine. Where the physical outcome cannot yet be established, execution and attempt state may be recorded as **unknown** — which is neither a soft failure nor a success: it does not silently consume a retry, and nothing stable and resource-available is allowed to sit running forever unobserved.
 
-**Work is identified separately from its execution.** A task is the stable unit of acceptance and keeps its identity across retries; each retry or reassignment is a separate **attempt** under it. A task is assigned through a **lease**, and the active lease version is the single fencing token for material actions derived from that lease — there is no second fencing authority. Every material side effect must confirm that the acting attempt still holds the current lease version, and a stale one is rejected *before* any side effect occurs. This is what prevents a superseded agent from writing into work that has already moved on.
+**Work is identified separately from its execution.** A task is the stable unit of acceptance and keeps its identity across retries; each retry or reassignment is a separate **attempt** under it. A task is assigned through a **lease**, and the active lease version is the single fencing token for material actions derived from that lease — there is no second fencing authority. Every material side effect must confirm that the acting attempt still holds the current lease version, and a stale one is rejected *before* any side effect occurs. This is what prevents a superseded agent from writing into work that has already moved on. This guarantee requires an enforceable write boundary: a lease record alone cannot stop a CLI with direct filesystem access. Mediated writes and any admitted operating-system restriction must be tested for revocation and out-of-scope denial; work is blocked when the required enforcement cannot be established.
 
 **What wins when sources disagree**, strongest first:
 
@@ -334,7 +385,7 @@ A structural promise runs through the whole design: **the machine-readable contr
 
 **Verification is local, and deliberately so.** Everything that checks Mayasaba runs on the user's own Windows machine: there is no hosted continuous integration, and no cloud runner is used even when an equivalent hosted one exists. This follows from the same boundary that shapes the rest of the product — execution belongs on the user's PC, so moving verification to a hosted machine would violate the boundary rather than satisfy it. The rule is enforced rather than merely stated: a proposed change that reintroduces a hosted pipeline is rejected.
 
-Correctness is layered rather than assumed. A contract check proves the definitions agree with each other and with the implementation; it does not compile or run anything, so it can pass while the build is broken. A separate verification pass covers format, compilation, build, the full test suite and the desktop tests, and stops at the first failure. Beyond those, the checks themselves are tested: known drift is reintroduced one case at a time, and the corresponding check must fail and name the specific disagreement it exists to catch.
+Correctness is layered rather than assumed. A contract check proves the definitions agree with each other and with the implementation; it does not compile or run anything, so it can pass while the build is broken. A separate verification pass covers format, compilation, build, the full test suite and the desktop tests, and stops at the first failure. For the native C++ implementation, this pass also covers static analysis, supported AddressSanitizer targets, parser fuzzing, native UI responsiveness and accessibility, process-tree cleanup, workspace access denial and stale-write rejection, crash recovery, and MSI lifecycle checks. Beyond those, the checks themselves are tested: known drift is reintroduced one case at a time, and the corresponding check must fail and name the specific disagreement it exists to catch.
 
 **A validation result is bound to what produced it.** It is always about particular artifacts, a particular workspace, a particular environment and a particular version of the validator or test suite, so a run records the environment snapshot alongside the artifact hashes it was produced against.
 
