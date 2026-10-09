@@ -38,7 +38,7 @@ Mayasaba is a native C++20 application and the deterministic control plane betwe
 
 A software project passes through these stages. Other local-file tasks run only the stages that apply to their acceptance criteria, so a report never needs a build step. A document, research or data task is validated by the checks its own acceptance criteria require — structure, source and citation validity, record counts, invariants or integrity — never by a software gate that does not apply to it.
 
-1. **Intake.** Project creation happens in the Control Room's **Initial Intake Composer** — the text box shown when creating a new project, which is a different surface from the Chat section of the navigation. It takes exactly two required inputs: the **local workspace folder**, chosen with the native Windows folder picker (a typed path is only a candidate until existence, locality and authorization are separately checked), and the **project intent**, free text describing what the user wants Mayasaba to accomplish. Until submission that text is local draft state only. On submission it becomes version 1 of a **project brief**, which is durable project truth — the persisted artifact is the brief record, not a transcript entry, and the chat transcript is never treated as project truth. Attached files are kept as supporting context with their source recorded; attaching a file does not make it truth. The project's display name comes from the workspace folder name, and its identity is a separate opaque id, so two projects with the same folder name never collide.
+1. **Intake through chat.** Mayasaba opens directly into the **same Chat interface and composer used throughout the project's life**. The user describes the project in an ordinary multiline chat message, may attach supporting files, and selects a local workspace through a folder-picker control integrated into that chat experience. The two required values for project creation are the **local workspace folder** (a typed path is only a candidate until existence, locality and authorization are separately checked) and the **project intent** expressed in chat. The user may describe the idea before selecting the folder; the draft is retained and Mayasaba prompts for the missing required value. Until submission, the message and selected attachments are local UI draft state only. The first successfully authorized submission creates version 1 of the **project brief** as durable project truth; the chat timeline displays a linked rendering of that creation rather than becoming a second source of truth. Files remain supporting context with their provenance recorded, not automatically approved requirements. The project's display name comes from the workspace folder name and its identity is a separate opaque id, so identical folder names do not collide. After creation, the **same composer** continues the conversation in the created project without switching the user to a different input interface.
 2. **Discovery.** Mayasaba establishes the brief baseline and objective facts about the workspace: path, repository type, existing files, available toolchain and constraints. It decides whether the brief is complete enough to start. The brief version current at that moment becomes the fixed anchor for the whole analysis.
 3. **Independent analysis and proposals.** All three agents receive the same snapshot of the project and analyze it independently, without seeing the others, then each submits a proposal. All three must participate in council deliberation; an absent or unavailable agent pauses or blocks the council rather than reducing its membership. This avoids anchoring on whoever speaks first.
 4. **Cross-critique, rebuttal and revision.** Mayasaba assigns each agent which proposals to review. Reviewers critique with evidence, authors answer and revise.
@@ -65,11 +65,11 @@ PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS
 
 ## 3. Frontend and UI/UX
 
-The frontend is the native WinUI 3 Control Room. It presents the project through chat, structured views and inspectable results. Users operate Mayasaba through this interface; they do not need to manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
+The frontend is the native WinUI 3 Control Room. **One persistent chat interface and composer are the sole entry point for the user's free-text project intent, conversation, clarifications, requests, answers and file attachments, from first launch through delivery.** The same chat experience includes the local workspace picker for project creation; it does not send the user to a separate intake form or project-intent editor. Council, requirements, tasks, decisions and evidence remain inspectable through structured views in the same Control Room, with controller-authorized controls for specific actions. Users do not manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
 
 ### What the user sees
 
-**Before a project exists.** The entry surface lets the user create a project or reopen a persisted one. Project creation shows the Initial Intake Composer with the native workspace-folder picker, project-intent text box, optional file attachments and a create action. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
+**Before a project exists.** The app opens to the Chat interface, with a welcome prompt inviting the user to describe an idea in the same multiline composer used after creation. **Choose workspace** invokes the native Windows folder picker inline with the chat flow; **Attach files** adds optional context. The user can type first and choose the folder later. The single chat submission creates the project only when both required values are present and authorized; otherwise the chat shows what is missing while preserving the draft. Opening a persisted project resumes its existing conversation in this same interface. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
 
 **Inside a project.** A persistent header identifies the project, authorized workspace, lifecycle phase and operational condition. It shows agent readiness and whether work is running, waiting for the user, blocked, paused, stopped or recovering. Phase and condition are separate fields. Pause and stop remain reachable while background work is active.
 
@@ -77,7 +77,7 @@ A side rail provides project navigation. The central pane displays the selected 
 
 | Surface | What the user sees and can do |
 | --- | --- |
-| Chat | Read user contributions, agent-attributed responses and controller outcomes; type in the Ongoing Chat Composer; attach files; inspect linked work and answer a pending question. |
+| Chat | The same composer throughout the project: describe initial intent, choose a workspace, send messages, request changes, attach files, inspect linked work and answer pending questions. Read project-creation results, user contributions, agent-attributed responses and controller outcomes in one conversation. |
 | Council | Inspect each decision point's triggering gate/event and status; its ordered FULL rounds, three agent proposals, six directed critiques, chair, rebuttals, revisions, evidence grades, carried-forward positions, conflicts, next-round reasons and user escalations. Concise rationales are visible; private chain of thought is excluded. |
 | Requirements | Inspect the current brief, structured requirements, approval state and links to the decisions, tasks and checks that satisfy them. |
 | Architecture and decisions | Inspect recorded choices, alternatives, lock status and affected requirements; submit an explicit reopening request through the declared command flow. |
@@ -91,40 +91,36 @@ These sections are views over the existing authoritative services and records. T
 
 ### Where the user actually types
 
-The Control Room is the only user interface, and the chat surface is the user's interface to it: the user types, and typed state transitions — not the transcript — determine what becomes project truth.
+The Control Room offers **one Chat interface and one consistent chat composer**, before and after project creation. The user never types project intent in a separate form or separate text box. The composer is a native UI component that owns the currently edited draft, not the database record of the user's approved intent. Its behavior depends on controller-owned project state, while its appearance and interaction pattern remain continuous:
 
-There are **two distinct composer surfaces**, named so that intake can never be confused with the Chat navigation section, and so the ongoing chat cannot drift into a second project-creation path:
-
-| Surface | When it appears | What submission creates |
+| Chat state | What the user does in the same composer | Persisted submission result |
 | --- | --- | --- |
-| **Initial Intake Composer** | When creating a new project | `ProjectBrief` version 1 — project truth |
-| **Ongoing Chat Composer** | After the project exists, in the Chat section | A `UserContribution` with an **advisory** classification |
+| **No project yet** | Describe the idea, optionally attach files, and use **Choose workspace** in the chat flow; submit once both required values are ready. | The Project service creates `ProjectBrief` version 1 and the project atomically, then the chat shows a linked creation message from the persisted result. |
+| **Project exists** | Continue chatting, describe new ideas or changes, attach files, and answer questions without switching composers. | The contribution is recorded durably as a `UserContribution` with an advisory classification. Authoritative services evaluate its effect and, when justified and authorized, persist a new `ProjectBrief` version, requirement change, decision-related request or other appropriate record. |
+| **Question or escalation pending** | Reply in the same composer, linked to the pending controller question, or use its inline answer controls. | The owning service stores the response and determines if it changes approved project truth; the chat displays the actual applied, waiting or rejected result. |
 
-Both are composer surfaces: **the user types free text into a text box in either case.** What differs is *which surface* the text is entered from and *what gets persisted*. This distinction is easy to misread, so state it carefully:
+**The same chat input is the source of intent; its stored representation is not the UI draft.** The submitted text can be displayed as a message, but the transcript is a projection and is never treated as the authoritative project brief. On creation, the Project service persists `ProjectBrief` version 1 derived from that chat submission. Later, the user's chat request can produce a newer version or another authoritative change **only** through the owning controller service and the required validation/approval flow; the user never has to open a separate intent editor. A chat message is not automatically an approved new requirement or an instruction granting filesystem permission.
 
-- **"Not a chat message" describes the artifact, not the input.** When the canonical descriptions say the project intent is "project truth, not a chat message", they mean the stored record is a versioned `ProjectBrief` — not a transcript row that could later be mistaken for authoritative intent. It does not mean the user types it somewhere other than a text box.
-- **Intake is not the Chat section.** The navigation sections (Chat, Council, Requirements, …) are all *project* sections, and a project does not exist until intake commits. Intake is therefore the surface shown when no project exists yet; the Ongoing Chat Composer lives inside the Chat section afterwards.
-
-Ownership is split deliberately, so that the transcript is never mistaken for project truth:
+**Ownership remains distinct even though the input experience is unified:**
 
 | Concern | Owner |
 | --- | --- |
-| User input interface and draft | Chat composer (draft state only) |
-| Project creation | Project service |
-| Durable representation of user intent | `ProjectBrief` |
-| Structured requirements derived from the brief | Requirement service |
-| Analysis context snapshot | Context service |
-| Deliberation over the frozen context | Council service |
+| **All user text entry, pending file selections and unsent draft** | The single Chat UI/composer (temporary presentation state only) |
+| **Project creation and durable versioned user intent** | Project service; `ProjectBrief` is its authoritative persisted record |
+| **Subsequent conversation contributions and their interpretation** | Controller-owned message/contribution service and relevant authoritative services |
+| **Structured requirements derived from the brief** | Requirement service |
+| **Analysis context snapshot** | Context service |
+| **Deliberation over the frozen context** | Council service |
 
-The composer writes no requirement, decision or epoch directly. Free-text input after creation is recorded as a `UserContribution` carrying an advisory classification, and only the owning authoritative service decides whether project truth actually changed. The Control Room must therefore display the outcome the service produced, not the advisory label: a contribution the service found non-material must never appear to have changed project truth. When a contribution does change truth, the resulting epoch, affected scope and context regeneration are shown; when it does not, it is shown as timeline commentary.
+The composer writes no requirement, decision or epoch directly. After project creation, a contribution is recorded with advisory classification and routed to the responsible service to identify whether the user has proposed a material change, answered a question or simply commented. When user approval or clarification is needed, Mayasaba asks through the same chat. Only the owning service can commit a new brief version or other authoritative record. The Control Room displays the exact persisted outcome and affected scope, and shows epoch advances, regenerated context and agent synchronization when material truth changes.
 
-The intake submission surface must also make four states distinguishable, and never invent project state while creation is pending: **draft** (editable local UI state, nothing persisted), **submitting** (command in flight, draft retained, no lifecycle field displayed as authoritative), **created** (the persisted projection returned by the controller), and **rejected** (draft retained alongside a machine-readable error code and message). After commit, the Control Room renders the authoritative persisted projection, never a project reconstructed from the submitted form.
+**Single-composer submission states.** For project creation the composer distinguishes **draft** (editable UI-only text/attachments), **submitting** (command in flight without invented project state), **created** (persisted project projection returned by the controller) and **rejected** (draft retained with a machine-readable error and actionable explanation). Once created, it continues in conversational mode while preserving linked submissions and any failed drafts. Reopening a project restores the persisted conversation and authoritative brief; an unsubmitted local draft is never promoted to project truth.
 
 ### Chat interface and file attachments
 
 The Control Room provides a native, chat-centered user experience. The central conversation pane presents user contributions, agent-attributed responses, controller outcomes and links to tasks, decisions, artifacts and evidence. Project navigation stays in a side rail, while an optional details pane shows the selected item's context. The active project, workspace, lifecycle phase and pause/stop controls remain visible. Council deliberation and other project sections are accessible from this interface without creating separate sources of project truth.
 
-**Composer experience.** Both the Initial Intake Composer and the Ongoing Chat Composer provide a multiline text box, an **Attach files** button, drag-and-drop support and a clearly labelled submit action. Intake still requires only the workspace folder and project intent; attachments are optional supporting context. The ongoing composer submits a contribution to the existing project. Keyboard submission behavior is visible and configurable, with a separate shortcut for a newline.
+**Composer experience.** The **single Chat composer** provides a multiline text box, **Attach files**, drag-and-drop and one clearly labelled send/submit action throughout the lifecycle. In the not-yet-created state it also shows **Choose workspace**, using the native Windows folder picker within the conversation flow; the two required project-creation inputs remain the selected folder and the idea typed in chat, while attachments are optional. After creation the same composer sends contributions to the existing project. Pending controller questions and proposed requirement/brief updates are presented inline and answered from the same chat, with explicit approval when required. Keyboard submission behavior is visible and configurable, with a separate shortcut for a newline.
 
 **Attachment experience**
 
@@ -140,11 +136,11 @@ A selected file outside the project folder requires explicit authorization for t
 
 An attachment is supporting material, not an approved requirement, decision or verified factual claim. Authorized content is included through the Context Synchronizer's versioned snapshots with attachment references and provenance. Adding an attachment to ongoing chat records it with a `UserContribution`; only the authoritative services decide whether project truth changes and whether the project epoch must advance. The interface shows preparation, persistence, context inclusion and agent synchronization separately, so a file displayed in chat is never automatically reported as read or applied by every agent. Agent context delivery follows the existing provider policy and workspace authorization.
 
-**Desktop acceptance.** Local UI tests cover both composers, native file selection and drag-and-drop, removing draft attachments, mixed valid/rejected files, retained drafts after failure, supported previews and fallback cards, durable attachment retrieval after restart, keyboard and screen-reader operation, and streaming responsiveness. Controller tests cover attachment scope, immutable content and provenance, context-version changes and accurate delivery/synchronization projections.
+**Desktop acceptance.** Local UI tests cover the **single composer across first-launch, project creation, ongoing chat, user-question and reopened-project states**; typing before selecting a workspace; native folder/file selection and drag-and-drop; removing draft attachments; mixed valid/rejected files; retained drafts after failure; supported previews and fallback cards; durable attachment retrieval after restart; keyboard and screen-reader operation; and streaming responsiveness. Controller tests prove that initial chat submission creates `ProjectBrief` version 1, later chat messages do not silently become approved requirements, authorized material changes create linked versions and epochs, and attachment scope, provenance, context versions and delivery/synchronization are enforced.
 
 ### Chat and interaction behavior
 
-Chat is the primary interaction surface after creation. A submitted item shows who produced it, when it was recorded, its submission outcome and links to relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
+Chat is the **primary and continuous user-input surface from first launch through delivery**, not something that appears only after project creation. A submitted item shows who produced it, when it was recorded, its submission outcome and links to the authoritative brief/contribution and other relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
 
 The composer provides multiline input, file attachment selection, draft attachment removal and a visible submit action. Attachments show preparation, rejection, persistence and context-inclusion status. Supported previews are read-only; an unsupported preview has a clear fallback card. Selecting an attachment does not send the draft.
 
@@ -159,7 +155,7 @@ Routine implementation mechanics are not displayed as raw text in the main conve
 | Background responsibility | Work performed by the controller | User-facing result |
 | --- | --- | --- |
 | Orchestrator | Derive overall project state, schedule work, coordinate barriers and enforce phase gates. | Current phase and condition, next permitted work and the reason progress is waiting or blocked. |
-| Project and requirement services | Persist the brief and contributions; determine whether authoritative intent changed. | Current requirements and an explicit accepted, rejected, commentary-only or material-change outcome. |
+| Project and requirement services | Create the initial `ProjectBrief` from the first authorized chat submission, retain linked contributions, validate subsequent user requests and persist revised brief/requirements only through their owning services. | The same chat timeline links to the current authoritative intent and shows accepted, rejected, commentary-only, proposed or material-change outcomes. |
 | Context Synchronizer | Assemble immutable snapshots, track versions and reject stale context. | Context-inclusion and synchronization status; a reason when stale work is blocked. |
 | Council Engine | Assign reviewers, track positions, apply round budgets and enforce decision gates. | Council progress, critiques, unresolved disagreements and questions needing a user answer. |
 | Task/DAG Engine | Evaluate dependencies, grant leases and track attempts and recovery. | Ready, active, waiting and blocked task states with ownership and causes. |
@@ -182,7 +178,7 @@ The interface displays progress from observed controller records. It does not in
 
 All main flows support keyboard use, visible focus, screen-reader labels, high contrast, DPI scaling and reduced motion. Large conversation, task and evidence lists remain responsive during sustained event streaming. Success and failure are communicated with text as well as visual styling.
 
-Local desktop acceptance covers creating and reopening projects, both composers and attachments, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
+Local desktop acceptance covers creating and reopening projects through the same Chat interface, single-composer intent entry and attachments, chat-driven brief revisions, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
 
 ## 4. Architecture and authoritative state
 
@@ -439,7 +435,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 ### Presentation
 
 - WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
-- Native chat composers, attachment chips/cards, drag-and-drop and Windows file-picker integration for intake and ongoing project chat. Read-only previews and conversation rendering stay within the native UI; authoritative attachment handling remains in application services.
+- One native Chat composer used for first-time project intent and all subsequent chat, with attachment chips/cards, drag-and-drop and Windows folder/file picker integration inside the same chat experience. Read-only previews and conversation rendering stay within the native UI; authoritative project intent, contribution and attachment handling remain in application services.
 - A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
 - Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
 - Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
