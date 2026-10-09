@@ -81,6 +81,28 @@ The composer writes no requirement, decision or epoch directly. Free-text input 
 
 The intake submission surface must also make four states distinguishable, and never invent project state while creation is pending: **draft** (editable local UI state, nothing persisted), **submitting** (command in flight, draft retained, no lifecycle field displayed as authoritative), **created** (the persisted projection returned by the controller), and **rejected** (draft retained alongside a machine-readable error code and message). After commit, the Control Room renders the authoritative persisted projection, never a project reconstructed from the submitted form.
 
+### Chat interface and file attachments
+
+The Control Room provides a native, chat-centered user experience. The central conversation pane presents user contributions, agent-attributed responses, controller outcomes and links to tasks, decisions, artifacts and evidence. Project navigation stays in a side rail, while an optional details pane shows the selected item's context. The active project, workspace, lifecycle phase and pause/stop controls remain visible. Council deliberation and other project sections are accessible from this interface without creating separate sources of project truth.
+
+**Composer experience.** Both the Initial Intake Composer and the Ongoing Chat Composer provide a multiline text box, an **Attach files** button, drag-and-drop support and a clearly labelled submit action. Intake still requires only the workspace folder and project intent; attachments are optional supporting context. The ongoing composer submits a contribution to the existing project. Keyboard submission behavior is visible and configurable, with a separate shortcut for a newline.
+
+**Attachment experience**
+
+- Users select one or more local files with the native Windows file picker or drop files onto the composer. Selecting files does not submit the draft.
+- Each selected file appears as a removable attachment chip or card with its name, detected type, size and preparation status. Supported images have thumbnails; supported text and document formats have read-only previews. Files without a supported preview retain a metadata card and an explicit preview-unavailable label.
+- Attachment preparation, ready, rejected and submitted states are visually distinct. Size, count, type and parsing limits are declared; a rejected file shows an actionable error beside that file. The draft and valid selections remain available after a failed submission.
+- Submitted attachments appear with their originating brief or contribution in the conversation and are discoverable from the project's artifacts view. Opening an attachment shows its available preview, provenance and whether its content was included in an agent's context.
+- Long conversations are virtualized. Streaming updates preserve the user's reading position, and new activity can be reached through an explicit jump-to-latest action. Text, code blocks and structured controller results are rendered with native controls. Empty, loading, disconnected and error states explain the available next action.
+
+**Attachment ownership and context.** The UI owns pending attachment selections only. Application services validate selected files, register them through the Workspace Manager and record artifact provenance through the Evidence Engine, with SQLite storing the authoritative metadata and associations. Accepted attachments receive stable identifiers, content hashes, detected types, sizes and source records, and are stored as durable managed copies in an authorized project attachment location. Later changes to the original file do not silently change a submitted attachment.
+
+A selected file outside the project folder requires explicit authorization for that file and its managed copy; selecting it does not authorize its parent directory or a scan of surrounding files. Attachment processing does not execute the file or follow embedded instructions as authority. Any subprocess used for extraction passes through the execution kernel and its policy gates.
+
+An attachment is supporting material, not an approved requirement, decision or verified factual claim. Authorized content is included through the Context Synchronizer's versioned snapshots with attachment references and provenance. Adding an attachment to ongoing chat records it with a `UserContribution`; only the authoritative services decide whether project truth changes and whether the project epoch must advance. The interface shows preparation, persistence, context inclusion and agent synchronization separately, so a file displayed in chat is never automatically reported as read or applied by every agent. Agent context delivery follows the existing provider policy and workspace authorization.
+
+**Desktop acceptance.** Local UI tests cover both composers, native file selection and drag-and-drop, removing draft attachments, mixed valid/rejected files, retained drafts after failure, supported previews and fallback cards, durable attachment retrieval after restart, keyboard and screen-reader operation, and streaming responsiveness. Controller tests cover attachment scope, immutable content and provenance, context-version changes and accurate delivery/synchronization projections.
+
 ## 3. Technology stack
 
 Mayasaba is a fully native Windows desktop application implemented in modern C++20, with a WinUI 3 Control Room and a deterministic C++ core. It has no hosted component. XAML describes the native interface; the application does not render its Control Room through HTML, JavaScript or a browser engine. This stack describes Mayasaba itself: the three external agent CLIs retain their own implementations, runtimes and provider connections.
@@ -128,6 +150,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 **Presentation**
 
 - WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
+- Native chat composers, attachment chips/cards, drag-and-drop and Windows file-picker integration for intake and ongoing project chat. Read-only previews and conversation rendering stay within the native UI; authoritative attachment handling remains in application services.
 - A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
 - Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
 - Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
