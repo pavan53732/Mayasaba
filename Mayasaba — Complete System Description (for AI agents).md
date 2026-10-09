@@ -38,7 +38,7 @@ Mayasaba is a native C++20 application and the deterministic control plane betwe
 
 A software project passes through these stages. Other local-file tasks run only the stages that apply to their acceptance criteria, so a report never needs a build step. A document, research or data task is validated by the checks its own acceptance criteria require — structure, source and citation validity, record counts, invariants or integrity — never by a software gate that does not apply to it.
 
-1. **Intake through chat.** Mayasaba opens directly into the **same Chat interface and composer used throughout the project's life**. The user describes the project in an ordinary multiline chat message, may attach supporting files, and selects a local workspace through a folder-picker control integrated into that chat experience. The two required values for project creation are the **local workspace folder** (a typed path is only a candidate until existence, locality and authorization are separately checked) and the **project intent** expressed in chat. The user may describe the idea before selecting the folder; the draft is retained and Mayasaba prompts for the missing required value. Until submission, the message and selected attachments are local UI draft state only. The first successfully authorized submission creates version 1 of the **project brief** as durable project truth; the chat timeline displays a linked rendering of that creation rather than becoming a second source of truth. Files remain supporting context with their provenance recorded, not automatically approved requirements. The project's display name comes from the workspace folder name and its identity is a separate opaque id, so identical folder names do not collide. After creation, the **same composer** continues the conversation in the created project without switching the user to a different input interface.
+1. **Intake through chat.** After the mandatory startup three-CLI check passes, Mayasaba opens directly into the **same Chat interface and composer used throughout the project's life**. The user describes the project in an ordinary multiline chat message, may attach supporting files, and selects a local workspace through a folder-picker control integrated into that chat experience. The two required values for project creation are the **local workspace folder** (a typed path is only a candidate until existence, locality and authorization are separately checked) and the **project intent** expressed in chat. The user may describe the idea before selecting the folder; the draft is retained and Mayasaba prompts for the missing required value. Until submission, the message and selected attachments are local UI draft state only. The first successfully authorized submission creates version 1 of the **project brief** as durable project truth; the chat timeline displays a linked rendering of that creation rather than becoming a second source of truth. Files remain supporting context with their provenance recorded, not automatically approved requirements. The project's display name comes from the workspace folder name and its identity is a separate opaque id, so identical folder names do not collide. After creation, the **same composer** continues the conversation in the created project without switching the user to a different input interface.
 2. **Discovery.** Mayasaba establishes the brief baseline and objective facts about the workspace: path, repository type, existing files, available toolchain and constraints. It decides whether the brief is complete enough to start. The brief version current at that moment becomes the fixed anchor for the whole analysis.
 3. **Independent analysis and proposals.** All three agents receive the same snapshot of the project and analyze it independently, without seeing the others, then each submits a proposal. All three must participate in council deliberation; an absent or unavailable agent pauses or blocks the council rather than reducing its membership. This avoids anchoring on whoever speaks first.
 4. **Cross-critique, rebuttal and revision.** Mayasaba assigns each agent which proposals to review. Reviewers critique with evidence, authors answer and revise.
@@ -65,11 +65,46 @@ PROJECT_CREATED → DISCOVERY → INDEPENDENT_ANALYSIS → PROPOSALS
 
 ## 3. Frontend and UI/UX
 
-The frontend is the native WinUI 3 Control Room. **One persistent chat interface and composer are the sole entry point for the user's free-text project intent, conversation, clarifications, requests, answers and file attachments, from first launch through delivery.** The same chat experience includes the local workspace picker for project creation; it does not send the user to a separate intake form or project-intent editor. Council, requirements, tasks, decisions and evidence remain inspectable through structured views in the same Control Room, with controller-authorized controls for specific actions. Users do not manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
+The frontend is the native WinUI 3 Control Room. A **blocking three-CLI readiness check precedes the Chat UI on every app launch**. After all three pass, **one persistent chat interface and composer are the sole entry point for user project intent, conversations, clarifications, requests, answers and file attachments through delivery.** The same chat experience includes the local workspace picker for project creation; it does not send the user to a separate intake form or project-intent editor. Council, requirements, tasks, decisions and evidence remain inspectable through structured views in the same Control Room, with controller-authorized controls for specific actions. Users do not manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
+
+### Startup prerequisite gate — before Chat
+
+**MSI installation and first launch.** Mayasaba's MSI installs the native application and its own runtime assets. The three external CLIs remain user-installed tools: Mayasaba does not silently download, install, update or authenticate them. After MSI installation, launching Mayasaba opens a native **Checking agents** screen, not the Chat UI. This same mandatory gate runs on every subsequent launch before creating or reopening a project.
+
+~~~text
+MSI installs Mayasaba successfully
+             |
+             v
+       Launch Mayasaba
+             |
+             v
+  Check Hermes / Kilo / OpenCode
+             |
+             v
+    All three CLIs READY?
+        /          \
+       NO          YES
+       |            |
+       v            v
+   Agent Setup   Open Chat UI
+   Chat blocked  Create / reopen project
+       |
+  Install/fix, locate CLI
+       |
+    Recheck all three --> check again
+~~~
+
+**Fail-closed navigation.** Missing or incompatible CLIs do not cause the MSI installation to fail or force Mayasaba to exit. Instead the app stays on **Agent Setup**, a prerequisite-recovery screen with no project-intent composer; the user cannot bypass it to Chat, launch a council round or start task execution. The application never operates a reduced two-agent council.
+
+**Adapter-controlled preflight.** Each of Hermes Agent CLI, Kilo Code CLI and OpenCode CLI has a separately verified row. Its adapter resolves an explicitly configured executable or a command in the user's effective environment, validates the candidate path, checks the version and performs bounded, safe version/health/capability probes through the Local Execution Kernel. A matching filename or a command on PATH alone does not establish readiness. The checks must honor the existing process-supervision and adapter-specific safety requirements; they cannot scan the user's entire PC, run arbitrary installation scripts or take custody of provider credentials. An agent may be installed yet still show as unsupported or probe-failed. Provider login and per-session permissions remain separate requirements for actual agent execution.
+
+**What the user sees.** The blocking Agent Setup screen lists exactly three required CLIs: **Hermes Agent CLI**, **Kilo Code CLI** and **OpenCode CLI**. Every row shows a state of \`CHECKING\`, \`READY\`, \`MISSING\`, \`UNSUPPORTED\` or \`PROBE_FAILED\`, plus the detected version/path when known and a clear reason or safe installation/configuration guidance. Controls include **Recheck**, **Locate executable** (validated explicit file selection) and **Exit**. Recheck repeats the verification for all three. If external installation changes PATH, Mayasaba refreshes the environment safely where possible or explains that restarting the app is required. Never invent download links, assume success or install agents silently.
+
+**Opening Chat, relaunch and recovery.** Only when all three distinct adapters have current verified \`READY\` results does the controller produce \`ALL_AGENTS_READY\` and open the existing single Chat UI. A new user sees the welcome composer and workspace picker; a returning user can resume a persisted project conversation. This startup gate does not waive later authentication, capability, context or authorization checks. If a required agent is removed or stops meeting requirements during a project, the Orchestrator blocks new agent-dependent work, pauses the FULL council when needed, preserves project state/drafts and displays a readiness recovery condition. Work continues only after all three are reverified and normal recovery gates pass.
 
 ### What the user sees
 
-**Before a project exists.** The app opens to the Chat interface, with a welcome prompt inviting the user to describe an idea in the same multiline composer used after creation. **Choose workspace** invokes the native Windows folder picker inline with the chat flow; **Attach files** adds optional context. The user can type first and choose the folder later. The single chat submission creates the project only when both required values are present and authorized; otherwise the chat shows what is missing while preserving the draft. Opening a persisted project resumes its existing conversation in this same interface. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
+**Before a project exists.** Once all three CLIs pass the startup check, the app opens to the Chat interface, with a welcome prompt inviting the user to describe an idea in the same multiline composer used after creation. **Choose workspace** invokes the native Windows folder picker inline with the chat flow; **Attach files** adds optional context. The user can type first and choose the folder later. The single chat submission creates the project only when both required values are present and authorized; otherwise the chat shows what is missing while preserving the draft. Opening a persisted project resumes its existing conversation in this same interface. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
 
 **Inside a project.** A persistent header identifies the project, authorized workspace, lifecycle phase and operational condition. It shows agent readiness and whether work is running, waiting for the user, blocked, paused, stopped or recovering. Phase and condition are separate fields. Pause and stop remain reachable while background work is active.
 
@@ -85,13 +120,13 @@ A side rail provides project navigation. The central pane displays the selected 
 | Files and evidence | Inspect authorized project artifacts, submitted attachments, supported previews, source/provenance records, content hashes and links to producing tasks or commands. Internal storage is not presented as a second editable source of truth. |
 | Validation and repair | Inspect build, test, runtime, review and packaging results separately; see failures, supporting evidence, repair attempts and the remaining gates. |
 | Delivery | Inspect the requested local deliverables, their locations, certification evidence and any unmet acceptance criteria. Completion is shown only when the controller has certified it. |
-| Settings and agent readiness | Inspect application/project configuration and detected CLI versions, capability status and health. Missing or unsupported prerequisites have actionable messages. Provider credentials remain with the agent CLIs. |
+| Settings and agent readiness | On startup, Agent Setup lists all three required CLIs, verified status and remediation controls. After readiness passes, inspect project configuration, detected versions, capabilities and health. Provider credentials remain with the CLIs. |
 
 These sections are views over the existing authoritative services and records. They do not introduce separate project, task or decision owners.
 
 ### Where the user actually types
 
-The Control Room offers **one Chat interface and one consistent chat composer**, before and after project creation. The user never types project intent in a separate form or separate text box. The composer is a native UI component that owns the currently edited draft, not the database record of the user's approved intent. Its behavior depends on controller-owned project state, while its appearance and interaction pattern remain continuous:
+The Control Room offers **one Chat interface and one consistent chat composer**, before and after project creation, **after the CLI-readiness gate passes**. The user never types project intent in a separate form or separate text box. The composer is a native UI component that owns the currently edited draft, not the database record of the user's approved intent. Its behavior depends on controller-owned project state, while its appearance and interaction pattern remain continuous:
 
 | Chat state | What the user does in the same composer | Persisted submission result |
 | --- | --- | --- |
@@ -140,7 +175,7 @@ An attachment is supporting material, not an approved requirement, decision or v
 
 ### Chat and interaction behavior
 
-Chat is the **primary and continuous user-input surface from first launch through delivery**, not something that appears only after project creation. A submitted item shows who produced it, when it was recorded, its submission outcome and links to the authoritative brief/contribution and other relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
+Chat is the **primary and continuous project-input surface after the startup gate passes through delivery**, not something that appears only after project creation. Agent Setup does not accept project intent. A submitted item shows who produced it, when it was recorded, its submission outcome and links to the authoritative brief/contribution and other relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
 
 The composer provides multiline input, file attachment selection, draft attachment removal and a visible submit action. Attachments show preparation, rejection, persistence and context-inclusion status. Supported previews are read-only; an unsupported preview has a clear fallback card. Selecting an attachment does not send the draft.
 
@@ -159,7 +194,7 @@ Routine implementation mechanics are not displayed as raw text in the main conve
 | Context Synchronizer | Assemble immutable snapshots, track versions and reject stale context. | Context-inclusion and synchronization status; a reason when stale work is blocked. |
 | Council Engine | Assign reviewers, track positions, apply round budgets and enforce decision gates. | Council progress, critiques, unresolved disagreements and questions needing a user answer. |
 | Task/DAG Engine | Evaluate dependencies, grant leases and track attempts and recovery. | Ready, active, waiting and blocked task states with ownership and causes. |
-| Agent adapters and MCF-v2 | Probe CLIs, translate streams, persist and route messages, acknowledge receipt and retry delivery. | Agent health, attributed responses, delivery/synchronization outcomes and recorded errors. |
+| Agent adapters and MCF-v2 | Perform three-CLI startup checks before Chat, then probe sessions, translate streams, persist and route messages, acknowledge receipt and retry delivery. | Blocking Agent Setup when prerequisites fail; otherwise agent health, attributed responses, delivery/synchronization outcomes and recorded errors. |
 | Workspace Manager, Policy Engine and Execution Kernel | Authorize scope, prepare isolated workspaces, verify current authority, start controlled processes and supervise cancellation. | Authorized operations, affected files, command outcomes, blocked-action reasons and confirmed stop status. |
 | Validation/Repair and Evidence Engines | Execute checks, collect provenance and hashes, diagnose failures and verify repairs. | Separate check results, evidence links, repair progress and certification gates. |
 | SQLite Storage | Persist transactional state, events and inbox/outbox records; support recovery. | Durable project views after restart and visible recovery or integrity failures. |
@@ -178,7 +213,7 @@ The interface displays progress from observed controller records. It does not in
 
 All main flows support keyboard use, visible focus, screen-reader labels, high contrast, DPI scaling and reduced motion. Large conversation, task and evidence lists remain responsive during sustained event streaming. Success and failure are communicated with text as well as visual styling.
 
-Local desktop acceptance covers creating and reopening projects through the same Chat interface, single-composer intent entry and attachments, chat-driven brief revisions, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
+Local desktop acceptance covers first/subsequent-launch prerequisite checks, one/two/three CLI readiness combinations, blocking Agent Setup, Recheck, user-selected executable paths, unsupported/failed probes, Chat unlock only for all three, and later CLI loss/recovery without data loss; then creating and reopening projects through the same Chat interface, single-composer intent entry and attachments, chat-driven brief revisions, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
 
 ## 4. Architecture and authoritative state
 
@@ -369,7 +404,7 @@ All coordination travels over one protocol, MCF-v2. **There is no direct agent-t
 
 ## 7. Agent integration and controls
 
-Every agent is reached through its own adapter, which can detect the CLI, read its version, report capabilities, check health, launch it, send input, stream output, interrupt, resume, stop, and collect changes and evidence. The adapter is the only place a CLI's native protocol exists. What the installed CLI actually does is found by **probing it at runtime**, and only probe-confirmed facts are admitted as capabilities.
+Every agent is reached through its own adapter, which can detect the CLI, read its version, report capabilities, check health, launch it, send input, stream output, interrupt, resume, stop, and collect changes and evidence. **The three adapters must each prove readiness before the startup gate enables Chat.** The adapter is the only place a CLI's native protocol exists. What the installed CLI actually does is found by **probing it at runtime**, and only probe-confirmed facts are admitted as capabilities.
 
 | Agent | Transport | Notable controls |
 | --- | --- | --- |
@@ -399,7 +434,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 
 - Windows desktop, the one target platform. The supported Windows versions and processor architectures are declared and verified before a release.
 - Win32 for direct process, filesystem, handle and security operations; C++/WinRT for modern Windows Runtime APIs.
-- MSI distribution, as the only way the product is installed.
+- MSI distribution, as the only way the product is installed. Missing external CLIs do not fail installation; a post-install application startup gate blocks Chat until all three are ready.
 
 ### Native application and resource ownership
 
@@ -438,7 +473,7 @@ Mayasaba is a fully native Windows desktop application implemented in modern C++
 ### Presentation
 
 - WinUI 3 controls, XAML layouts and C++/WinRT view models for the Control Room.
-- One native Chat composer used for first-time project intent and all subsequent chat, with attachment chips/cards, drag-and-drop and Windows folder/file picker integration inside the same chat experience. Read-only previews and conversation rendering stay within the native UI; authoritative project intent, contribution and attachment handling remain in application services.
+- A native Agent Setup gate blocks the single Chat composer until all three CLIs pass startup verification. One native Chat composer is then used for first-time project intent and all subsequent chat, with attachment chips/cards, drag-and-drop and Windows folder/file picker integration inside the same chat experience. Read-only previews and conversation rendering stay within the native UI; authoritative project intent, contribution and attachment handling remain in application services.
 - A minimal, functional layout with native Fluent styling, a bento-grid organization and restrained system materials where supported.
 - Virtualized event and evidence lists, bounded live-update batches and explicit dispatch onto the UI thread, so dense machine-state presentation remains responsive.
 - Keyboard navigation, visible focus, screen-reader semantics, high contrast, DPI scaling and reduced-motion behavior are verified in desktop tests.
@@ -512,7 +547,7 @@ Correctness is layered rather than assumed. A contract check proves the definiti
 
 - Contract validation, format and static-analysis checks, compilation, core tests, desktop tests, runtime checks and end-to-end validation.
 - AddressSanitizer runs for supported native test targets and fuzzing of untrusted JSON, adapter streams and contract decoders. Sanitizer coverage and platform limitations are recorded; a clean run is not a proof of memory safety.
-- Local fault-injection tests for crash recovery, cancellation, queue saturation, duplicate delivery, stale contexts, stale leases and rejected workspace access. Council contract tests reject duplicate decision triggers, missing-agent participation, reduced-council paths, incomplete six-way critiques, self-critique, non-deterministic chair rotation, stale-context positions, false fixpoint convergence, lost disagreement provenance, unapproved escalations, round-cap resets and any selector or override replacing mandatory FULL deliberation. Chat-originated change tests verify that a new feature request generates one linked pending proposal and FULL decision point, does not prematurely alter approved truth or create tasks, and after authorization re-plans with the correct epoch; commentary and repeated submissions do not trigger duplicate deliberations.
+- Startup prerequisite tests cover missing, unsupported and probe-failed CLIs; three-agent gating, explicit-path validation, Recheck, changed PATH/restart messaging, blocked Chat and project creation, restored Chat once ready, and later CLI loss/recovery without project loss. Local fault-injection tests for crash recovery, cancellation, queue saturation, duplicate delivery, stale contexts, stale leases and rejected workspace access. Council contract tests reject duplicate decision triggers, missing-agent participation, reduced-council paths, incomplete six-way critiques, self-critique, non-deterministic chair rotation, stale-context positions, false fixpoint convergence, lost disagreement provenance, unapproved escalations, round-cap resets and any selector or override replacing mandatory FULL deliberation. Chat-originated change tests verify that a new feature request generates one linked pending proposal and FULL decision point, does not prematurely alter approved truth or create tasks, and after authorization re-plans with the correct epoch; commentary and repeated submissions do not trigger duplicate deliberations.
 - Evidence-backed certification, which is the only thing that can declare work complete.
 - Local-only verification: there is no hosted pipeline, because verification belongs on the user's own machine.
 
