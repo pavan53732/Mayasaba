@@ -103,7 +103,76 @@ An attachment is supporting material, not an approved requirement, decision or v
 
 **Desktop acceptance.** Local UI tests cover both composers, native file selection and drag-and-drop, removing draft attachments, mixed valid/rejected files, retained drafts after failure, supported previews and fallback cards, durable attachment retrieval after restart, keyboard and screen-reader operation, and streaming responsiveness. Controller tests cover attachment scope, immutable content and provenance, context-version changes and accurate delivery/synchronization projections.
 
-## 3. Technology stack
+## 3. Frontend and UI/UX — the user experience and background work
+
+The frontend is the native WinUI 3 Control Room. It presents the project through chat, structured views and inspectable results. Users operate Mayasaba through this interface; they do not need to manipulate database files, protocol messages or internal work directories to manage a project. Background processing remains accountable: every project-affecting action, conclusion, artifact and validation result is available through an appropriate view.
+
+### What the user sees
+
+**Before a project exists.** The entry surface lets the user create a project or reopen a persisted one. Project creation shows the Initial Intake Composer with the native workspace-folder picker, project-intent text box, optional file attachments and a create action. Draft, submitting, rejected and created states are distinct. Project navigation appears only after the controller has returned a created project.
+
+**Inside a project.** A persistent header identifies the project, authorized workspace, lifecycle phase and operational condition. It shows agent readiness and whether work is running, waiting for the user, blocked, paused, stopped or recovering. Phase and condition are separate fields. Pause and stop remain reachable while background work is active.
+
+A side rail provides project navigation. The central pane displays the selected section, and an optional details pane exposes the selected message, task, decision, file or evidence record. This layout adapts to window size and DPI; smaller windows collapse secondary panes without hiding essential controls.
+
+| Surface | What the user sees and can do |
+| --- | --- |
+| Chat | Read user contributions, agent-attributed responses and controller outcomes; type in the Ongoing Chat Composer; attach files; inspect linked work and answer a pending question. |
+| Council | Inspect independent proposals, assigned critiques, rebuttals, revisions, evidence grades, competing positions, round progress and unresolved questions. Concise rationales are visible; private chain of thought is excluded. |
+| Requirements | Inspect the current brief, structured requirements, approval state and links to the decisions, tasks and checks that satisfy them. |
+| Architecture and decisions | Inspect recorded choices, alternatives, lock status and affected requirements; submit an explicit reopening request through the declared command flow. |
+| Tasks | Inspect dependencies, ownership, attempts, current progress, blockers and required acceptance checks. Retry or reassignment is available only through controller-authorized actions. |
+| Files and evidence | Inspect authorized project artifacts, submitted attachments, supported previews, source/provenance records, content hashes and links to producing tasks or commands. Internal storage is not presented as a second editable source of truth. |
+| Validation and repair | Inspect build, test, runtime, review and packaging results separately; see failures, supporting evidence, repair attempts and the remaining gates. |
+| Delivery | Inspect the requested local deliverables, their locations, certification evidence and any unmet acceptance criteria. Completion is shown only when the controller has certified it. |
+| Settings and agent readiness | Inspect application/project configuration and detected CLI versions, capability status and health. Missing or unsupported prerequisites have actionable messages. Provider credentials remain with the agent CLIs. |
+
+These sections are views over the existing authoritative services and records. They do not introduce separate project, task or decision owners.
+
+### Chat and interaction behavior
+
+Chat is the primary interaction surface after creation. A submitted item shows who produced it, when it was recorded, its submission outcome and links to relevant records. User messages, agent responses and controller results are visually distinguishable. Streaming text is provisional until its recorded outcome is available; an agent's completion statement is never rendered as controller-certified success.
+
+The composer provides multiline input, file attachment selection, draft attachment removal and a visible submit action. Attachments show preparation, rejection, persistence and context-inclusion status. Supported previews are read-only; an unsupported preview has a clear fallback card. Selecting an attachment does not send the draft.
+
+A pending interview presents one batch of unresolved questions with the context needed to answer. A material disagreement shows the competing positions and affected requirements, with any recommendation labelled advisory. No response or timeout is shown as approval.
+
+The interface preserves the user's reading position during streaming, provides a jump-to-latest action, and keeps drafts after rejected submissions. Loading, empty, unavailable and error states identify what happened and which action is available. An acknowledgement, completed command and validated result are displayed as different outcomes.
+
+### What happens in the background
+
+Routine implementation mechanics are not displayed as raw text in the main conversation. Their relevant status, effect and evidence are surfaced through the project views and an inspectable event timeline.
+
+| Background responsibility | Work performed by the controller | User-facing result |
+| --- | --- | --- |
+| Orchestrator | Derive overall project state, schedule work, coordinate barriers and enforce phase gates. | Current phase and condition, next permitted work and the reason progress is waiting or blocked. |
+| Project and requirement services | Persist the brief and contributions; determine whether authoritative intent changed. | Current requirements and an explicit accepted, rejected, commentary-only or material-change outcome. |
+| Context Synchronizer | Assemble immutable snapshots, track versions and reject stale context. | Context-inclusion and synchronization status; a reason when stale work is blocked. |
+| Council Engine | Assign reviewers, track positions, apply round budgets and enforce decision gates. | Council progress, critiques, unresolved disagreements and questions needing a user answer. |
+| Task/DAG Engine | Evaluate dependencies, grant leases and track attempts and recovery. | Ready, active, waiting and blocked task states with ownership and causes. |
+| Agent adapters and MCF-v2 | Probe CLIs, translate streams, persist and route messages, acknowledge receipt and retry delivery. | Agent health, attributed responses, delivery/synchronization outcomes and recorded errors. |
+| Workspace Manager, Policy Engine and Execution Kernel | Authorize scope, prepare isolated workspaces, verify current authority, start controlled processes and supervise cancellation. | Authorized operations, affected files, command outcomes, blocked-action reasons and confirmed stop status. |
+| Validation/Repair and Evidence Engines | Execute checks, collect provenance and hashes, diagnose failures and verify repairs. | Separate check results, evidence links, repair progress and certification gates. |
+| SQLite Storage | Persist transactional state, events and inbox/outbox records; support recovery. | Durable project views after restart and visible recovery or integrity failures. |
+
+The UI requests commands and queries through typed application interfaces. Application services produce authoritative projections and events; the UI renders those results. UI code does not write SQL, spawn processes, schedule agents or decide that a task succeeded.
+
+### Internal files and information boundaries
+
+The normal project experience shows the user's authorized source files, submitted attachments, generated artifacts, relevant command output and evidence. Background storage also includes the SQLite database and its supporting files, persisted event/inbox/outbox records, controller-managed snapshots, adapter buffers, temporary files and isolated worktree bookkeeping. Users are not expected to edit these internal records to control the project. Where an internal failure affects the project, its error and effect must be visible.
+
+Diagnostic detail may expose relevant technical records in a read-only inspection view, subject to workspace authorization and redaction. Ordinary chat is not flooded with raw protocol envelopes, queue operations, handle identifiers or database internals. Credentials, tokens and other secrets never enter ordinary messages, logs or evidence views. Agents' private chain of thought is never exposed. Evidence and record inspection do not grant broader filesystem access.
+
+### Feedback, accessibility and acceptance
+
+The interface displays progress from observed controller records. It does not invent completion percentages, token totals, capabilities or successful cancellation. When an outcome is unknown, it says so and shows the recovery state. After restart, it renders persisted state while reconciliation is pending rather than pretending that interrupted work completed.
+
+All main flows support keyboard use, visible focus, screen-reader labels, high contrast, DPI scaling and reduced motion. Large conversation, task and evidence lists remain responsive during sustained event streaming. Success and failure are communicated with text as well as visual styling.
+
+Local desktop acceptance covers creating and reopening projects, both composers and attachments, navigation between related records, pending interviews, blocked and rejected commands, accessible interaction, background-stream responsiveness, confirmed pause/stop outcomes, recovery after restart and delivery views that cannot falsely display certification.
+
+
+## 4. Technology stack
 
 Mayasaba is a fully native Windows desktop application implemented in modern C++20, with a WinUI 3 Control Room and a deterministic C++ core. It has no hosted component. XAML describes the native interface; the application does not render its Control Room through HTML, JavaScript or a browser engine. This stack describes Mayasaba itself: the three external agent CLIs retain their own implementations, runtimes and provider connections.
 
@@ -227,7 +296,7 @@ No cloud service, remote database, hosted component, application account, manage
 - [Microsoft: Windows app packaging and deployment](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/)
 - [Microsoft: AddressSanitizer](https://learn.microsoft.com/en-us/cpp/sanitizers/asan?view=msvc-170)
 
-## 4. Architecture
+## 5. Architecture
 
 The WinUI 3 UI talks to C++ application services through a typed command/query boundary. The services drive thirteen layers, and each layer has exactly one owner.
 
@@ -284,7 +353,7 @@ Conflicts between these are recorded explicitly and traced, never resolved silen
 
 **Configuration is layered, and the nearest layer wins:** project configuration over user configuration over application defaults. Configuration is versioned and schema-validated, and secrets are referenced rather than copied into ordinary state, messages or logs.
 
-## 5. The agents and the communication fabric
+## 6. The agents and the communication fabric
 
 ### The agents and their adapters
 
@@ -324,7 +393,7 @@ All coordination travels over one protocol, MCF-v2. **There is no direct agent-t
 - **Bad traffic is refused explicitly, never absorbed.** Malformed, unauthorized, oversized and cross-project messages are rejected with a recorded reason.
 - **History is immutable.** Events are append-only and chained with SHA-256 per project, so corruption, deletion or reordering is detectable. The chain is not keyed, so it does not resist a deliberate full recompute — a limitation the design records rather than hides.
 
-## 6. The council
+## 7. The council
 
 The council lets the three agents deliberate as a virtual council **without becoming one shared mind**. A controller-side council service owns the process. Agents contribute through ordinary messages on a dedicated council channel, and they never touch the council's records directly.
 
@@ -383,7 +452,7 @@ Agents' questions are normalized, clustered and de-duplicated, checked against t
 
 An answer is saved as an immutable record and sent only to the affected agents, never broadcast to unrelated agents. If it changes material truth, the project epoch advances and a new immutable context snapshot goes out as a context update. A linked continuation round then opens. An answer is not automatically a requirement, a decision or a permission, and it does not bypass any mediated command. Redistribution is tracked as delivery and synchronization separately from transport acknowledgement, so an answer is not reported as applied until the affected agents have resumed from the current context. No answer, timeout or silence is ever converted into assent.
 
-## 7. Contracts, correctness and governance
+## 8. Contracts, correctness and governance
 
 A structural promise runs through the whole design: **the machine-readable contract is the product.** Every message type, event, payload, state machine, error code and bridge operation has a declared, versioned definition, and the definitions are checked against each other and against the implementation rather than kept in prose beside it. The contract is versioned and machine-readable, covering messages, events, payloads, state machines, error codes and bridge operations. It is described by kind rather than by count, because the vocabulary grows as the system evolves.
 
