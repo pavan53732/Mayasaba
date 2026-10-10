@@ -26,6 +26,7 @@ struct SnapshotEntry {
     std::string sha256;
     std::uint64_t size = 0;
     std::string coverage;               // from the manifest; CONTENT_INSPECTED requires evidence
+    std::string reason;                 // required (non-empty) for the negative coverage states
 };
 
 struct Snapshot {
@@ -104,5 +105,12 @@ private:
 // Secret-shaped content filtering for content delivered to agents. Returns true when the
 // excerpt was withheld entirely.
 bool ShouldWithholdContent(const std::string& content, std::string* reason);
+
+// Coverage provenance contract: only the eight registered coverage states are accepted. A
+// CONTENT_INSPECTED or ANALYZED entry must carry read evidence (a non-empty sha256); the
+// negative states (EXCLUDED/UNREADABLE/UNSUPPORTED/TOO_LARGE/STALE) must carry a concrete
+// reason. Exposed so callers and tests can assert the same rule CreateSnapshot enforces.
+bool IsValidCoverage(const std::string& coverage);
+bool CoverageRequiresReadEvidence(const std::string& coverage);
 
 }  // namespace mayasaba::context

@@ -422,15 +422,65 @@ struct Migration {
     const char* sql;
 };
 
-constexpr int kNewestMigrationVersion = 2;
+constexpr int kNewestMigrationVersion = 4;
 static_assert(kNewestMigrationVersion == kSchemaVersion,
               "kSchemaVersion must equal the newest migration version");
+
+// v3: orchestrator-owned durable tables that were previously created via lazy DDL in the
+// Orchestrator (app/src/orchestration.cpp). Per the architecture, schema ownership belongs to
+// the SQLite Storage layer (AGENTS.md 4.2, spec section 9). This migration consolidates them
+// into the storage owner's migration registry so there is a single schema definition point and
+// the Orchestrator never issues DDL.
+const char* kSchemaV3 = R"SQL(
+CREATE TABLE IF NOT EXISTS orchestrator_triggers(
+  trigger_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  target_task_id TEXT NOT NULL DEFAULT '',
+  council_point_id TEXT NOT NULL DEFAULT '',
+  fired INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  fired_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS orchestrator_sync_barriers(
+  barrier_id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  required_agents TEXT NOT NULL,
+  context_digest TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  satisfied_at TEXT NOT NULL DEFAULT '',
+  expires_at_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS orchestrator_sync_acks(
+  barrier_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  context_digest TEXT NOT NULL,
+  acknowledged_at TEXT NOT NULL,
+  PRIMARY KEY(barrier_id, agent)
+);
+CREATE TABLE IF NOT EXISTS orchestrator_publications(
+  publication_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+)SQL";
 
 const Migration kMigrations[] = {
     {1, kSchemaV1},
     // v2: the outbox sequence is per (project, sender, channel); the sender column was missing
     // from v1, which made every sequence query fail and silently reset sequences to 1.
     {2, "ALTER TABLE mcf_outbox ADD COLUMN sender TEXT NOT NULL DEFAULT '';"},
+    {3, kSchemaV3},
+    // v4: snapshot digest profiles. Historical snapshot digests were hashed without each
+    // entry's reason field; new digests include it and every row records the profile it was
+    // hashed under. The ALTER backfills existing rows to profile 1 (the original pre-change
+    // shape) so their stored digests verify unchanged, while new snapshots write profile 2.
+    // SQLite ALTER TABLE ADD COLUMN with a constant non-NULL default is supported; the
+    // versioned migration registry guarantees this runs exactly once per database.
+    {4, "ALTER TABLE snapshots ADD COLUMN digest_profile INTEGER NOT NULL DEFAULT 1;"},
 };
 
 }  // namespace

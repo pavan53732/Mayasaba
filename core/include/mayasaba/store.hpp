@@ -150,6 +150,6 @@ private:
 };
 
 // Current embedded schema version (migration registry).
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 4;
 
 }  // namespace mayasaba::storage
