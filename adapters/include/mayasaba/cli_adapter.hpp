@@ -25,6 +25,12 @@ struct CliProfile {
     bool prompt_via_stdin = false;
     bool emits_json_lines = true;
     bool verified_on_this_machine = false;        // set only by a real observed probe
+    // The native event discriminators THIS CLI is known to emit, in its own vocabulary. Empty
+    // means "not established for this CLI": the adapter then enforces only the shape contract
+    // (object with a string `type`) and passes the native kind through unchanged. It never
+    // falls back to another CLI's vocabulary or to a shared list. Populating this for a real
+    // CLI requires observing that CLI's own output — it must not be guessed.
+    std::vector<std::string> accepted_event_kinds;
     std::string notes;                            // recorded rationale / limitations
 };
 
@@ -59,6 +65,10 @@ public:
         std::string state;  // STARTING | RUNNING | EXITED | CANCELLED | FAILED | UNKNOWN
         execution::ProcessObservation observation;
         std::size_t event_count = 0;
+        // Declared protocol errors: refused native lines. A non-zero count means the session
+        // failed closed and no refused line was admitted as a contribution.
+        std::size_t protocol_errors = 0;
+        std::string protocol_error;  // last declared EventProtocolError code
     };
     bool Snapshot(const std::string& session_id, SessionSnapshot* snapshot);
 

@@ -45,19 +45,21 @@ std::string TrimCarriageReturn(std::string line) {
     return line;
 }
 
-// Extracts a human-readable text field from a native JSON event, if present.
+// Extracts a human-readable text field from a native JSON event, if present. A CLI is untrusted
+// input: every accessor is type-guarded so a wrongly-typed field yields no text instead of an
+// escaping nlohmann::json::exception.
 std::string ExtractEventText(const nlohmann::json& value) {
     static const char* kTextKeys[] = {"text", "content", "message", "result", "output",
                                       "delta", "summary"};
+    if (!value.is_object()) return {};
     for (const char* key : kTextKeys) {
-        if (value.contains(key) && value[key].is_string()) {
-            return RedactSecrets(value[key].get<std::string>());
-        }
-        if (value.contains(key) && value[key].is_object()) {
-            const auto& nested = value[key];
+        if (!value.contains(key)) continue;
+        const auto& field = value[key];
+        if (field.is_string()) return RedactSecrets(field.get<std::string>());
+        if (field.is_object()) {
             for (const char* nested_key : {"text", "content"}) {
-                if (nested.contains(nested_key) && nested[nested_key].is_string()) {
-                    return RedactSecrets(nested[nested_key].get<std::string>());
+                if (field.contains(nested_key) && field[nested_key].is_string()) {
+                    return RedactSecrets(field[nested_key].get<std::string>());
                 }
             }
         }
@@ -65,8 +67,135 @@ std::string ExtractEventText(const nlohmann::json& value) {
     return {};
 }
 
+// Keys that carry an agent's private chain of thought or reasoning. The UI must never display
+// these, and they are dropped from the normalized payload before any consumer can see them.
+bool IsReasoningKey(const std::string& key) {
+    static const char* kKeys[] = {"thinking", "reasoning", "chain_of_thought", "chainofthought",
+                                  "scratchpad", "internal_monologue", "cot", "thought",
+                                  "thoughts", "reasoning_content", "reasoning_details"};
+    for (const char* candidate : kKeys) {
+        if (key == candidate) return true;
+    }
+    return false;
+}
+
+// Bounded, recursive normalization of an untrusted native payload: drops private-reasoning
+// keys, redacts secret-shaped strings and truncates the structure. This is a bounded filter,
+// not proof that every secret is removed; it never throws.
+nlohmann::json SanitizePayload(const nlohmann::json& value, int depth, std::size_t* nodes) {
+    constexpr int kMaxDepth = 6;
+    constexpr std::size_t kMaxNodes = 512;
+    constexpr std::size_t kMaxString = 4096;
+    if (++*nodes > kMaxNodes) return "[truncated]";
+    if (value.is_string()) {
+        std::string text = RedactSecrets(value.get<std::string>());
+        if (text.size() > kMaxString) text.resize(kMaxString);
+        return text;
+    }
+    if (value.is_array()) {
+        if (depth >= kMaxDepth) return "[truncated]";
+        nlohmann::json out = nlohmann::json::array();
+        for (const auto& item : value) {
+            if (out.size() >= 256) {
+                out.push_back("[truncated]");
+                break;
+            }
+            out.push_back(SanitizePayload(item, depth + 1, nodes));
+        }
+        return out;
+    }
+    if (value.is_object()) {
+        if (depth >= kMaxDepth) return "[truncated]";
+        nlohmann::json out = nlohmann::json::object();
+        for (auto it = value.begin(); it != value.end(); ++it) {
+            if (IsReasoningKey(it.key())) continue;  // never expose private reasoning
+            out[it.key()] = SanitizePayload(it.value(), depth + 1, nodes);
+        }
+        return out;
+    }
+    return value;  // number, boolean, null
+}
+
+// Normalizes an untrusted native JSON line into a typed event or a declared protocol error.
+// Total: never throws. A refused line is reported with a declared code and is never admitted as
+// a message event.
+//
+// Enforcement is split deliberately:
+//   * shape (object + string `type`) is universal and always enforced;
+//   * the accepted *string* vocabulary comes from `accepted_kinds`, i.e. this CLI's profile.
+//     When the profile declares no set, no string can be called unknown, so the native kind is
+//     passed through unchanged rather than guessed at or refused.
+SessionEvent NormalizeEvent(const nlohmann::json& value,
+                            const std::vector<std::string>& accepted_kinds) {
+    SessionEvent event;
+    if (!value.is_object()) {
+        event.kind = "error";
+        event.protocol_error = EventProtocolErrorName(EventProtocolError::UnsupportedShape);
+        event.text = std::string("refused native line: ") + event.protocol_error;
+        return event;
+    }
+    if (!value.contains("type") || !value["type"].is_string()) {
+        // Absent, numeric, null or object discriminator: malformed, refused, never assumed to be
+        // a message.
+        event.kind = "error";
+        event.protocol_error = EventProtocolErrorName(EventProtocolError::MalformedDiscriminator);
+        event.text = std::string("refused native line: ") + event.protocol_error;
+        return event;
+    }
+    const std::string kind = value["type"].get<std::string>();
+    if (kind.size() > 64) {  // bound the untrusted discriminator before it is copied anywhere
+        event.kind = "error";
+        event.protocol_error = EventProtocolErrorName(EventProtocolError::UnsupportedShape);
+        event.text = std::string("refused native line: ") + event.protocol_error +
+                     " (discriminator over 64 bytes)";
+        return event;
+    }
+    if (!accepted_kinds.empty()) {
+        bool accepted = false;
+        for (const auto& candidate : accepted_kinds) {
+            if (kind == candidate) {
+                accepted = true;
+                break;
+            }
+        }
+        if (!accepted) {
+            event.kind = "error";
+            event.protocol_error = EventProtocolErrorName(EventProtocolError::UnknownDiscriminator);
+            event.text = std::string("refused native line: ") + event.protocol_error + " (\"" +
+                         kind + "\")";
+            return event;
+        }
+    }
+    event.kind = kind;
+    event.text = ExtractEventText(value);
+    std::size_t nodes = 0;
+    event.payload = SanitizePayload(value, 0, &nodes);
+    return event;
+}
+
 }  // namespace
 
+const char* EventProtocolErrorName(EventProtocolError error) {
+    switch (error) {
+        case EventProtocolError::None: return "NONE";
+        case EventProtocolError::UnsupportedShape: return "UNSUPPORTED_SHAPE";
+        case EventProtocolError::MalformedDiscriminator: return "MALFORMED_DISCRIMINATOR";
+        case EventProtocolError::UnknownDiscriminator: return "UNKNOWN_DISCRIMINATOR";
+    }
+    return "UNKNOWN";
+}
+
+// The three profiles. Launch vectors are observed from the installed CLIs' own help interfaces
+// (bounded, non-mutating).
+//
+// `accepted_event_kinds` is deliberately left empty for all three: the native event-name set of
+// none of these CLIs has been established on this machine (no captured stream is recorded in the
+// tree, and a help interface does not declare one). An empty set means the adapter enforces only
+// the universal shape contract — object with a string `type` — and passes the native kind
+// through unchanged. It does NOT mean "accept everything as a message": consumers must treat an
+// undeclared kind as not-a-contribution, and the controller acts only on kinds it understands.
+// Filling this in requires observing each CLI's own output; it must never be guessed, and the
+// three CLIs must never share one list.
 CliProfile DefaultProfile(AgentKind kind) {
     CliProfile profile;
     profile.kind = kind;
@@ -114,7 +243,7 @@ CliProfile DefaultProfile(AgentKind kind) {
             //   claude --print (-p) with --output-format json for programmatic output.
             // Model/provider/auth flags are never injected; the CLI resolves its own
             // user-managed configuration.
-            profile.probe_args = {"--version"};
+            profile.probe_args = {"--help"};
             profile.launch_args = {"--print", "--output-format", "json", "{prompt}"};
             profile.prompt_via_stdin = false;
             profile.emits_json_lines = true;
@@ -157,6 +286,8 @@ struct CliAdapter::Session {
     std::string partial_line;                // trailing bytes of an incomplete line
     std::size_t parse_failures = 0;
     std::size_t parseable_events = 0;
+    std::size_t protocol_errors = 0;         // refused native lines (declared protocol errors)
+    std::string protocol_error;              // last declared protocol-error code observed
 };
 
 CliAdapter::CliAdapter(AgentKind kind, std::string explicit_path, CliProfile profile_override)
@@ -399,15 +530,23 @@ std::vector<SessionEvent> CliAdapter::DrainEvents(const std::string& session_id)
             if (profile_.emits_json_lines) {
                 auto parsed = ParseJsonBounded(line, {1u << 20, 32, 4096});
                 if (!parsed.ok()) {
-                    ++session.parse_failures;  // counted, never silently treated as an event
+                    // Bytes that are not JSON at all (diagnostic chatter, log noise): counted as
+                    // a parse failure, never silently treated as an event. This is distinct from
+                    // a valid-JSON line with a wrong shape, which is a declared protocol error.
+                    ++session.parse_failures;
                     continue;
                 }
-                SessionEvent event;
-                const auto& value = parsed.value();
-                event.kind = value.value("type", std::string("message"));
-                event.text = ExtractEventText(value);
-                event.payload = value;
-                ++session.parseable_events;
+                // NormalizeEvent is total and fail-closed: a valid declared event passes through;
+                // a malformed/unsupported/unknown line becomes a declared protocol error, is
+                // never counted as a contribution, and fails the session closed. The accepted
+                // string vocabulary is this profile's own (empty = shape-only enforcement).
+                SessionEvent event = NormalizeEvent(parsed.value(), profile_.accepted_event_kinds);
+                if (event.protocol_error.empty()) {
+                    ++session.parseable_events;
+                } else {
+                    ++session.protocol_errors;
+                    session.protocol_error = event.protocol_error;
+                }
                 session.buffered.push_back(std::move(event));
             } else {
                 SessionEvent event;
@@ -420,7 +559,8 @@ std::vector<SessionEvent> CliAdapter::DrainEvents(const std::string& session_id)
     }
 
     // Observe completion. A clean exit with no parseable events is a failure, never a success:
-    // exit codes are data, not verdicts.
+    // exit codes are data, not verdicts. A session that emitted a declared protocol error also
+    // fails closed even if it exited 0, so a refused line can never be certified as success.
     if (session.process->Running()) {
         session.state = "RUNNING";
     } else {
@@ -428,6 +568,17 @@ std::vector<SessionEvent> CliAdapter::DrainEvents(const std::string& session_id)
         session.observation = observation;
         if (session.state == "CANCELLING") {
             session.state = observation.termination_observed ? "CANCELLED" : "UNKNOWN";
+        } else if (session.protocol_errors > 0) {
+            // Session-level report. `protocol_error` on an event marks a refused native line, so
+            // this summary deliberately leaves it empty and names the code in its text; the last
+            // code is also exposed on the session snapshot.
+            session.state = "FAILED";
+            SessionEvent event;
+            event.kind = "error";
+            event.text = "session failed closed: " + std::to_string(session.protocol_errors) +
+                         " refused native line(s) (last: " + session.protocol_error +
+                         "; exit code " + std::to_string(observation.exit_code) + ")";
+            session.buffered.push_back(std::move(event));
         } else if (session.parseable_events == 0) {
             session.state = "FAILED";
             SessionEvent event;
@@ -460,6 +611,8 @@ bool CliAdapter::Snapshot(const std::string& session_id, SessionSnapshot* snapsh
         snapshot->state = it->second->state;
         snapshot->observation = it->second->observation;
         snapshot->event_count = it->second->parseable_events;
+        snapshot->protocol_errors = it->second->protocol_errors;
+        snapshot->protocol_error = it->second->protocol_error;
     }
     return true;
 }

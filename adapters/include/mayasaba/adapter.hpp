@@ -71,10 +71,41 @@ struct SessionSpec {
     std::string prompt;                                // task prompt (never contains secrets)
 };
 
+// Shape contract for a native event line, and the declared protocol errors for refusing one.
+//
+// This contract constrains JSON *shape* only — the line must be an object carrying a string
+// `type` discriminator. Shape holds for every CLI, so it is enforced unconditionally.
+//
+// Which *string* discriminators are valid is CLI-specific and is NOT declared here. It is
+// declared per profile on CliProfile::accepted_event_kinds. There is deliberately no global
+// native vocabulary for all three CLIs: no native event-name set has been established for any
+// of them on this machine, and inventing one would refuse real events as protocol errors.
+//
+// A refused line never becomes a contribution. It is reported with one of these codes and the
+// session fails closed.
+enum class EventProtocolError {
+    None = 0,               // valid event
+    UnsupportedShape,       // valid JSON, but not an object (or a discriminator over the bound)
+    MalformedDiscriminator, // object whose "type" is absent or is not a string (number, null, ...)
+    UnknownDiscriminator,   // "type" is a string outside this profile's declared accepted set
+};
+const char* EventProtocolErrorName(EventProtocolError error);
+
 // One normalized event from a CLI's native stream.
 struct SessionEvent {
-    std::string kind;        // "started" | "message" | "tool" | "usage" | "error" | "done"
+    // For a profile that declares accepted_event_kinds: one of those kinds. For a profile that
+    // declares none, the native discriminator string is passed through unchanged (nothing is
+    // guessed or fabricated), and consumers must treat an undeclared kind as not-a-contribution.
+    std::string kind;
     std::string text;        // message/error text (already redacted)
+    // Declared protocol-error code; empty for a valid event. When non-empty this event is NOT
+    // a contribution — it reports that the native line was refused.
+    std::string protocol_error;
+    // Native payload. A bounded best-effort filter drops private-reasoning keys and redacts
+    // secret-shaped strings, but that is NOT a confidentiality boundary: an unshaped secret is
+    // not detected, so this must not be treated as sanitized. Nothing in the current tree reads
+    // it. Payload confidentiality is a separate, unresolved obligation (BLOCKED) recorded in
+    // coordination/worker-reports/CLAUDE-SUPERVISED.md.
     nlohmann::json payload = nlohmann::json::object();
 };
 

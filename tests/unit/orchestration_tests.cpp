@@ -3,9 +3,11 @@
 // task completion on valid passes, trigger firing, phase transitions, and contribution persistence.
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "mayasaba/base.hpp"
@@ -50,7 +52,7 @@ struct OrchestrationFixture {
 
         policy = std::make_unique<policy::Engine>(store.get());
         tasks = std::make_unique<tasks::Engine>(store.get());
-        council = std::make_unique<council::Engine>();
+        council = std::make_unique<council::Engine>(store.get());
         context = std::make_unique<context::Synchronizer>(store.get(), project_root);
         evidence = std::make_unique<evidence::Engine>(store.get());
         validation = std::make_unique<validation::Engine>(store.get(), evidence.get());
@@ -86,36 +88,30 @@ Status AdvanceToValidating(tasks::Engine* tasks, const std::string& task_id) {
     return tasks->TransitionTask(task_id, tasks::TaskState::Validating);
 }
 
-TEST(Orchestration, EmptyValidationResultFailsClosed) {
+TEST(Orchestration, EmptyCriteriaContractIsRejectedFailClosed) {
+    // SPEC BASIS (Complete System Description §4 "Proof-carrying task contracts"): every
+    // actionable task carries "one or more individually identified acceptance criteria". A
+    // contract with no criteria has no oracle at all, so the Task/DAG Engine must reject it at
+    // registration (fail closed) rather than admit an unverifiable task. This replaces the
+    // earlier premise that an oracle-less contract could be scheduled and only fail later at
+    // validation; the authoritative spec forbids an oracle-less actionable task outright.
     OrchestrationFixture fix;
     ASSERT_FALSE(fix.project_id.empty());
 
-    // Schedule a task with NO acceptance criteria
     tasks::TaskContract contract;
     contract.task_id = "task_empty_criteria";
     contract.project_id = fix.project_id;
     contract.objective = "run an unverifiable task";
-    contract.criteria = {};  // empty criteria!
+    contract.criteria = {};  // no acceptance oracle at all
 
-    auto scheduled = fix.orchestrator->ScheduleTask(fix.project_id, "Empty Criteria Task", contract);
-    ASSERT_TRUE(scheduled.ok()) << scheduled.message();
-
-    // Transition task through legal state machine path to Validating
-    auto to_val = AdvanceToValidating(fix.tasks.get(), "task_empty_criteria");
-    ASSERT_TRUE(to_val.ok()) << to_val.message();
-
-    // Calling ValidateTask on a task with 0 criteria produces 0 verdicts.
-    // Under AGENTS.md §§ 4.4 and 13, unverifiable state fails closed.
-    // An empty validation result MUST fail the task, NEVER complete it!
-    auto val_res = fix.orchestrator->ValidateTask("task_empty_criteria");
-    ASSERT_TRUE(val_res.ok());
-    EXPECT_TRUE(val_res->empty());
-
-    // Verify task state in the authoritative task engine: MUST be Failed!
-    auto final_task = fix.tasks->GetTask("task_empty_criteria");
-    ASSERT_TRUE(final_task.ok());
-    EXPECT_EQ(final_task->state, tasks::TaskState::Failed);
-    EXPECT_NE(final_task->state, tasks::TaskState::Completed);
+    auto scheduled =
+        fix.orchestrator->ScheduleTask(fix.project_id, "Empty Criteria Task", contract);
+    EXPECT_FALSE(scheduled.ok()) << "an oracle-less task contract must be rejected (fail closed)";
+    if (!scheduled.ok()) {
+        EXPECT_EQ(scheduled.code(), ErrorCode::InvalidArgument);
+    }
+    // Nothing unverifiable was admitted into the authoritative task engine.
+    EXPECT_FALSE(fix.tasks->GetTask("task_empty_criteria").ok());
 }
 
 TEST(Orchestration, InconclusiveEvidenceFailsTask) {
@@ -327,6 +323,230 @@ TEST(Orchestration, UserContributionIsPersistedImmutably) {
     EXPECT_EQ(read->text, "Fix the authentication flow");
     ASSERT_EQ(read->attachments.size(), 1u);
     EXPECT_EQ(read->attachments[0], "att_1");
+}
+
+// --- Restart recovery: stale lease reclaimed, interrupted attempt UNKNOWN -------------------
+
+TEST(Orchestration, RestartRecoveryReclaimsStaleLeaseAndMarksAttemptUnknown) {
+    OrchestrationFixture fix;
+    ASSERT_FALSE(fix.project_id.empty());
+
+    tasks::TaskContract contract;
+    contract.task_id = "task_stale";
+    contract.project_id = fix.project_id;
+    contract.objective = "stale lease recovery";
+    contract.allowed_write_paths = {"src/a.cpp"};
+    tasks::AcceptanceCriterion crit;
+    crit.criterion_id = "c1";
+    crit.expectation = "the build succeeds";
+    crit.oracle_class = "compile";
+    crit.blocking = true;
+    contract.criteria.push_back(crit);
+
+    auto scheduled = fix.orchestrator->ScheduleTask(fix.project_id, "Stale", contract);
+    ASSERT_TRUE(scheduled.ok()) << scheduled.message();
+    ASSERT_TRUE(fix.tasks->TransitionTask("task_stale", tasks::TaskState::Ready).ok());
+
+    // Lease with a tiny TTL and start an attempt, then let the lease expire.
+    auto lease = fix.tasks->GrantLease("task_stale", "att-stale", "hermes",
+                                       std::chrono::milliseconds(1));
+    ASSERT_TRUE(lease.ok()) << lease.message();
+    auto attempt = fix.tasks->StartAttempt("task_stale", "hermes", lease.value().version, {});
+    ASSERT_TRUE(attempt.ok()) << attempt.message();
+    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+
+    auto report = fix.orchestrator->RecoverAfterRestart(fix.project_id);
+    ASSERT_TRUE(report.ok()) << report.message();
+    bool reclaimed = false;
+    for (const auto& task_id : report->expired_lease_tasks) {
+        if (task_id == "task_stale") reclaimed = true;
+    }
+    EXPECT_TRUE(reclaimed) << "restart recovery must reclaim the stale lease";
+
+    // The task is back to READY and the interrupted attempt is UNKNOWN, never SUCCEEDED.
+    EXPECT_EQ(fix.tasks->GetTask("task_stale").value().state, tasks::TaskState::Ready);
+    auto attempts = fix.tasks->AttemptsFor("task_stale");
+    ASSERT_TRUE(attempts.ok());
+    ASSERT_EQ(attempts.value().size(), 1u);
+    EXPECT_EQ(attempts.value()[0].status, "UNKNOWN");
+    EXPECT_FALSE(fix.tasks->ActiveLeaseFor("task_stale").ok());
+}
+
+// --- Cancellation: unknown session fails closed (never a fabricated success) -----------------
+
+TEST(Orchestration, CancelUnknownSessionFailsClosed) {
+    OrchestrationFixture fix;
+    auto cancelled = fix.orchestrator->CancelTaskExecution("no-such-session", "user request");
+    EXPECT_FALSE(cancelled.ok());
+    EXPECT_EQ(cancelled.code(), ErrorCode::NotFound);
+}
+
+// --- Synchronization barrier (state machine #8): all required agents, one digest -------------
+
+TEST(Orchestration, BarrierSatisfiedOnlyWhenAllAgentsAckSameDigest) {
+    OrchestrationFixture fix;
+
+    auto barrier = fix.orchestrator->RegisterBarrier(
+        fix.project_id, "council-sync", {"hermes", "kilo", "claude"}, "digest-1", 0);
+    ASSERT_TRUE(barrier.ok()) << barrier.message();
+    const std::string barrier_id = barrier.value();
+
+    auto initial = fix.orchestrator->BarrierState(barrier_id);
+    ASSERT_TRUE(initial.ok());
+    EXPECT_EQ(initial.value().state, "waiting");
+
+    // A mismatched digest is rejected and never counted toward satisfaction.
+    auto mismatch = fix.orchestrator->AcknowledgeBarrier(barrier_id, "hermes", "digest-OTHER");
+    EXPECT_FALSE(mismatch.ok());
+
+    ASSERT_TRUE(fix.orchestrator->AcknowledgeBarrier(barrier_id, "hermes", "digest-1").ok());
+    ASSERT_TRUE(fix.orchestrator->AcknowledgeBarrier(barrier_id, "kilo", "digest-1").ok());
+    auto partial = fix.orchestrator->BarrierState(barrier_id);
+    ASSERT_TRUE(partial.ok());
+    EXPECT_NE(partial.value().state, "satisfied") << "two of three acks must not satisfy";
+
+    ASSERT_TRUE(fix.orchestrator->AcknowledgeBarrier(barrier_id, "claude", "digest-1").ok());
+    auto satisfied = fix.orchestrator->BarrierState(barrier_id);
+    ASSERT_TRUE(satisfied.ok());
+    EXPECT_EQ(satisfied.value().state, "satisfied");
+    EXPECT_EQ(satisfied.value().acknowledged_agents.size(), 3u);
+}
+
+// --- Council facade on Orchestrator: full lifecycle from open to covered synthesis -----------
+
+TEST(Orchestration, CouncilFacadeFullLifecycleFromOpenToCoveredSynthesis) {
+    OrchestrationFixture fix;
+
+    // 1. Open council point
+    auto opened = fix.orchestrator->OpenCouncilPoint(
+        fix.project_id, "Database WAL mode decision", "Evidence document text", "snapshot-wal-1");
+    ASSERT_TRUE(opened.ok()) << opened.message();
+    const std::string point_id = opened.value();
+
+    // 2. Advance round
+    ASSERT_TRUE(fix.orchestrator->AdvanceCouncilRound(point_id).ok());
+
+    // 3. Link session
+    Orchestrator::CouncilSessionLink link{point_id, 1, "hermes", "sess-council-1", "proposal"};
+    ASSERT_TRUE(fix.orchestrator->LinkCouncilSession(link).ok());
+    auto sessions = fix.orchestrator->CouncilSessions();
+    ASSERT_FALSE(sessions.empty());
+    EXPECT_EQ(sessions.back().session_id, "sess-council-1");
+    EXPECT_EQ(sessions.back().point_id, point_id);
+
+    // 4. Submit independent proposals for all three agents
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(
+        point_id, "hermes", "Hermes proposal for WAL mode").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(
+        point_id, "kilo", "Kilo proposal for WAL mode").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(
+        point_id, "claude", "Claude proposal for WAL mode").ok());
+
+    auto st1 = fix.orchestrator->CouncilPointState(point_id);
+    ASSERT_TRUE(st1.ok());
+    EXPECT_EQ(st1.value().proposals.size(), 3u);
+
+    // 5. Submit all six directed cross-critiques (no self-critique)
+    EXPECT_FALSE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "hermes", "hermes", "Self critique should fail").ok());
+
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "hermes", "kilo", "Hermes review of Kilo").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "hermes", "claude", "Hermes review of Claude").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "kilo", "hermes", "Kilo review of Hermes").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "kilo", "claude", "Kilo review of Claude").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "claude", "hermes", "Claude review of Hermes").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(
+        point_id, "claude", "kilo", "Claude review of Kilo").ok());
+
+    // 6. Identify deterministic chair and distinct reviewer
+    std::string chair = fix.council->ChairFor(point_id, 1);
+    ASSERT_FALSE(chair.empty());
+    std::string reviewer;
+    for (const auto& a : {"hermes", "kilo", "claude"}) {
+        if (a != chair) {
+            reviewer = a;
+            break;
+        }
+    }
+    ASSERT_FALSE(reviewer.empty());
+
+    // 7. Submit synthesis with attributed non-chair review and auto survivor coverage
+    auto syn_status = fix.orchestrator->SubmitCouncilSynthesis(
+        point_id, chair, "Synthesized consensus for SQLite WAL", reviewer,
+        "Attributed non-chair review: all peer points addressed.");
+    ASSERT_TRUE(syn_status.ok()) << syn_status.message();
+
+    // 8. Verify the point state resolves with Outcome::Synthesized and coverage_ok
+    auto resolved_state = fix.orchestrator->CouncilPointState(point_id);
+    ASSERT_TRUE(resolved_state.ok());
+    ASSERT_EQ(resolved_state.value().syntheses.size(), 1u);
+    EXPECT_TRUE(resolved_state.value().syntheses[0].coverage_ok);
+    EXPECT_EQ(resolved_state.value().syntheses[0].review_agent, reviewer);
+    EXPECT_EQ(resolved_state.value().outcome, council::Outcome::Synthesized);
+}
+
+// --- Council facade rejects chair self-review and incomplete survivor citations --------------
+
+TEST(Orchestration, CouncilFacadeRejectsChairSelfReviewAndMissingSurvivorCitation) {
+    OrchestrationFixture fix;
+
+    auto opened = fix.orchestrator->OpenCouncilPoint(
+        fix.project_id, "Cache strategy", "Evidence report", "snapshot-cache-1");
+    ASSERT_TRUE(opened.ok()) << opened.message();
+    const std::string point_id = opened.value();
+
+    ASSERT_TRUE(fix.orchestrator->AdvanceCouncilRound(point_id).ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(point_id, "hermes", "Hermes cache").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(point_id, "kilo", "Kilo cache").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilProposal(point_id, "claude", "Claude cache").ok());
+
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "hermes", "kilo", "ok").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "hermes", "claude", "ok").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "kilo", "hermes", "ok").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "kilo", "claude", "ok").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "claude", "hermes", "ok").ok());
+    ASSERT_TRUE(fix.orchestrator->SubmitCouncilCritique(point_id, "claude", "kilo", "ok").ok());
+
+    std::string chair = fix.council->ChairFor(point_id, 1);
+    std::string reviewer;
+    for (const auto& a : {"hermes", "kilo", "claude"}) {
+        if (a != chair) {
+            reviewer = a;
+            break;
+        }
+    }
+
+    // Chair self-review must fail closed with Denied
+    council::Synthesis self_review;
+    self_review.point_id = point_id;
+    self_review.chair_agent = chair;
+    self_review.review_agent = chair;  // Invalid: chair reviewing own synthesis
+    self_review.nonchair_review = "I approve my own work";
+    self_review.synthesized_resolution = "Chair only resolution";
+    auto self_res = fix.orchestrator->SubmitCouncilSynthesis(self_review);
+    EXPECT_FALSE(self_res.ok());
+    EXPECT_EQ(self_res.code(), ErrorCode::Denied);
+
+    // Synthesis citing only 1 of 3 survivors must be rejected with Denied
+    auto survivors = fix.council->SurvivingProposals(point_id);
+    ASSERT_TRUE(survivors.ok());
+    ASSERT_EQ(survivors.value().size(), 3u);
+
+    council::Synthesis partial;
+    partial.point_id = point_id;
+    partial.chair_agent = chair;
+    partial.review_agent = reviewer;
+    partial.nonchair_review = "Review of partial";
+    partial.synthesized_resolution = "Partial resolution";
+    partial.cited_positions = {survivors.value()[0].proposal_id};  // Missing other 2 survivors!
+    auto partial_res = fix.orchestrator->SubmitCouncilSynthesis(partial);
+    EXPECT_FALSE(partial_res.ok());
+    EXPECT_EQ(partial_res.code(), ErrorCode::Denied);
 }
 
 }  // namespace

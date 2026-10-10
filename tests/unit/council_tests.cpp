@@ -4,10 +4,14 @@
 #include <gtest/gtest.h>
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "mayasaba/council.hpp"
+#include "mayasaba/store.hpp"
+#include "test_support.hpp"
 
 using namespace mayasaba;
 using namespace mayasaba::council;
@@ -18,9 +22,11 @@ const char* kProject = "proj_council";
 const char* kPoint = "point-1";
 
 struct Fixture {
+    test::ScratchDir scratch;
+    std::unique_ptr<storage::Store> store;
     Engine engine;
 
-    Fixture() {
+    Fixture() : store(OpenStore()), engine(store.get()) {
         CouncilPoint point;
         point.point_id = kPoint;
         point.project_id = kProject;
@@ -28,6 +34,13 @@ struct Fixture {
         point.evidence = "context snapshot";
         point.snapshot_id = "snap-1";
         EXPECT_TRUE(engine.RegisterPoint(point).ok());
+    }
+
+    std::unique_ptr<storage::Store> OpenStore() {
+        auto opened = storage::Store::Open(scratch.File("council_test.db"));
+        EXPECT_TRUE(opened.ok()) << opened.message();
+        if (!opened.ok()) return nullptr;
+        return std::move(opened.value());
     }
 
     Status Propose(const std::string& agent, const std::string& text,
@@ -68,6 +81,31 @@ struct Fixture {
         ASSERT_TRUE(Propose("hermes", texts[0]).ok());
         ASSERT_TRUE(Propose("kilo", texts[1]).ok());
         ASSERT_TRUE(Propose("claude", texts[2]).ok());
+        auto ids = ProposalIds(round);
+        ASSERT_EQ(ids.size(), 3u);
+        ASSERT_TRUE(AddCritique("hermes", "kilo", ids["kilo"], "h critiques k").ok());
+        ASSERT_TRUE(AddCritique("hermes", "claude", ids["claude"], "h critiques o").ok());
+        ASSERT_TRUE(AddCritique("kilo", "hermes", ids["hermes"], "k critiques h").ok());
+        ASSERT_TRUE(AddCritique("kilo", "claude", ids["claude"], "k critiques o").ok());
+        ASSERT_TRUE(AddCritique("claude", "hermes", ids["hermes"], "o critiques h").ok());
+        ASSERT_TRUE(AddCritique("claude", "kilo", ids["kilo"], "o critiques k").ok());
+    }
+
+    // Completes one round where a single agent's proposal carries explicit claim records
+    // (used to exercise the computed evidence-grade gate).
+    void CompleteRoundWithClaims(std::int64_t round, const std::vector<std::string>& texts,
+                                 const std::string& claim_agent,
+                                 const std::vector<nlohmann::json>& claims) {
+        ASSERT_EQ(texts.size(), 3u);
+        const std::vector<std::string> agents = {"hermes", "kilo", "claude"};
+        for (std::size_t i = 0; i < agents.size(); ++i) {
+            Proposal proposal;
+            proposal.point_id = kPoint;
+            proposal.agent = agents[i];
+            proposal.proposal = texts[i];
+            if (agents[i] == claim_agent) proposal.claims = claims;
+            ASSERT_TRUE(engine.SubmitProposal(proposal).ok()) << agents[i];
+        }
         auto ids = ProposalIds(round);
         ASSERT_EQ(ids.size(), 3u);
         ASSERT_TRUE(AddCritique("hermes", "kilo", ids["kilo"], "h critiques k").ok());
@@ -358,44 +396,52 @@ TEST(CouncilConvergence, MajorityOrIncompleteRoundNeverConverges) {
 TEST(CouncilConvergence, ReviewedSynthesisConvergesWithoutSecondRound) {
     Fixture fixture;
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
-    ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
-    ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
+    fixture.CompleteRound(1, {"A", "B", "C"});
+    auto ids = fixture.ProposalIds(1);
+    ASSERT_EQ(ids.size(), 3u);
 
+    // A covered synthesis with an attributed non-chair review resolves the point in round 1,
+    // before any second round is needed (AGENTS.md 7).
     Synthesis synthesis;
     synthesis.point_id = kPoint;
     synthesis.chair_agent = "hermes";
     synthesis.synthesized_resolution = "resolve";
     synthesis.nonchair_review = "reviewed by kilo";
+    synthesis.review_agent = "kilo";
     synthesis.evidence = {{{"hash", "deadbeef"}}};
+    synthesis.cited_positions = {ids["hermes"], ids["kilo"], ids["claude"]};
     synthesis.chair_approved = true;
     ASSERT_TRUE(fixture.engine.SubmitSynthesis(synthesis).ok());
 
     auto state = fixture.engine.PointStateOf(kPoint);
     ASSERT_TRUE(state.ok());
     EXPECT_TRUE(fixture.engine.IsConverged(state.value()));
-    EXPECT_EQ(state.value().outcome, Outcome::Converged);
+    EXPECT_EQ(state.value().outcome, Outcome::Synthesized);
 }
 
-TEST(CouncilConvergence, SynthesisMissingChairApprovalDoesNotConverge) {
+TEST(CouncilConvergence, SynthesisWithoutChairApprovalResolvesWhenCoveredAndReviewed) {
     Fixture fixture;
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
-    ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
-    ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
+    fixture.CompleteRound(1, {"A", "B", "C"});
+    auto ids = fixture.ProposalIds(1);
+    ASSERT_EQ(ids.size(), 3u);
 
     Synthesis synthesis;
     synthesis.point_id = kPoint;
     synthesis.chair_agent = "hermes";
     synthesis.synthesized_resolution = "resolve";
     synthesis.nonchair_review = "reviewed by kilo";
-    synthesis.chair_approved = false;
+    synthesis.review_agent = "kilo";
+    synthesis.cited_positions = {ids["hermes"], ids["kilo"], ids["claude"]};
+    synthesis.chair_approved = false;  // the chair has no binding authority
     ASSERT_TRUE(fixture.engine.SubmitSynthesis(synthesis).ok());
 
     auto state = fixture.engine.PointStateOf(kPoint);
     ASSERT_TRUE(state.ok());
-    EXPECT_FALSE(fixture.engine.IsConverged(state.value()));
-    EXPECT_NE(state.value().outcome, Outcome::Converged);
+    // Chair approval is a persisted chair signal only; a covered, attributed non-chair review
+    // resolves the point regardless (AGENTS.md 7).
+    EXPECT_TRUE(fixture.engine.IsConverged(state.value()));
+    EXPECT_EQ(state.value().outcome, Outcome::Synthesized);
 }
 
 // --- Roles ---------------------------------------------------------------------------------
@@ -407,4 +453,247 @@ TEST(CouncilRole, NamesAreStable) {
     EXPECT_STREQ(RoundRoleName(RoundRole::Synthesis), "synthesis");
     EXPECT_STREQ(RoundRoleName(RoundRole::NonchairReview), "nonchair_review");
     EXPECT_STREQ(RoundRoleName(RoundRole::ChairReview), "chair_review");
+}
+
+// --- Durability across engine restart (H3: SQLite-backed) ----------------------------------
+// Required: council records are durable. A NEW engine over the reopened store must observe the
+// identical authoritative point, round, positions and critiques (spec sections 5, 11).
+
+TEST(CouncilDurability, RestartPreservesRoundsPositionsAndCritiques) {
+    test::ScratchDir scratch;
+    const std::string db_path = scratch.File("council_restart.db");
+    const std::string point_id = "point-restart";
+
+    {
+        auto opened = storage::Store::Open(db_path);
+        ASSERT_TRUE(opened.ok()) << opened.message();
+        council::Engine engine(opened.value().get());
+
+        CouncilPoint point;
+        point.point_id = point_id;
+        point.project_id = "proj_restart";
+        point.topic = "durable topic";
+        point.evidence = "context snapshot";
+        point.snapshot_id = "snap-restart";
+        ASSERT_TRUE(engine.RegisterPoint(point).ok());
+        ASSERT_TRUE(engine.BeginRound(point_id, 1).ok());
+
+        for (const std::string agent : {"hermes", "kilo", "claude"}) {
+            Proposal proposal;
+            proposal.point_id = point_id;
+            proposal.agent = agent;
+            proposal.proposal = "position-" + agent;
+            ASSERT_TRUE(engine.SubmitProposal(proposal).ok()) << agent;
+        }
+        auto state = engine.PointStateOf(point_id);
+        ASSERT_TRUE(state.ok()) << state.message();
+        std::map<std::string, std::string> ids;
+        for (const auto& proposal : state.value().proposals) ids[proposal.agent] = proposal.proposal_id;
+        ASSERT_EQ(ids.size(), 3u);
+
+        const std::pair<std::string, std::string> pairs[6] = {
+            {"hermes", "kilo"},   {"hermes", "claude"}, {"kilo", "hermes"},
+            {"kilo", "claude"}, {"claude", "hermes"}, {"claude", "kilo"}};
+        for (const auto& pair : pairs) {
+            Critique critique;
+            critique.proposal_id = ids[pair.second];
+            critique.author_agent = pair.first;
+            critique.target_agent = pair.second;
+            critique.review = pair.first + " critiques " + pair.second;
+            ASSERT_TRUE(engine.SubmitCritique(critique).ok()) << pair.first << "->" << pair.second;
+        }
+        // engine (and its store handle) destroyed here.
+    }
+
+    auto reopened_store = storage::Store::Open(db_path);
+    ASSERT_TRUE(reopened_store.ok()) << reopened_store.message();
+    council::Engine reopened(reopened_store.value().get());
+
+    auto point = reopened.Point(point_id);
+    ASSERT_TRUE(point.ok()) << point.message();
+    EXPECT_EQ(point.value().topic, "durable topic");
+
+    auto state = reopened.PointStateOf(point_id);
+    ASSERT_TRUE(state.ok()) << state.message();
+    ASSERT_EQ(state.value().rounds.size(), 1u);
+    EXPECT_EQ(state.value().rounds[0], 1);
+    ASSERT_EQ(state.value().proposals.size(), 3u);
+    ASSERT_EQ(state.value().critiques.size(), 6u);
+
+    auto surviving = reopened.SurvivingProposals(point_id);
+    ASSERT_TRUE(surviving.ok());
+    EXPECT_EQ(surviving.value().size(), 3u);
+
+    // A second independent reconstruction observes the identical outcome (deterministic).
+    council::Engine again(reopened_store.value().get());
+    auto state2 = again.PointStateOf(point_id);
+    ASSERT_TRUE(state2.ok());
+    EXPECT_EQ(state2.value().outcome, state.value().outcome);
+}
+
+// --- Five-outcome computation (spec section 5, "Rounds and how they end") -------------------
+
+TEST(CouncilOutcome, StableFirstCompletedRoundSealsContinueNotConverged) {
+    Fixture fixture;
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
+    fixture.CompleteRound(1, {"A", "B", "C"});
+
+    auto state = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(state.ok()) << state.message();
+    // A stable, conflict-free first completed round cannot be converged and cannot be a
+    // positive synthesis; it is the internal nonterminal CONTINUE checkpoint.
+    EXPECT_EQ(state.value().outcome, Outcome::Continue);
+    EXPECT_NE(state.value().outcome, Outcome::Converged);
+
+    // Sealing an unresolved-but-complete round keeps the nonterminal CONTINUE outcome.
+    auto sealed = fixture.engine.SealRound(kPoint);
+    ASSERT_TRUE(sealed.ok()) << sealed.message();
+    auto after = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(after.ok());
+    EXPECT_EQ(after.value().outcome, Outcome::Continue);
+    EXPECT_FALSE(fixture.engine.IsConverged(after.value()));
+}
+
+TEST(CouncilOutcome, ContinueIsNotASixthPositiveOutcome) {
+    // CONTINUE must be represented distinctly from the five externally reported outcomes.
+    EXPECT_NE(Outcome::Continue, Outcome::Converged);
+    EXPECT_NE(Outcome::Continue, Outcome::Synthesized);
+    EXPECT_NE(Outcome::Continue, Outcome::CapReached);
+    EXPECT_NE(Outcome::Continue, Outcome::Escalated);
+    EXPECT_NE(Outcome::Continue, Outcome::SealedWithOpenQuestion);
+}
+
+TEST(CouncilOutcome, EscalationAndOpenQuestionAreDistinctSeals) {
+    Fixture fixture;
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
+    fixture.CompleteRound(1, {"A", "B", "C"});
+
+    // A required user choice escalates; missing factual information seals with an open question.
+    ASSERT_TRUE(fixture.engine.SealRound(kPoint, SealCause::UserChoiceNeeded).ok());
+    auto escalated = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(escalated.ok());
+    EXPECT_EQ(escalated.value().outcome, Outcome::Escalated);
+
+    ASSERT_TRUE(fixture.engine.SealRound(kPoint, SealCause::MissingFacts).ok());
+    auto open_q = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(open_q.ok());
+    EXPECT_EQ(open_q.value().outcome, Outcome::SealedWithOpenQuestion);
+}
+
+// --- Chair ordinal offset (spec section 5, step 2) -----------------------------------------
+
+TEST(CouncilChair, CreationOrdinalOffsetsRoundOneChair) {
+    test::ScratchDir scratch;
+    auto opened = storage::Store::Open(scratch.File("chair_ordinal.db"));
+    ASSERT_TRUE(opened.ok()) << opened.message();
+    council::Engine engine(opened.value().get());
+
+    CouncilPoint first;
+    first.point_id = "point-ordinal-0";
+    first.project_id = "proj_chair";
+    first.topic = "t";
+    first.snapshot_id = "s";
+    first.ordinal = 0;
+    first.trigger_key = "trigger-0";
+    CouncilPoint second = first;
+    second.point_id = "point-ordinal-1";
+    second.ordinal = 1;
+    second.trigger_key = "trigger-1";
+
+    auto reg1 = engine.RegisterPoint(first);
+    ASSERT_TRUE(reg1.ok()) << reg1.message();
+    auto reg2 = engine.RegisterPoint(second);
+    ASSERT_TRUE(reg2.ok()) << reg2.message();
+
+    // Two decision points with different creation ordinals must not share a round-1 chair.
+    EXPECT_NE(engine.ChairFor(first.point_id, 1), engine.ChairFor(second.point_id, 1));
+    // The offset is a rotation: point B's first chair equals point A's second chair.
+    EXPECT_EQ(engine.ChairFor(second.point_id, 1), engine.ChairFor(first.point_id, 2));
+    // Deterministic and reproducible across calls.
+    EXPECT_EQ(engine.ChairFor(first.point_id, 1), engine.ChairFor(first.point_id, 1));
+}
+
+// --- Synthesis coverage rejection (spec section 5, step 6) ---------------------------------
+
+TEST(CouncilSynthesis, MissingSurvivingPositionBlocksSynthesisResolution) {
+    Fixture fixture;
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
+    ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
+    ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
+    auto ids = fixture.ProposalIds(1);
+    ASSERT_EQ(ids.size(), 3u);
+
+    Synthesis synthesis;
+    synthesis.point_id = kPoint;
+    synthesis.chair_agent = fixture.engine.ChairFor(kPoint, 1);
+    synthesis.synthesized_resolution = "merge";
+    synthesis.nonchair_review = "reviewed by a non-chair agent";
+    synthesis.chair_approved = true;
+    synthesis.evidence = {{{"hash", "deadbeef"}}};
+    // Cite only two of the three surviving positions: the coverage check must fail.
+    synthesis.cited_positions = {ids["hermes"], ids["kilo"]};
+
+    auto submitted = fixture.engine.SubmitSynthesis(synthesis);
+    if (submitted.ok()) {
+        auto state = fixture.engine.PointStateOf(kPoint);
+        ASSERT_TRUE(state.ok());
+        EXPECT_FALSE(fixture.engine.IsConverged(state.value()))
+            << "a synthesis that omits a surviving position cannot resolve the point";
+        EXPECT_NE(state.value().outcome, Outcome::Converged);
+        EXPECT_NE(state.value().outcome, Outcome::Synthesized);
+    } else {
+        EXPECT_FALSE(submitted.message().empty());
+    }
+}
+
+// --- Evidence-grade gate (spec section 5, "A decision cannot be approved on an assumption") -
+
+TEST(CouncilEvidenceGrade, UnsupportedLoadBearingAssumptionBlocksConvergence) {
+    Fixture fixture;
+    // An unsupported load-bearing claim: empty evidence and not marked supporting.
+    const std::vector<nlohmann::json> unsupported = {
+        {{"text", "the storage engine is fast enough"},
+         {"evidence", nlohmann::json::array()},
+         {"supporting", false}}};
+
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
+    fixture.CompleteRoundWithClaims(1, {"A", "B", "C"}, "kilo", unsupported);
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 2).ok());
+    fixture.CompleteRoundWithClaims(2, {"A", "B", "C"}, "kilo", unsupported);
+
+    auto state = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(state.ok());
+    // Two comparable rounds would otherwise converge; the unsupported load-bearing assumption
+    // on a surviving position must block it.
+    EXPECT_FALSE(fixture.engine.IsConverged(state.value()));
+    EXPECT_NE(state.value().outcome, Outcome::Converged);
+
+    auto grades = fixture.engine.GradePosition(kPoint);
+    ASSERT_TRUE(grades.ok()) << grades.message();
+    bool found_unsupported = false;
+    for (const auto& grade : grades.value()) {
+        if (grade.unsupported_assumption) found_unsupported = true;
+    }
+    EXPECT_TRUE(found_unsupported)
+        << "an unsupported load-bearing assumption must be graded and surfaced";
+}
+
+TEST(CouncilEvidenceGrade, SupportedLoadBearingClaimDoesNotBlockConvergence) {
+    Fixture fixture;
+    // The same claim WITH evidence and marked supporting must not block convergence.
+    const std::vector<nlohmann::json> supported = {
+        {{"text", "the storage engine is fast enough"},
+         {"evidence", nlohmann::json::array({nlohmann::json{{"hash", "abc"}}})},
+         {"supporting", true}}};
+
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
+    fixture.CompleteRoundWithClaims(1, {"A", "B", "C"}, "kilo", supported);
+    ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 2).ok());
+    fixture.CompleteRoundWithClaims(2, {"A", "B", "C"}, "kilo", supported);
+
+    auto state = fixture.engine.PointStateOf(kPoint);
+    ASSERT_TRUE(state.ok());
+    EXPECT_TRUE(fixture.engine.IsConverged(state.value()));
+    EXPECT_EQ(state.value().outcome, Outcome::Converged);
 }

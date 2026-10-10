@@ -177,7 +177,7 @@ public:
 
         policy_ = std::make_unique<policy::Engine>(store_.get());
         tasks_ = std::make_unique<tasks::Engine>(store_.get());
-        council_ = std::make_unique<council::Engine>();
+        council_ = std::make_unique<council::Engine>(store_.get());
         context_ = std::make_unique<context::Synchronizer>(store_.get(), std::string{});
         evidence_ = std::make_unique<evidence::Engine>(store_.get());
         validation_ = std::make_unique<validation::Engine>(store_.get(), evidence_.get());
@@ -398,6 +398,7 @@ public:
         contract.project_id = project_id;
         contract.contribution_id = persisted->contribution_id;
         contract.objective = request.text;
+        contract.allowed_write_paths = {"agent-output.txt"};
         tasks::AcceptanceCriterion criterion;
         criterion.criterion_id = NewId("crit");
         criterion.expectation = "The published result satisfies the user request";

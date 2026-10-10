@@ -6,10 +6,12 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,6 +48,44 @@ struct RegisteredTrigger {
     bool fired = false;
     std::string created_at;
     std::string fired_at;
+};
+
+// Synchronization barrier record (state machine #8). A barrier is orchestrator-owned durable
+// state: it is satisfied only when EVERY required agent acknowledges the SAME context digest.
+// A digest mismatch is rejected and never counted; a timed-out barrier reports `expired` and is
+// never auto-satisfied — callers decide what an expiry means.
+struct BarrierRecord {
+    std::string barrier_id;
+    std::string project_id;
+    std::string purpose;
+    std::vector<std::string> required_agents;
+    std::string context_digest;
+    std::string state;                        // waiting | satisfied | expired
+    std::vector<std::string> acknowledged_agents;   // agents that acked the SAME digest
+    std::string created_at;
+    std::string satisfied_at;
+    std::int64_t expires_at_ms = 0;           // 0 = no expiry
+};
+
+// Outcome of a cancellation request: the attempt is CANCELLED when the observed termination is
+// confirmed, otherwise UNKNOWN (unobservable). The lease is revoked by compare-and-swap and the
+// task is moved to Cancelled when the state machine permits it.
+struct CancellationResult {
+    std::string session_id;
+    std::string task_id;
+    std::string attempt_id;
+    std::string attempt_status;               // CANCELLED | UNKNOWN
+    std::string task_state;                   // resulting task state name (or unchanged:<state>)
+    bool lease_revoked = false;
+    std::string detail;
+};
+
+// Result of restart recovery: stale leases reclaimed and pending publications reconciled. Safe
+// to run repeatedly; it never double-consumes a retry.
+struct RecoveryReport {
+    std::vector<std::string> expired_lease_tasks;
+    std::vector<std::string> reconciled_publications;
+    std::vector<std::string> details;
 };
 
 // A user contribution to the Chat thread: immutable, one per Send after a root is bound.
@@ -125,6 +165,13 @@ public:
     Status OnAgentSessionCompleted(const std::string& session_id, bool success,
                                    const std::string& session_error);
 
+    // Reports that a finished session's process outcome could not be observed (crash, lost
+    // handle, unreadable exit). The attempt is marked UNKNOWN and the task is NOT completed;
+    // restart recovery reclaims it. This is the truthful outcome when the observed state is
+    // unverifiable (AGENTS.md § 4.4: unknown state fails closed).
+    Status OnAgentSessionOutcomeUnknown(const std::string& session_id,
+                                        const std::string& detail = {});
+
     // Integration pipeline (after a successful attempt): change set, conflict check,
     // guarded publication through the durable journal.
     Expected<workspace::IntegrationCandidate> PrepareIntegration(const std::string& task_id);
@@ -163,8 +210,14 @@ public:
     Status SubmitCouncilCritique(const std::string& point_id, const std::string& author,
                                  const std::string& target, const std::string& review);
     Status SubmitCouncilSynthesis(const std::string& point_id, const std::string& chair,
+                                  const std::string& text, const std::string& review_agent,
+                                  const std::string& nonchair_review,
+                                  const std::vector<std::string>& cited_positions = {},
+                                  const std::vector<nlohmann::json>& disagreements = {});
+    Status SubmitCouncilSynthesis(const std::string& point_id, const std::string& chair,
                                   const std::string& text, const std::string& nonchair_review,
                                   const std::vector<nlohmann::json>& disagreements = {});
+    Status SubmitCouncilSynthesis(const council::Synthesis& synthesis);
     Expected<council::Engine::PointState> CouncilPointState(const std::string& point_id);
 
     // --- Registered triggers (controller-owned scheduling authority) ---------------------
@@ -172,8 +225,39 @@ public:
     Status FireTrigger(const std::string& trigger_id);
     std::vector<RegisteredTrigger> Triggers(const std::string& project_id);
 
+    // --- Synchronization barrier (state machine #8) --------------------------------------
+    // Durable, orchestrator-owned. `required_agents` are the participating agent ids
+    // ("hermes"|"kilo"|"claude"). Satisfaction requires every required agent to acknowledge
+    // the SAME context digest; a mismatch is rejected and never counted; expiry is reported but
+    // never auto-satisfies. ttl_ms == 0 means no expiry.
+    Expected<std::string> RegisterBarrier(const std::string& project_id,
+                                          const std::string& purpose,
+                                          const std::vector<std::string>& required_agents,
+                                          const std::string& context_digest,
+                                          std::int64_t ttl_ms = 0);
+    Status AcknowledgeBarrier(const std::string& barrier_id, const std::string& agent,
+                              const std::string& context_digest);
+    Expected<BarrierRecord> BarrierState(const std::string& barrier_id);
+
+    // --- Cancellation (end-to-end propagation) -------------------------------------------
+    // Requests gateway cancellation, then records the observed outcome: the attempt is marked
+    // CANCELLED (observed) or UNKNOWN (unobservable), the lease is revoked by compare-and-swap,
+    // and the task is moved to Cancelled when its state machine permits.
+    Expected<CancellationResult> CancelTaskExecution(const std::string& session_id,
+                                                     const std::string& reason = {});
+
+    // --- Restart recovery ----------------------------------------------------------------
+    // Reclaims stale/expired leases (task -> Ready, interrupted attempt -> UNKNOWN) and
+    // reconciles any pending publication journal. Idempotent: never double-consumes a retry.
+    Expected<RecoveryReport> RecoverAfterRestart(const std::string& project_id);
+
     // --- Phase transitions ---------------------------------------------------------------
     Status TransitionPhase(const std::string& project_id, ProjectPhase phase);
+
+    // Orthogonal project side conditions (ACTIVE|PAUSED|STOPPED|BLOCKED|RECOVERING). These are
+    // independent of the canonical lifecycle phase and never advance or reset the epoch.
+    Status SetProjectCondition(const std::string& project_id, const std::string& condition);
+    Expected<std::string> ProjectCondition(const std::string& project_id);
 
 private:
     Services services_;
@@ -186,10 +270,19 @@ private:
     struct TaskSessionLink {
         std::string task_id;
         std::string attempt_id;
+        std::string lease_id;
         std::int64_t lease_version = 0;
         std::string staging_path;
     };
     std::map<std::string, TaskSessionLink> task_sessions_;
+
+    // Details observed while routing a finished/cancelled session outcome.
+    struct RouteOutcome {
+        std::string attempt_status;      // SUCCEEDED | FAILED | CANCELLED | UNKNOWN
+        std::string task_state;          // resulting task state name
+        bool lease_revoked = false;
+        std::string detail;
+    };
 
     Status ValidatePhaseTransition(ProjectPhase from, ProjectPhase to);
     Expected<ProjectIdentity> LoadProject(const std::string& project_id);
@@ -201,6 +294,18 @@ private:
     std::string BuildTaskPrompt(const tasks::Task& task) const;
     Status FireTriggerLocked(const std::string& trigger_id);
     std::vector<RegisteredTrigger> TriggersLocked(const std::string& project_id);
+
+    // Barrier helpers (assume mutex_ is held).
+    Expected<BarrierRecord> LoadBarrierLocked(const std::string& barrier_id);
+
+    // Routes a finished session to the task/attempt/lease/evidence state machines. `outcome` is
+    // SUCCEEDED|FAILED|CANCELLED|UNKNOWN. Assumes mutex_ is held.
+    Status RouteSessionOutcomeLocked(const TaskSessionLink& link, const std::string& session_id,
+                                     const std::string& outcome, const std::string& session_error,
+                                     RouteOutcome* observed = nullptr);
+
+    // True when a durable PUBLISHED publication exists for the task (validation ordering gate).
+    bool HasPublishedPublicationLocked(const std::string& task_id);
 };
 
 }  // namespace mayasaba::app

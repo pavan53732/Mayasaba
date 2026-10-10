@@ -2,7 +2,8 @@
 // adapter behavior (probing, fragmented streams, cancellation, failure modes) is deterministic
 // without touching the user's real CLIs or consuming model usage.
 //
-// Usage: fake_cli.exe [--help] [--mode=normal|fail|slow|noisy|crash|silent|fragmented]
+// Usage: fake_cli.exe [--help] [--help-extra=TEXT]
+//                     [--mode=normal|fail|slow|noisy|crash|silent|fragmented|badtype|badshapes|unknownkind|secret]
 //                     [--delay-ms=N] [--help-exit=N] [--exit-code=N]
 #include <windows.h>
 
@@ -56,13 +57,20 @@ int main(int argc, char** argv) {
     const int delay_ms = std::atoi(ArgValue(args, "--delay-ms=", "0").c_str());
     const int help_exit = std::atoi(ArgValue(args, "--help-exit=", "0").c_str());
     const int exit_code = std::atoi(ArgValue(args, "--exit-code=", "0").c_str());
+    // Capability-admission tests need to control exactly which interface tokens the probe
+    // output advertises, without editing this helper for each scenario.
+    const std::string help_extra = ArgValue(args, "--help-extra=", "");
 
     if (HasArg(args, "--help")) {
         std::fputs(
             "fake_cli: scripted CLI for Mayasaba adapter tests.\n"
-            "Modes: normal|fail|slow|noisy|crash|silent|fragmented\n"
+            "Modes: normal|fail|slow|noisy|crash|silent|fragmented|badtype|badshapes|unknownkind\n"
             "Speaks JSON lines on stdin/stdout.\n",
             stdout);
+        if (!help_extra.empty()) {
+            std::fputs(help_extra.c_str(), stdout);
+            std::fputc('\n', stdout);
+        }
         std::fflush(stdout);
         return help_exit;
     }
@@ -123,6 +131,33 @@ int main(int argc, char** argv) {
             std::fwrite(payload.data() + split, 1, payload.size() - split, stdout);
             std::fputc('\n', stdout);
             std::fflush(stdout);
+        } else if (mode == "badtype") {
+            // Valid JSON, but the discriminator is not a string. A CLI is untrusted input;
+            // the adapter must refuse this as a declared protocol error and fail closed.
+            Emit("{\"type\":123,\"text\":\"ack:" + prompt_text + "\"}");
+        } else if (mode == "badshapes") {
+            // One valid event followed by four MALFORMED discriminators: numeric, null, object
+            // and absent. Each must be a declared protocol error (shape rule), and the session
+            // must fail closed even though a valid event preceded them. Deliberately contains no
+            // unknown *string*, so this mode isolates the universal shape rule from the
+            // profile-bound vocabulary rule below.
+            Emit(nlohmann::json{{"type", "message"}, {"text", "ack:" + prompt_text}}.dump());
+            Emit(R"({"type":42,"text":"numeric"})");
+            Emit(R"({"type":null,"text":"null"})");
+            Emit(R"({"type":{"nested":true},"text":"object"})");
+            Emit(R"({"no_type_field":true,"text":"missing"})");
+        } else if (mode == "unknownkind") {
+            // One valid event followed by a well-formed line whose `type` is a string outside any
+            // vocabulary this CLI has declared. Whether that is a protocol error depends on the
+            // profile's own accepted set, so this mode isolates the vocabulary rule.
+            Emit(nlohmann::json{{"type", "message"}, {"text", "ack:" + prompt_text}}.dump());
+            Emit(R"({"type":"totally_unknown_kind","text":"unknown"})");
+        } else if (mode == "secret") {
+            // A valid event whose payload carries a secret-shaped value and a private-reasoning
+            // field. The normalized payload must not expose either.
+            Emit("{\"type\":\"message\",\"text\":\"ack:" + prompt_text +
+                 "\",\"api_key\":\"sk-abcdefghijklmnopqrstuvwxyz012345\","
+                 "\"thinking\":\"private chain of thought that must never surface\"}");
         } else {
             Emit(nlohmann::json{{"type", "message"}, {"text", "ack:" + prompt_text}}.dump());
         }

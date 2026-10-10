@@ -1,6 +1,55 @@
+import argparse
 import os
+import sys
 
-build_dir = r'C:\Users/pavan/PROJECTS/Mayasaba/app/Mayasaba.App/x64/Release/Mayasaba.App'
+
+def ResolveBuildDir(script_dir, config, override):
+    if override:
+        return os.path.abspath(override)
+    repo_root = os.path.dirname(script_dir)
+    return os.path.normpath(
+        os.path.join(repo_root, 'app', 'Mayasaba.App', 'x64', config, 'Mayasaba.App')
+    )
+
+
+def ResolveOutputPath(script_dir, override):
+    if override:
+        return os.path.abspath(override)
+    return os.path.join(script_dir, 'Mayasaba.wxs')
+
+
+parser = argparse.ArgumentParser(
+    description='Generate Mayasaba.wxs from a staged app build output directory.'
+)
+parser.add_argument(
+    '--build-dir',
+    dest='build_dir',
+    default=None,
+    help=(
+        'Path to the app build output directory. Defaults to '
+        '<repo-root>/app/Mayasaba.App/x64/<config>/Mayasaba.App relative to this script.'
+    ),
+)
+parser.add_argument(
+    '--output',
+    dest='output',
+    default=None,
+    help='Path to write Mayasaba.wxs. Defaults to Mayasaba.wxs next to this script.',
+)
+parser.add_argument(
+    '--config',
+    default='Release',
+    choices=['Debug', 'Release'],
+    help='Build configuration for default build-dir (default: Release)',
+)
+args = parser.parse_args()
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+build_dir = ResolveBuildDir(script_dir, args.config, args.build_dir)
+
+if not os.path.isdir(build_dir):
+    print(f'ERROR: build-dir not found: {build_dir}', file=sys.stderr)
+    sys.exit(1)
 
 all_files = []
 for root, dirs, files in os.walk(build_dir):
@@ -232,9 +281,11 @@ wxs.append('  </Package>')
 wxs.append('</Wix>')
 
 content = '\r\n'.join(wxs)
-wxs_path = r'C:\Users/pavan/PROJECTS/Mayasaba\packaging/Mayasaba.wxs'
+wxs_path = ResolveOutputPath(script_dir, args.output)
 with open(wxs_path, 'w', newline='', encoding='utf-8') as f:
     f.write(content)
 
 fc = len([l for l in wxs if '<File ' in l and 'Ref' not in l])
 print(f'Generated {len(wxs)} lines, {fc} File entries, {component_count} Components')
+print(f'Build dir: {build_dir}')
+print(f'Output:    {wxs_path}')

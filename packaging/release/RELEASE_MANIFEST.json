@@ -7,7 +7,7 @@
   "msi": {
     "path": "packaging/release/Mayasaba.msi",
     "scope": "perUser",
-    "sha256": "037C8B692072E087205A8ADE5FFB1B70AB84414A50897FC6007A008DDCA19EC0",
+    "sha256": "0F7C0E44B12DFFF0CA012E7E29D330BCC2D22E24D9667AF892A88A104B84F952",
     "size_bytes": 20612679,
     "product_code": "{9750A5BF-D2AC-4C2D-B4E5-6FE45D8C2D3E}",
     "upgrade_code": "{8D06BC07-C3D7-49D6-BC9B-9F59D17EB6CE}"
@@ -37,5 +37,5 @@
     "component_count": 95,
     "embedded_cabinet": true
   },
-  "timestamp_utc": "2026-10-10T03:20:00Z"
+  "timestamp_utc": "2026-10-10T14:15:00Z"
 }

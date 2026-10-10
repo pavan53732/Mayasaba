@@ -259,7 +259,7 @@ Each CLI has one dedicated adapter. The adapter owns executable discovery, bound
 | --- | --- | --- |
 | Hermes Agent CLI | Streamed native JSON over standard I/O | Suppress outside-workspace rule/memory/skill injection; forbid approval bypass, upgrades, outbound messaging, credential export, and service control |
 | Kilo Code CLI | Native JSON events; local ACP only when verified | Absolute working directory; private controller-owned session; default-deny permissions; no cloud/public sessions, plugin/import surfaces, or codebase indexing |
-| Claude Code CLI | Headless print mode (-p); native JSON events | Non-interactive execution; no background listening server, approval bypass, plugin install, or credential export |
+| Claude Code CLI | Headless print mode (`-p`); native JSON events | Establish the installed CLI's supported JSON mode through a bounded behavioral probe; reject `--dangerously-skip-permissions`, background listeners, plugin installation and credential export. Never rewrite or treat raw Claude settings or an interactive `/permissions` display as authorization proof; prove task permissions and containment through a controlled-session behavioral/fault check tied to the launched process. |
 
 Compatibility is behavioral. Adapters do not request or compare release numbers. A path or executable name alone cannot prove support.
 
