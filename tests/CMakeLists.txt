@@ -26,7 +26,15 @@ file(GLOB_RECURSE MAYASABA_HELPER_SOURCES CONFIGURE_DEPENDS
 foreach(source ${MAYASABA_HELPER_SOURCES})
   get_filename_component(stem ${source} NAME_WE)
   add_executable(${stem} ${source})
-  target_link_libraries(${stem} PRIVATE mayasaba_core mayasaba_adapters)
+  # The containment probe must be runnable with only the restricted workspace
+  # readable.  Keep this helper self-contained so it does not need developer-CRT
+  # DLLs or Mayasaba libraries outside that workspace.
+  if(stem STREQUAL "child_process_helper")
+    set_property(TARGET ${stem} PROPERTY
+      MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  else()
+    target_link_libraries(${stem} PRIVATE mayasaba_core mayasaba_adapters)
+  endif()
   set_target_properties(${stem} PROPERTIES FOLDER "tests/helpers")
 endforeach()
 

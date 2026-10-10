@@ -7,28 +7,28 @@
   "msi": {
     "path": "packaging/release/Mayasaba.msi",
     "scope": "perUser",
-    "sha256": "0F7C0E44B12DFFF0CA012E7E29D330BCC2D22E24D9667AF892A88A104B84F952",
-    "size_bytes": 20612679,
+    "sha256": "580DF92D6FB1F493B4473C6A248D940205CB6E930794E4EE537755481E002091",
+    "size_bytes": 20645447,
     "product_code": "{9750A5BF-D2AC-4C2D-B4E5-6FE45D8C2D3E}",
     "upgrade_code": "{8D06BC07-C3D7-49D6-BC9B-9F59D17EB6CE}"
   },
   "primary_executable": {
     "path": "app/Mayasaba.App/x64/Release/Mayasaba.App/Mayasaba.App.exe",
-    "sha256": "647F3AA312163F10A93E7B53A6500346CF2946A57C22B03442395A0BA7F86FFE",
-    "size_bytes": 2792448
+    "sha256": "D74DFE6D9D692B9383F1CE6F36922BD104EE8BA71BA13D168E4871ADBDD430D3",
+    "size_bytes": 2866688
   },
   "libraries": {
     "mayasaba_app.lib": {
       "path": "build/vs2026/app/Release/mayasaba_app.lib",
-      "sha256": "2C8C163B2E1344BD50EAA33359497C063D793BCDAFB85C0A6608016FFB24F76D"
+      "sha256": "014EADC7C878F0A30E299A0A7A42618B6063B59A413CDA668F9E1B9DD54A1C43"
     },
     "mayasaba_core.lib": {
       "path": "build/vs2026/core/Release/mayasaba_core.lib",
-      "sha256": "6C61D5A48A6F768C3388E1C9E2AE0F04E015CB4E3A88FA63B3F70957B9B999AB"
+      "sha256": "58653694B7B96FF7D3677B14B4C9C9EB96B6F5D36F7CF9276AB12A2555FB0D78"
     },
     "mayasaba_adapters.lib": {
       "path": "build/vs2026/adapters/Release/mayasaba_adapters.lib",
-      "sha256": "A019E24A2B580528689E5A9399A4FE18B680C40D11FA3A176B00EBB8CA1DB793"
+      "sha256": "D831B99652769AC780178576CE59B03F3D40FA1EECFD65E586CB874E0D03255C"
     }
   },
   "payload_metrics": {
@@ -37,5 +37,5 @@
     "component_count": 95,
     "embedded_cabinet": true
   },
-  "timestamp_utc": "2026-10-10T14:15:00Z"
+  "timestamp_utc": "2026-10-10T19:09:36Z"
 }

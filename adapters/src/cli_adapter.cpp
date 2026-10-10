@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <string_view>
 #include <thread>
 
 #include "mayasaba/base.hpp"
@@ -31,8 +32,14 @@ const char* kForbiddenArguments[] = {
 };
 
 bool ContainsForbidden(const std::string& argument, std::string* matched) {
+    // A flag may carry its value in the same token. Evaluate its name rather than only the
+    // complete token so `--model=...`, `--provider=...`, and `-m=...` cannot evade policy.
+    const std::size_t assignment = argument.find('=');
+    const std::string_view flag_name = assignment == std::string::npos
+                                           ? std::string_view(argument)
+                                           : std::string_view(argument).substr(0, assignment);
     for (const char* forbidden : kForbiddenArguments) {
-        if (argument == forbidden) {
+        if (flag_name == forbidden) {
             if (matched) *matched = forbidden;
             return true;
         }
@@ -390,6 +397,10 @@ Status CliAdapter::LaunchSession(const SessionSpec& spec, const std::string& ses
     launch.executable = executable_path_;
     launch.arguments = arguments;
     launch.working_directory = spec.execution_working_directory;
+    // Agent sessions may have material effects only inside a controller-owned staging view.
+    // The probe remains read-only and unconstrained; an authorized session is fail-closed if
+    // the kernel cannot establish its low-integrity workspace write boundary.
+    launch.require_restricted_workspace = true;
     launch.max_capture_bytes = 8u << 20;
     launch.purpose = "agent-session:" + std::string(AgentId(kind_));
     auto process = execution::Process::Launch(launch);

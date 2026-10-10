@@ -1,6 +1,8 @@
 #include "mayasaba/kernel.hpp"
 
 #include <windows.h>
+#include <aclapi.h>
+#include <sddl.h>
 
 #include <atomic>
 #include <mutex>
@@ -83,6 +85,14 @@ struct HandleGuard {
     ~HandleGuard() { if (handle) CloseHandle(handle); }
     HandleGuard(const HandleGuard&) = delete;
     HandleGuard& operator=(const HandleGuard&) = delete;
+    HandleGuard(HandleGuard&& other) noexcept : handle(other.release()) {}
+    HandleGuard& operator=(HandleGuard&& other) noexcept {
+        if (this != &other) {
+            if (handle) CloseHandle(handle);
+            handle = other.release();
+        }
+        return *this;
+    }
     HANDLE release() {
         HANDLE h = handle;
         handle = nullptr;
@@ -90,6 +100,138 @@ struct HandleGuard {
     }
     operator HANDLE() const { return handle; }
 };
+
+// A low-integrity process cannot write to ordinary medium-integrity files. The controller
+// relabels its staging tree before launch, while every normal user file retains its existing
+// integrity label. This enforces a material-write boundary in Windows rather than relying on a
+// working-directory convention. Reparse points are never followed.
+Status ApplyLowIntegrityLabel(const std::wstring& path, bool directory) {
+    const wchar_t* sddl = directory ? L"S:(ML;OICI;NW;;;LW)" : L"S:(ML;;NW;;;LW)";
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &descriptor,
+                                                               nullptr)) {
+        return Status::Error(ErrorCode::Internal,
+                             "cannot create low-integrity label: " +
+                                 std::to_string(GetLastError()));
+    }
+    BOOL present = FALSE;
+    BOOL defaulted = FALSE;
+    PACL sacl = nullptr;
+    const bool read_ok = GetSecurityDescriptorSacl(descriptor, &present, &sacl, &defaulted);
+    if (!read_ok || !present || sacl == nullptr) {
+        LocalFree(descriptor);
+        return Status::Error(ErrorCode::Internal, "cannot read low-integrity label");
+    }
+    const DWORD status = SetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
+                                                LABEL_SECURITY_INFORMATION, nullptr, nullptr,
+                                                nullptr, sacl);
+    LocalFree(descriptor);
+    if (status != ERROR_SUCCESS) {
+        return Status::Error(ErrorCode::IoError,
+                             "cannot apply workspace integrity label: " +
+                                 std::to_string(status));
+    }
+    return Status::Ok();
+}
+
+Status ApplyLowIntegrityLabelTree(const std::wstring& root) {
+    auto root_status = ApplyLowIntegrityLabel(root, true);
+    if (!root_status.ok()) return root_status;
+
+    WIN32_FIND_DATAW found{};
+    const std::wstring pattern = root + L"\\*";
+    HANDLE search = FindFirstFileW(pattern.c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE) {
+        return Status::Error(ErrorCode::IoError,
+                             "cannot enumerate workspace for containment: " +
+                                 std::to_string(GetLastError()));
+    }
+    HandleGuard search_guard(search);
+    do {
+        const std::wstring name(found.cFileName);
+        if (name == L"." || name == L"..") continue;
+        if ((found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) continue;
+        const std::wstring child = root + L"\\" + name;
+        const bool child_is_directory =
+            (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        auto child_status = ApplyLowIntegrityLabel(child, child_is_directory);
+        if (!child_status.ok()) return child_status;
+        if (child_is_directory) {
+            child_status = ApplyLowIntegrityLabelTree(child);
+            if (!child_status.ok()) return child_status;
+        }
+    } while (FindNextFileW(search, &found));
+    const DWORD error = GetLastError();
+    if (error != ERROR_NO_MORE_FILES) {
+        return Status::Error(ErrorCode::IoError,
+                             "workspace enumeration failed: " + std::to_string(error));
+    }
+    return Status::Ok();
+}
+
+Status CreateLowIntegrityToken(HANDLE* output) {
+    if (output == nullptr) {
+        return Status::Error(ErrorCode::InvalidArgument, "restricted-token output is null");
+    }
+    *output = nullptr;
+    HANDLE current_token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE |
+                                                   TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
+                          &current_token)) {
+        return Status::Error(ErrorCode::Internal,
+                             "OpenProcessToken failed: " + std::to_string(GetLastError()));
+    }
+    HandleGuard current_token_guard(current_token);
+
+    HANDLE restricted_token = nullptr;
+    if (!CreateRestrictedToken(current_token, DISABLE_MAX_PRIVILEGE, 0, nullptr, 0, nullptr, 0,
+                               nullptr, &restricted_token)) {
+        return Status::Error(ErrorCode::Unsupported,
+                             "cannot create restricted execution token: " +
+                                 std::to_string(GetLastError()));
+    }
+    DWORD sid_bytes = SECURITY_MAX_SID_SIZE;
+    std::vector<BYTE> low_sid(sid_bytes);
+    if (!CreateWellKnownSid(WinLowLabelSid, nullptr, low_sid.data(), &sid_bytes)) {
+        CloseHandle(restricted_token);
+        return Status::Error(ErrorCode::Internal,
+                             "CreateWellKnownSid(LowLabel) failed: " +
+                                 std::to_string(GetLastError()));
+    }
+    const DWORD label_bytes = static_cast<DWORD>(sizeof(TOKEN_MANDATORY_LABEL) + sid_bytes);
+    std::vector<BYTE> label_storage(label_bytes);
+    auto* label = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(label_storage.data());
+    label->Label.Sid = low_sid.data();
+    label->Label.Attributes = SE_GROUP_INTEGRITY;
+    if (!SetTokenInformation(restricted_token, TokenIntegrityLevel, label, label_bytes)) {
+        const DWORD error = GetLastError();
+        CloseHandle(restricted_token);
+        return Status::Error(ErrorCode::Unsupported,
+                             "cannot set low-integrity execution token: " +
+                                 std::to_string(error));
+    }
+    DWORD verified_bytes = 0;
+    GetTokenInformation(restricted_token, TokenIntegrityLevel, nullptr, 0, &verified_bytes);
+    std::vector<BYTE> verified_storage(verified_bytes);
+    if (verified_bytes == 0 ||
+        !GetTokenInformation(restricted_token, TokenIntegrityLevel, verified_storage.data(),
+                             verified_bytes, &verified_bytes)) {
+        const DWORD error = GetLastError();
+        CloseHandle(restricted_token);
+        return Status::Error(ErrorCode::Internal,
+                             "cannot verify low-integrity execution token: " +
+                                 std::to_string(error));
+    }
+    const auto* verified =
+        reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(verified_storage.data());
+    if (!EqualSid(verified->Label.Sid, low_sid.data())) {
+        CloseHandle(restricted_token);
+        return Status::Error(ErrorCode::Internal,
+                             "execution token did not retain the low-integrity label");
+    }
+    *output = restricted_token;
+    return Status::Ok();
+}
 
 }  // namespace
 
@@ -193,6 +335,22 @@ Expected<std::unique_ptr<Process>> Process::Launch(const LaunchSpec& spec) {
                                                   spec.working_directory);
     }
 
+    HandleGuard restricted_token;
+    if (spec.require_restricted_workspace) {
+        auto acl_status = ApplyLowIntegrityLabelTree(working_directory);
+        if (!acl_status.ok()) {
+            return Fail<std::unique_ptr<Process>>(ErrorCode::Blocked,
+                                                  "workspace containment setup failed: " +
+                                                      acl_status.message());
+        }
+        HANDLE token = nullptr;
+        auto token_status = CreateLowIntegrityToken(&token);
+        if (!token_status.ok()) {
+            return Fail<std::unique_ptr<Process>>(token_status.code(), token_status.message());
+        }
+        restricted_token = HandleGuard(token);
+    }
+
     // Pipes: parent reads stdout/stderr, writes stdin. Only these handles are inherited.
     HANDLE stdin_read = nullptr, stdin_write = nullptr;
     HANDLE stdout_read = nullptr, stdout_write = nullptr;
@@ -261,9 +419,14 @@ Expected<std::unique_ptr<Process>> Process::Launch(const LaunchSpec& spec) {
     PROCESS_INFORMATION info{};
     DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT |
                   EXTENDED_STARTUPINFO_PRESENT;
-    BOOL created = CreateProcessW(executable_wide.c_str(), command_line_wide.data(), nullptr,
-                                  nullptr, TRUE, flags, environment.data(),
-                                  working_directory.c_str(), &startup.StartupInfo, &info);
+    BOOL created = spec.require_restricted_workspace
+                       ? CreateProcessAsUserW(restricted_token, executable_wide.c_str(),
+                                              command_line_wide.data(), nullptr, nullptr, TRUE,
+                                              flags, environment.data(), working_directory.c_str(),
+                                              &startup.StartupInfo, &info)
+                       : CreateProcessW(executable_wide.c_str(), command_line_wide.data(), nullptr,
+                                        nullptr, TRUE, flags, environment.data(),
+                                        working_directory.c_str(), &startup.StartupInfo, &info);
     DeleteProcThreadAttributeList(attribute_list);
     if (!created) {
         return Fail<std::unique_ptr<Process>>(
@@ -295,6 +458,7 @@ Expected<std::unique_ptr<Process>> Process::Launch(const LaunchSpec& spec) {
     process->start_ms_ = MonotonicMillis();
     process->observation_.outcome = ProcessOutcome::Running;
     process->observation_.started_at = process->started_at_;
+    process->observation_.restricted_workspace_enforced = spec.require_restricted_workspace;
 
     process->stdout_stream_ = std::make_unique<Stream>();
     process->stdout_stream_->pipe = process->stdout_read_;

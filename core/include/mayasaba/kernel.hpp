@@ -28,6 +28,12 @@ struct LaunchSpec {
     std::vector<std::string> environment_removals;  // names removed from the inherited block
     std::size_t max_capture_bytes = 4u << 20;      // bounded per-stream capture
     std::size_t active_process_limit = 64;         // Job Object active process cap
+    // When set, the process runs under a Windows restricted low-integrity token. The kernel
+    // labels the controller-owned workspace tree low integrity before launch, while ordinary
+    // user files remain medium integrity; Windows therefore rejects writes outside that tree.
+    // This is an OS-enforced material-write boundary, not a prompt or a working-directory
+    // convention. It does not, by itself, authorize or prove scoped read access.
+    bool require_restricted_workspace = false;
     std::string purpose;                           // recorded (e.g. "agent-session", "test")
 };
 
@@ -52,6 +58,7 @@ struct ProcessObservation {
     bool cancellation_requested = false;
     bool termination_observed = false;   // process tree actually gone
     bool escalation_used = false;
+    bool restricted_workspace_enforced = false;
     std::string detail;
 };
 

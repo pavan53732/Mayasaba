@@ -1,0 +1,15 @@
+[MSI Test] SHA-256: 580DF92D6FB1F493B4473C6A248D940205CB6E930794E4EE537755481E002091
+[MSI Test] Installing C:\Users\pavan\PROJECTS\Mayasaba\packaging\release\Mayasaba.msi /passive...
+[MSI Test] Install ExitCode: 0
+[MSI Test] Installed executable found at: C:\Users\pavan\AppData\Local\Mayasaba\Mayasaba.App.exe
+[MSI Test] Total installed files: 283
+[MSI Test] Launching installed executable...
+[MSI Test] App is running with PID 24948! Closing...
+[MSI Test] Uninstalling...
+[MSI Test] Uninstall ExitCode: 0
+
+--- Execution Record ---
+Command: powershell -ExecutionPolicy Bypass -File scripts\verify-msi-install.ps1
+ExitCode: 0
+DurationMs: 10543
+TimestampUtc: 2026-10-10T19:10:26.0910251Z

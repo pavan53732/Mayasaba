@@ -1,0 +1,43 @@
+Test project C:/Users/pavan/PROJECTS/Mayasaba/build/vs2026
+      Start 14: orchestration_extra_tests
+      Start  3: controller_tests
+      Start 12: council_persistence_tests
+      Start 13: council_tests
+ 1/19 Test #12: council_persistence_tests ........   Passed    1.49 sec
+      Start  9: context_extra_tests
+ 2/19 Test #13: council_tests ....................   Passed    1.99 sec
+      Start 18: tasks_tests
+ 3/19 Test #14: orchestration_extra_tests ........   Passed    2.34 sec
+      Start 15: orchestration_tests
+ 4/19 Test  #9: context_extra_tests ..............   Passed    1.33 sec
+      Start  6: bus_tests
+ 5/19 Test #15: orchestration_tests ..............   Passed    1.48 sec
+      Start 19: workspace_tests
+ 6/19 Test  #6: bus_tests ........................   Passed    1.06 sec
+      Start  8: context_digest_compat_tests
+ 7/19 Test #18: tasks_tests ......................   Passed    1.91 sec
+      Start 17: store_tests
+ 8/19 Test  #8: context_digest_compat_tests ......   Passed    0.64 sec
+      Start 11: context_tests
+ 9/19 Test #17: store_tests ......................   Passed    1.76 sec
+      Start 16: policy_tests
+10/19 Test #19: workspace_tests ..................   Passed    1.93 sec
+      Start  4: adapter_tests
+11/19 Test #11: context_tests ....................   Passed    1.44 sec
+      Start  7: base_tests
+12/19 Test  #3: controller_tests .................   Passed    6.09 sec
+      Start  2: registry_tests
+13/19 Test  #7: base_tests .......................   Passed    0.13 sec
+      Start 10: context_secret_tests
+14/19 Test #10: context_secret_tests .............   Passed    0.06 sec
+      Start  5: kernel_tests
+15/19 Test  #2: registry_tests ...................   Passed    0.11 sec
+      Start  1: canonical_tests
+16/19 Test  #1: canonical_tests ..................   Passed    0.10 sec
+17/19 Test #16: policy_tests .....................   Passed    0.74 sec
+18/19 Test  #5: kernel_tests .....................   Passed    1.34 sec
+19/19 Test  #4: adapter_tests ....................   Passed    2.79 sec
+
+100% tests passed, 0 tests failed out of 19
+
+Total Test time (real) =   8.58 sec

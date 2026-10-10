@@ -8,6 +8,7 @@
 //   stdin-echo           echoes stdin lines back prefixed with "ECHO:"
 //   flood <bytes>        writes the given number of bytes to stdout
 //   stderr <text>        writes text to stderr, exits 3
+//   write <path> <text>  writes text to a file; reports WRITE_OK or WRITE_FAILED
 #include <windows.h>
 
 #include <cstdio>
@@ -86,6 +87,24 @@ int main(int argc, char** argv) {
     if (mode == "stderr") {
         std::fprintf(stderr, "%s\n", argc >= 3 ? argv[2] : "stderr text");
         return 3;
+    }
+    if (mode == "write") {
+        if (argc < 3) {
+            std::fprintf(stderr, "write requires a path\n");
+            return 64;
+        }
+        FILE* file = std::fopen(argv[2], "wb");
+        if (!file) {
+            std::printf("WRITE_FAILED %lu\n", static_cast<unsigned long>(GetLastError()));
+            std::fflush(stdout);
+            return 5;
+        }
+        const char* text = argc >= 4 ? argv[3] : "written";
+        std::fwrite(text, 1, std::strlen(text), file);
+        std::fclose(file);
+        std::printf("WRITE_OK\n");
+        std::fflush(stdout);
+        return 0;
     }
     std::fprintf(stderr, "unknown mode: %s\n", mode.c_str());
     return 64;

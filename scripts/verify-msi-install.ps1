@@ -1,7 +1,12 @@
 # Verify MSI installation, file presence, execution from install location, and clean uninstallation.
+param(
+    # Preserve prior evidence when validating a newly rebuilt package.
+    [string]$LogPath = (Join-Path $PSScriptRoot '..\docs\implementation\logs\msi_install_verification.log')
+)
+
 $ErrorActionPreference = 'Stop'
 
-$logPath = Join-Path $PSScriptRoot '..\docs\implementation\logs\msi_install_verification.log'
+$logPath = [System.IO.Path]::GetFullPath($LogPath)
 $logLines = [System.Collections.Generic.List[string]]::new()
 
 function Log-Msg([string]$msg) {
@@ -12,6 +17,8 @@ function Log-Msg([string]$msg) {
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 $msiPath = (Resolve-Path (Join-Path $PSScriptRoot '..\packaging\release\Mayasaba.msi')).Path
+$msiHash = (Get-FileHash -LiteralPath $msiPath -Algorithm SHA256).Hash
+Log-Msg "[MSI Test] SHA-256: $msiHash"
 Log-Msg "[MSI Test] Installing $msiPath /passive..."
 $installProc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$msiPath`" /passive" -Wait -PassThru
 Log-Msg "[MSI Test] Install ExitCode: $($installProc.ExitCode)"

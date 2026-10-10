@@ -2,6 +2,8 @@
 // process-tree cleanup, launch rejection, environment control.
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "mayasaba/kernel.hpp"
 #include "test_support.hpp"
 
@@ -168,6 +170,45 @@ TEST(Kernel, LaunchFailsClosedForMissingWorkingDirectory) {
     auto process = Process::Launch(spec);
     ASSERT_FALSE(process.ok());
     EXPECT_EQ(process.code(), ErrorCode::NotFound);
+}
+
+TEST(Kernel, RestrictedWorkspaceTokenDeniesWritesOutsideStaging) {
+    ScratchDir scratch;
+    const std::filesystem::path staging = std::filesystem::path(scratch.path()) / "staging";
+    const std::filesystem::path outside = std::filesystem::path(scratch.path()) / "outside";
+    std::filesystem::create_directories(staging);
+    std::filesystem::create_directories(outside);
+
+    // The restricted process must be able to load an executable from its authorized tree.
+    const std::filesystem::path staged_helper = staging / "child_process_helper.exe";
+    std::filesystem::copy_file(HelperPath(), staged_helper,
+                               std::filesystem::copy_options::overwrite_existing);
+
+    LaunchSpec denied;
+    denied.executable = staged_helper.string();
+    denied.arguments = {"write", "../outside/escape.txt", "must-not-write"};
+    denied.working_directory = staging.string();
+    denied.require_restricted_workspace = true;
+    denied.purpose = "restricted-workspace-negative";
+    auto denied_process = Process::Launch(denied);
+    ASSERT_TRUE(denied_process.ok()) << denied_process.message();
+    auto denied_observation = denied_process.value()->WaitFor(std::chrono::milliseconds(10000));
+    EXPECT_TRUE(denied_observation.restricted_workspace_enforced);
+    EXPECT_EQ(denied_observation.outcome, ProcessOutcome::Exited);
+    EXPECT_NE(denied_observation.exit_code, 0u);
+    EXPECT_FALSE(std::filesystem::exists(outside / "escape.txt"));
+
+    LaunchSpec allowed = denied;
+    allowed.arguments = {"write", "inside.txt", "permitted"};
+    allowed.purpose = "restricted-workspace-positive";
+    auto allowed_process = Process::Launch(allowed);
+    ASSERT_TRUE(allowed_process.ok()) << allowed_process.message();
+    auto allowed_observation = allowed_process.value()->WaitFor(std::chrono::milliseconds(10000));
+    EXPECT_TRUE(allowed_observation.restricted_workspace_enforced);
+    EXPECT_EQ(allowed_observation.outcome, ProcessOutcome::Exited);
+    EXPECT_EQ(allowed_observation.exit_code, 0u) << allowed_process.value()->ReadStdout()
+                                                 << allowed_process.value()->ReadStderr();
+    EXPECT_TRUE(std::filesystem::exists(staging / "inside.txt"));
 }
 
 TEST(Kernel, JobAccountingShowsSingleActiveProcessAfterExit) {

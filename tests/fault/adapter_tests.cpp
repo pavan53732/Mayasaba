@@ -427,6 +427,14 @@ TEST(Adapter, ForbiddenFlagsAreRejectedAtProbeAndLaunch) {
     ASSERT_FALSE(status2.ok());
     EXPECT_EQ(status2.code(), ErrorCode::Denied);
     EXPECT_NE(status2.message().find("--model"), std::string::npos);
+
+    for (const std::string& assigned : {"--model=some-model", "--provider=custom", "-m=fast"}) {
+        CliProfile assigned_profile = ProfileFor({assigned});
+        CliAdapter assigned_adapter(AgentKind::Hermes, FakeCliPath(), assigned_profile);
+        auto assigned_status = assigned_adapter.Probe();
+        EXPECT_FALSE(assigned_status.ok()) << assigned;
+        EXPECT_EQ(assigned_status.code(), ErrorCode::Denied) << assigned;
+    }
 }
 
 TEST(Adapter, UnverifiedProfileRefusesSessions) {
