@@ -67,15 +67,15 @@ struct Fixture {
         ASSERT_EQ(texts.size(), 3u);
         ASSERT_TRUE(Propose("hermes", texts[0]).ok());
         ASSERT_TRUE(Propose("kilo", texts[1]).ok());
-        ASSERT_TRUE(Propose("opencode", texts[2]).ok());
+        ASSERT_TRUE(Propose("claude", texts[2]).ok());
         auto ids = ProposalIds(round);
         ASSERT_EQ(ids.size(), 3u);
         ASSERT_TRUE(AddCritique("hermes", "kilo", ids["kilo"], "h critiques k").ok());
-        ASSERT_TRUE(AddCritique("hermes", "opencode", ids["opencode"], "h critiques o").ok());
+        ASSERT_TRUE(AddCritique("hermes", "claude", ids["claude"], "h critiques o").ok());
         ASSERT_TRUE(AddCritique("kilo", "hermes", ids["hermes"], "k critiques h").ok());
-        ASSERT_TRUE(AddCritique("kilo", "opencode", ids["opencode"], "k critiques o").ok());
-        ASSERT_TRUE(AddCritique("opencode", "hermes", ids["hermes"], "o critiques h").ok());
-        ASSERT_TRUE(AddCritique("opencode", "kilo", ids["kilo"], "o critiques k").ok());
+        ASSERT_TRUE(AddCritique("kilo", "claude", ids["claude"], "k critiques o").ok());
+        ASSERT_TRUE(AddCritique("claude", "hermes", ids["hermes"], "o critiques h").ok());
+        ASSERT_TRUE(AddCritique("claude", "kilo", ids["kilo"], "o critiques k").ok());
     }
 };
 
@@ -145,7 +145,7 @@ TEST(CouncilProposal, DisclosureGatedUntilAllThreePropose) {
 
     ASSERT_TRUE(fixture.Propose("kilo", "use sqlite").ok());
     ASSERT_TRUE(fixture.engine.SurvivingProposals(kPoint).value().empty());
-    ASSERT_TRUE(fixture.Propose("opencode", "use sqlite").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "use sqlite").ok());
     auto full = fixture.engine.SurvivingProposals(kPoint);
     ASSERT_TRUE(full.ok());
     EXPECT_EQ(full.value().size(), 3u);
@@ -161,14 +161,14 @@ TEST(CouncilCritique, RejectsSelfAndDuplicate) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
     auto ids = fixture.ProposalIds(1);
 
     EXPECT_EQ(fixture.AddCritique("hermes", "hermes", ids["hermes"], "self").code(),
               ErrorCode::InvalidArgument);
     EXPECT_EQ(fixture.AddCritique("hermes", "kilo", "missing", "x").code(), ErrorCode::NotFound);
     // target_agent must be the reviewed proposal's author.
-    EXPECT_EQ(fixture.AddCritique("hermes", "opencode", ids["kilo"], "x").code(),
+    EXPECT_EQ(fixture.AddCritique("hermes", "claude", ids["kilo"], "x").code(),
               ErrorCode::InvalidArgument);
 
     ASSERT_TRUE(fixture.AddCritique("hermes", "kilo", ids["kilo"], "h->k").ok());
@@ -181,21 +181,21 @@ TEST(CouncilCritique, SixDirectedCritiquesRequiredForRoundCompletion) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
     auto ids = fixture.ProposalIds(1);
 
     ASSERT_TRUE(fixture.AddCritique("hermes", "kilo", ids["kilo"], "1").ok());
-    ASSERT_TRUE(fixture.AddCritique("hermes", "opencode", ids["opencode"], "2").ok());
+    ASSERT_TRUE(fixture.AddCritique("hermes", "claude", ids["claude"], "2").ok());
     ASSERT_TRUE(fixture.AddCritique("kilo", "hermes", ids["hermes"], "3").ok());
-    ASSERT_TRUE(fixture.AddCritique("kilo", "opencode", ids["opencode"], "4").ok());
-    ASSERT_TRUE(fixture.AddCritique("opencode", "hermes", ids["hermes"], "5").ok());
+    ASSERT_TRUE(fixture.AddCritique("kilo", "claude", ids["claude"], "4").ok());
+    ASSERT_TRUE(fixture.AddCritique("claude", "hermes", ids["hermes"], "5").ok());
 
     auto after_five = fixture.engine.PointStateOf(kPoint);
     ASSERT_TRUE(after_five.ok());
     EXPECT_NE(after_five.value().rationale.find("critiques incomplete"), std::string::npos);
     EXPECT_EQ(after_five.value().critiques.size(), 5u);
 
-    ASSERT_TRUE(fixture.AddCritique("opencode", "kilo", ids["kilo"], "6").ok());
+    ASSERT_TRUE(fixture.AddCritique("claude", "kilo", ids["kilo"], "6").ok());
     auto after_six = fixture.engine.PointStateOf(kPoint);
     ASSERT_TRUE(after_six.ok());
     EXPECT_NE(after_six.value().rationale.find("round complete"), std::string::npos);
@@ -250,7 +250,7 @@ TEST(CouncilChair, DeterministicRoundRobin) {
     Fixture fixture;
     EXPECT_EQ(fixture.engine.ChairFor(kPoint, 1), "hermes");
     EXPECT_EQ(fixture.engine.ChairFor(kPoint, 2), "kilo");
-    EXPECT_EQ(fixture.engine.ChairFor(kPoint, 3), "opencode");
+    EXPECT_EQ(fixture.engine.ChairFor(kPoint, 3), "claude");
     EXPECT_EQ(fixture.engine.ChairFor(kPoint, 4), "hermes");
     // Determinism: identical inputs give the identical chair.
     EXPECT_EQ(fixture.engine.ChairFor(kPoint, 3), fixture.engine.ChairFor(kPoint, 3));
@@ -264,7 +264,7 @@ TEST(CouncilSynthesis, RequiresChairAuthorAndNonChairReview) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
 
     Synthesis synthesis;
     synthesis.point_id = kPoint;
@@ -289,14 +289,14 @@ TEST(CouncilSynthesis, PreservesMaterialDisagreement) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
 
     Synthesis synthesis;
     synthesis.point_id = kPoint;
     synthesis.chair_agent = "hermes";
     synthesis.synthesized_resolution = "merge with dissent";
     synthesis.nonchair_review = "reviewed by kilo";
-    synthesis.disagreements = {{{"topic", "durability"}, {"positions", {"kilo", "opencode"}}}};
+    synthesis.disagreements = {{{"topic", "durability"}, {"positions", {"kilo", "claude"}}}};
     ASSERT_TRUE(fixture.engine.SubmitSynthesis(synthesis).ok());
 
     auto state = fixture.engine.PointStateOf(kPoint);
@@ -360,7 +360,7 @@ TEST(CouncilConvergence, ReviewedSynthesisConvergesWithoutSecondRound) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
 
     Synthesis synthesis;
     synthesis.point_id = kPoint;
@@ -382,7 +382,7 @@ TEST(CouncilConvergence, SynthesisMissingChairApprovalDoesNotConverge) {
     ASSERT_TRUE(fixture.engine.BeginRound(kPoint, 1).ok());
     ASSERT_TRUE(fixture.Propose("hermes", "A").ok());
     ASSERT_TRUE(fixture.Propose("kilo", "B").ok());
-    ASSERT_TRUE(fixture.Propose("opencode", "C").ok());
+    ASSERT_TRUE(fixture.Propose("claude", "C").ok());
 
     Synthesis synthesis;
     synthesis.point_id = kPoint;

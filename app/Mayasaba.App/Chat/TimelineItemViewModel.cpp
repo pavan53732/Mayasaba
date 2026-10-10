@@ -39,7 +39,7 @@ std::string AgentDisplayNameFromId(const std::string& agent_id) {
     const std::string id = Lower(agent_id);
     if (id == "hermes") return "Hermes";
     if (id == "kilo" || id == "kilocode" || id == "kilo_code" || id == "kilo code") return "Kilo Code";
-    if (id == "opencode" || id == "open_code" || id == "open code") return "OpenCode";
+    if (id == "claude" || id == "claudecode" || id == "claude_code" || id == "claude code") return "Claude Code";
     return agent_id;
 }
 
@@ -114,7 +114,7 @@ TimelineItemViewModel ProjectTimelineItem(const mayasaba::control::TimelineItem&
     vm.kind_label = KindLabelForKind(item.kind);
     vm.glyph = vm.is_message ? std::string() : GlyphForKind(item.kind);
 
-    // Author attribution. Agent messages always name Hermes, Kilo Code or OpenCode; a controller
+    // Author attribution. Agent messages always name Hermes, Kilo Code or Claude Code; a controller
     // card is never styled as a fourth agent.
     if (item.kind == kKindUserMessage) {
         vm.author = "You";

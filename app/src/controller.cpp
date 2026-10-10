@@ -385,7 +385,7 @@ public:
 
         // Dispatch one leased task to a ready agent (Hermes preferred for the default slice).
         const std::string agent = [&]() {
-            for (const std::string preferred : {"hermes", "kilo", "opencode"}) {
+            for (const std::string preferred : {"hermes", "kilo", "claude"}) {
                 if (std::find(availability.ready_agents.begin(), availability.ready_agents.end(),
                               preferred) != availability.ready_agents.end()) {
                     return preferred;

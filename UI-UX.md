@@ -266,7 +266,7 @@ The timeline contains visually distinct entries for:
 
 Every submitted user message displays author, timestamp, persistence state, interpretation/route state, and links to relevant `UserContribution`, request, question, decision, task, or evidence records.
 
-Agent attribution always names Hermes, Kilo Code, or OpenCode. Controller-owned summaries are not styled as a fourth agent.
+Agent attribution always names Hermes, Kilo Code, or Claude Code. Controller-owned summaries are not styled as a fourth agent.
 
 Controller cards use a consistent anatomy: plain-language title, source-linked status, one-sentence consequence, timestamp, affected operation, primary next action when one exists, and **Show details**. A narrow evidence spine distinguishes controller authority from conversational messages. Do not emit a new card for every heartbeat or low-level event; update the existing source-linked card when that preserves truthful chronology, and append a new card when the authoritative outcome materially changes.
 

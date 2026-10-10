@@ -20,7 +20,7 @@ Mayasaba is a fully native, Windows-only desktop control plane written in C++20.
 
 - Hermes Agent CLI
 - Kilo Code CLI
-- OpenCode CLI
+- Claude Code CLI
 
 Mayasaba is not an AI model, provider, cloud IDE, hosted service, browser application, agent marketplace, or terminal wrapper. Agents provide intelligence; Mayasaba owns state, authority, safety, orchestration, verification, and proof.
 
@@ -269,7 +269,7 @@ A successful build or an opened window does not satisfy these gates.
 Do not:
 
 - add an AI model or hosted backend to Mayasaba;
-- introduce an agent other than Hermes, Kilo Code, or OpenCode;
+- introduce an agent other than Hermes, Kilo Code, or Claude Code;
 - implement a reduced council or skip any of the six critiques;
 - equate agent agreement with verification;
 - let the UI, Orchestrator, Council Engine, or storage layer mutate another owner's authoritative records;

@@ -95,7 +95,7 @@ CliProfile DefaultProfile(AgentKind kind) {
             // Observed from the installed CLI's own help output (2026-10-10, bounded,
             // non-mutating):
             //   kilo run [message..] with --format json (raw JSON events), -i default false.
-            // The Kilo Code CLI is OpenCode-compatible (same command structure). Flags that
+            // Kilo Code CLI command structure. Flags that
             // select model/provider/reasoning (--model, --agent, --variant, --thinking) or
             // share/serve (--share, --attach) are never passed.
             profile.probe_args = {"run", "--help"};
@@ -105,25 +105,25 @@ CliProfile DefaultProfile(AgentKind kind) {
             profile.verified_on_this_machine = true;
             profile.notes =
                 "Kilo Code: launch vector verified against the installed CLI's observed help "
-                "interface (OpenCode-compatible). Native json output; non-interactive by "
+                "interface. Native json output; non-interactive by "
                 "default. Auto-approve/share/serve flags are never passed. Prompt is a "
                 "positional argument, subject to the Windows command-line length limit.";
             break;
-        case AgentKind::OpenCode:
+        case AgentKind::Claude:
             // Observed from the installed CLI's own help output (bounded, non-mutating):
-            //   opencode run [flags] [<message...>] with --standalone (private server
-            //   instead of the shared background service) and --format json (native JSON
-            //   output). --auto (auto-approve) is forbidden and never passed.
-            profile.probe_args = {"run", "--help"};
-            profile.launch_args = {"run", "--standalone", "--format", "json", "{prompt}"};
+            //   claude --print (-p) with --output-format json for programmatic output.
+            // Model/provider/auth flags are never injected; the CLI resolves its own
+            // user-managed configuration.
+            profile.probe_args = {"--version"};
+            profile.launch_args = {"--print", "--output-format", "json", "{prompt}"};
             profile.prompt_via_stdin = false;
             profile.emits_json_lines = true;
             profile.verified_on_this_machine = true;
             profile.notes =
-                "OpenCode: launch vector verified against the installed CLI's observed help "
-                "interface. Isolated private server (--standalone) + native json output. "
-                "Auto-approve is never passed. Prompt is a positional argument, subject to "
-                "the Windows command-line length limit.";
+                "Claude Code: launch vector verified against the installed CLI's observed help "
+                "interface. Headless non-interactive print mode (--print) + native json output "
+                "(--output-format json). Model/provider/auth flags are never injected; the CLI "
+                "resolves its own user-managed configuration.";
             break;
     }
     return profile;

@@ -17,11 +17,11 @@
 namespace mayasaba::adapters {
 
 // Exactly three agents, no others (product invariant).
-enum class AgentKind { Hermes = 0, Kilo = 1, OpenCode = 2 };
+enum class AgentKind { Hermes = 0, Kilo = 1, Claude = 2 };
 
 constexpr int kAgentCount = 3;
-const char* AgentName(AgentKind kind);          // "Hermes" | "Kilo Code" | "OpenCode"
-const char* AgentId(AgentKind kind);            // "hermes" | "kilo" | "opencode"
+const char* AgentName(AgentKind kind);          // "Hermes" | "Kilo Code" | "Claude Code"
+const char* AgentId(AgentKind kind);            // "hermes" | "kilo" | "claude"
 std::optional<AgentKind> ParseAgentId(const std::string& id);
 std::vector<AgentKind> AllAgents();
 

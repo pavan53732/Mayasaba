@@ -68,7 +68,7 @@ std::string KindLabelForKind(const std::string& kind);
 // Maps a kind to a decorative glyph. Never the only carrier of meaning.
 std::string GlyphForKind(const std::string& kind);
 
-// "hermes" -> "Hermes", "kilo" -> "Kilo Code", "opencode" -> "OpenCode". Agent attribution
+// "hermes" -> "Hermes", "kilo" -> "Kilo Code", "claude" -> "Claude Code". Agent attribution
 // always names the agent; an unknown id is returned unchanged so nothing is invented.
 std::string AgentDisplayNameFromId(const std::string& agent_id);
 

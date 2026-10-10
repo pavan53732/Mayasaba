@@ -16,7 +16,7 @@
       4. Builds installer\bin\Mayasaba.msi with 'wix build'.
       5. Runs ICE validation with 'wix msi validate'.
 
-    External CLIs (Hermes, OpenCode, Kilo Code) are intentionally NOT bundled: they are
+    External CLIs (Hermes, Claude Code, Kilo Code) are intentionally NOT bundled: they are
     user-installed, and a missing CLI must never fail installation.
 
 .EXAMPLE

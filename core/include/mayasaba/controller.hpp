@@ -118,7 +118,7 @@ struct Ack {
 
 struct RetryAgentProbeRequest {
     int version = kControllerProtocolVersion;
-    std::string agent_id;             // "hermes" | "kilo" | "opencode"
+    std::string agent_id;             // "hermes" | "kilo" | "claude"
 };
 
 struct DismissCardRequest {
@@ -149,8 +149,8 @@ struct ProjectState {
 };
 
 struct AgentStatusView {
-    std::string agent_id;             // "hermes" | "kilo" | "opencode"
-    std::string display_name;         // "Hermes" | "Kilo Code" | "OpenCode"
+    std::string agent_id;             // "hermes" | "kilo" | "claude"
+    std::string display_name;         // "Hermes" | "Kilo Code" | "Claude Code"
     std::string readiness;            // CHECKING | READY | MISSING | UNSUPPORTED | PROBE_FAILED
     std::string reason;               // exact observed reason for non-READY states
     bool needs_attention = false;     // UI shows only these in the warning rows

@@ -28,9 +28,8 @@ struct CliProfile {
     std::string notes;                            // recorded rationale / limitations
 };
 
-// The three profiles. Hermes and OpenCode vectors were observed from the installed CLIs'
-// own help output (bounded, non-mutating); Kilo Code is not installed on this machine, so
-// its profile stays unverified and sessions fail closed until a probe verifies it.
+// The three profiles: Hermes, Kilo Code, and Claude Code. Launch vectors are observed from
+// the installed CLIs' own help interfaces (bounded, non-mutating).
 CliProfile DefaultProfile(AgentKind kind);
 
 // Rejects profiles that request forbidden behavior: approval bypass, model/provider

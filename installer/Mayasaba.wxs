@@ -7,7 +7,7 @@
     * The WinUI 3 application is unpackaged (no MSIX identity) and ships a self-contained
       Windows App SDK runtime payload. That is an application deployment detail, not an
       alternative to the MSI.
-    * External CLIs (Hermes, OpenCode, Kilo Code) are user-installed. They are deliberately
+    * External CLIs (Hermes, Claude Code, Kilo Code) are user-installed. They are deliberately
       NOT bundled or installed here, and a missing CLI must never fail installation. Missing
       CLIs surface only as inline Chat problem cards and block only their own operations.
 

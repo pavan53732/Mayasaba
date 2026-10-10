@@ -24,7 +24,7 @@ namespace {
 constexpr std::int64_t kRoundCap = 5;
 
 const std::vector<std::string>& AgentOrder() {
-    static const std::vector<std::string> kAgents = {"hermes", "kilo", "opencode"};
+    static const std::vector<std::string> kAgents = {"hermes", "kilo", "claude"};
     return kAgents;
 }
 

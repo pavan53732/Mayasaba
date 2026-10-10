@@ -28,7 +28,7 @@ struct CouncilPoint {
 struct Proposal {
     std::string proposal_id;
     std::string point_id;
-    std::string agent;                    // "hermes" | "kilo" | "opencode"
+    std::string agent;                    // "hermes" | "kilo" | "claude"
     std::string position;                 // surviving | superseded
     std::string proposal;                 // the actual textual answer
     std::string predecessor_id;           // immutable chain link when revised
@@ -102,7 +102,7 @@ public:
                          const std::vector<std::string>& agent_order = DefaultAgentOrder());
 
     static std::vector<std::string> DefaultAgentOrder() {
-        return {"hermes", "kilo", "opencode"};
+        return {"hermes", "kilo", "claude"};
     }
 
 private:

@@ -317,7 +317,7 @@
                                Style="{StaticResource TextSubtitle}" TextAlignment="Center" />
                     <TextBlock x:Name="EmptyBody" Style="{StaticResource TextBody}" TextAlignment="Center"
                                Foreground="{ThemeResource MutedBrush}"
-                               Text="Mayasaba keeps one authoritative record of your project while Hermes, Kilo Code and OpenCode work as separate sessions. Open a folder to bind the project root — opening it does not scan, launch or change anything." />
+                               Text="Mayasaba keeps one authoritative record of your project while Hermes, Kilo Code and Claude Code work as separate sessions. Open a folder to bind the project root — opening it does not scan, launch or change anything." />
                     <Button x:Name="EmptyOpenFolderButton" Style="{StaticResource OpenFolderButtonStyle}"
                             HorizontalAlignment="Center" Click="OnOpenFolderClick"
                             AutomationProperties.Name="Open a project folder">

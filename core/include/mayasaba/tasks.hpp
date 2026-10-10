@@ -46,7 +46,7 @@ struct TaskContract {
     std::string objective;
     std::vector<std::string> expected_artifacts;
     std::vector<std::string> dependencies;         // task ids
-    std::string assigned_agent;                    // "hermes" | "kilo" | "opencode" ("" = unassigned)
+    std::string assigned_agent;                    // "hermes" | "kilo" | "claude" ("" = unassigned)
     std::vector<std::string> allowed_read_paths;   // relative to project root
     std::vector<std::string> allowed_write_paths;  // relative; must stay in staging
     std::vector<std::string> forbidden_paths;

@@ -308,7 +308,7 @@ Expected<tasks::Lease> Orchestrator::LeaseTask(const std::string& task_id,
     if (!task.ok()) return Fail<tasks::Lease>(task.code(), task.message());
     if (!adapters::ParseAgentId(agent).has_value()) {
         return Fail<tasks::Lease>(ErrorCode::InvalidArgument,
-                                  "unknown agent id (expected hermes|kilo|opencode): " + agent);
+                                  "unknown agent id (expected hermes|kilo|claude): " + agent);
     }
 
     // A lease may only be granted to a READY task. Evaluate the schedule first: it promotes

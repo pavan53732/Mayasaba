@@ -75,7 +75,7 @@ third_party/*_tmp/
 # --- Coding CLIs & Agent State ---
 .kilo/
 .hermes/
-.opencode/
+.claude/
 .*-tmp*
 *.tmp
 .workbuddy-ai/

@@ -422,7 +422,7 @@ namespace winrt::Mayasaba::App::implementation
             {
                 EmptyTitle().Text(L"One project reality, three agent sessions");
                 EmptyBody().Text(
-                    L"Mayasaba keeps one authoritative record of your project while Hermes, Kilo Code and OpenCode "
+                    L"Mayasaba keeps one authoritative record of your project while Hermes, Kilo Code and Claude Code "
                     L"work as separate sessions. Open a folder to bind the project root — opening it does not scan, "
                     L"launch or change anything.");
                 EmptyHint().Text(L"Send stays disabled until an authorized project root is bound.");

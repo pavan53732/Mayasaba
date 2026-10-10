@@ -31,10 +31,10 @@ flowchart LR
     Services --> Core["Deterministic local control plane"]
     Core -->|"Scoped sessions"| H["Hermes Agent CLI"]
     Core -->|"Scoped sessions"| K["Kilo Code CLI"]
-    Core -->|"Scoped sessions"| O["OpenCode CLI"]
+    Core -->|"Scoped sessions"| C["Claude Code CLI"]
     H -->|"Configured provider"| HP["User-managed provider"]
     K -->|"Configured provider"| KP["User-managed provider"]
-    O -->|"Configured provider"| OP["User-managed provider"]
+    C -->|"Configured provider"| CP["User-managed provider"]
     Core --> SQLite["Local SQLite authority"]
     Core --> Managed["Digest-verified managed bytes"]
     Core --> Root["User-selected Windows project root"]
@@ -48,7 +48,7 @@ The following are system invariants rather than implementation preferences:
 
 1. **Windows only and fully native.** C++20 implements the controller and UI code; WinUI 3, XAML, and C++/WinRT implement the Control Room.
 2. **One project reality.** The controller owns one durable, source-linked view of project identity, intent, requirements, decisions, tasks, evidence, and state.
-3. **Three isolated agents.** Hermes, Kilo Code, and OpenCode retain distinct sessions, configurations, providers, tools, and reasoning.
+3. **Three isolated agents.** Hermes, Kilo Code, and Claude Code retain distinct sessions, configurations, providers, tools, and reasoning.
 4. **Exactly thirteen functional layers.** New implementation components must fit a declared layer without creating another authority plane.
 5. **Exactly twelve authoritative state machines.** Other workflows are projections over them.
 6. **One owner per durable record.** Coordination never implies co-ownership.
@@ -259,7 +259,7 @@ Each CLI has one dedicated adapter. The adapter owns executable discovery, bound
 | --- | --- | --- |
 | Hermes Agent CLI | Streamed native JSON over standard I/O | Suppress outside-workspace rule/memory/skill injection; forbid approval bypass, upgrades, outbound messaging, credential export, and service control |
 | Kilo Code CLI | Native JSON events; local ACP only when verified | Absolute working directory; private controller-owned session; default-deny permissions; no cloud/public sessions, plugin/import surfaces, or codebase indexing |
-| OpenCode CLI | Native JSON events; isolated local ACP when verified | Private controlled process/service; no public listener, shared external session, approval bypass, plugin install, credential export, or unrestricted serving |
+| Claude Code CLI | Headless print mode (-p); native JSON events | Non-interactive execution; no background listening server, approval bypass, plugin install, or credential export |
 
 Compatibility is behavioral. Adapters do not request or compare release numbers. A path or executable name alone cannot prove support.
 
@@ -452,7 +452,7 @@ The source specification fixes responsibilities but not final folder names. A pr
   adapters/
     hermes/
     kilo/
-    opencode/
+    claude/
   contracts/           # versioned schemas, registries, canonical test vectors
   tests/
     unit/

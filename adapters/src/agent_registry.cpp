@@ -13,7 +13,7 @@ const char* AgentName(AgentKind kind) {
     switch (kind) {
         case AgentKind::Hermes: return "Hermes";
         case AgentKind::Kilo: return "Kilo Code";
-        case AgentKind::OpenCode: return "OpenCode";
+        case AgentKind::Claude: return "Claude Code";
     }
     return "Unknown";
 }
@@ -22,7 +22,7 @@ const char* AgentId(AgentKind kind) {
     switch (kind) {
         case AgentKind::Hermes: return "hermes";
         case AgentKind::Kilo: return "kilo";
-        case AgentKind::OpenCode: return "opencode";
+        case AgentKind::Claude: return "claude";
     }
     return "unknown";
 }
@@ -30,12 +30,12 @@ const char* AgentId(AgentKind kind) {
 std::optional<AgentKind> ParseAgentId(const std::string& id) {
     if (id == "hermes") return AgentKind::Hermes;
     if (id == "kilo") return AgentKind::Kilo;
-    if (id == "opencode") return AgentKind::OpenCode;
+    if (id == "claude") return AgentKind::Claude;
     return std::nullopt;
 }
 
 std::vector<AgentKind> AllAgents() {
-    return {AgentKind::Hermes, AgentKind::Kilo, AgentKind::OpenCode};
+    return {AgentKind::Hermes, AgentKind::Kilo, AgentKind::Claude};
 }
 
 const char* ReadinessName(Readiness readiness) {
@@ -84,10 +84,10 @@ std::vector<std::string> KnownInstallCandidates(AgentKind kind) {
                 candidates.push_back(fs::JoinPath(lad, "Programs\\kilo\\kilo.exe"));
                 candidates.push_back(fs::JoinPath(lad, "kilo-code\\kilo.exe"));
                 break;
-            case AgentKind::OpenCode:
-                candidates.push_back(fs::JoinPath(lad, "opencode\\bin\\opencode.exe"));
-                candidates.push_back(fs::JoinPath(lad, "Programs\\opencode\\opencode.exe"));
-                candidates.push_back(fs::JoinPath(lad, "hermes\\node\\opencode.cmd"));
+            case AgentKind::Claude:
+                candidates.push_back(fs::JoinPath(lad, "hermes\\node\\claude.cmd"));
+                candidates.push_back(fs::JoinPath(lad, "Programs\\claude\\claude.exe"));
+                candidates.push_back(fs::JoinPath(lad, "npm\\claude.cmd"));
                 break;
         }
     }
@@ -98,7 +98,7 @@ std::vector<std::string> ExecutableNames(AgentKind kind) {
     switch (kind) {
         case AgentKind::Hermes: return {"hermes.exe", "hermes.cmd", "hermes.bat"};
         case AgentKind::Kilo: return {"kilo.exe", "kilo.cmd", "kilo.bat"};
-        case AgentKind::OpenCode: return {"opencode.exe", "opencode.cmd", "opencode.bat"};
+        case AgentKind::Claude: return {"claude.cmd", "claude.exe", "claude.bat", "claude.ps1"};
     }
     return {};
 }

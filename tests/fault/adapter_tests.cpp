@@ -245,7 +245,7 @@ TEST(Adapter, StartRequiresReadyProbe) {
 
 TEST(Gateway, SessionLifecycleAndEventRouting) {
     ScratchDir scratch;
-    ScopedPathOverride path_guard(scratch.path());  // kilo/opencode are deterministically absent
+    ScopedPathOverride path_guard(scratch.path());  // kilo/claude are deterministically absent
     gateway::AgentGateway gateway({{"hermes", FakeCliPath()}});
     auto status = gateway.Probe(AgentKind::Hermes);
     EXPECT_EQ(status.readiness, Readiness::Ready);

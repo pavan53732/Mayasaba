@@ -30,7 +30,7 @@ namespace {
 // --- Small shared helpers ------------------------------------------------------------------
 
 const std::vector<std::string>& KnownAgents() {
-    static const std::vector<std::string> kAgents = {"hermes", "kilo", "opencode"};
+    static const std::vector<std::string> kAgents = {"hermes", "kilo", "claude"};
     return kAgents;
 }
 
