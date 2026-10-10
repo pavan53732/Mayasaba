@@ -1,0 +1,41 @@
+{
+  "product_name": "Mayasaba",
+  "version": "0.1.0",
+  "build_configuration": "Release",
+  "target_platform": "x64",
+  "pipeline": "packaging/build-msi.bat",
+  "msi": {
+    "path": "packaging/release/Mayasaba.msi",
+    "scope": "perUser",
+    "sha256": "037C8B692072E087205A8ADE5FFB1B70AB84414A50897FC6007A008DDCA19EC0",
+    "size_bytes": 20612679,
+    "product_code": "{9750A5BF-D2AC-4C2D-B4E5-6FE45D8C2D3E}",
+    "upgrade_code": "{8D06BC07-C3D7-49D6-BC9B-9F59D17EB6CE}"
+  },
+  "primary_executable": {
+    "path": "app/Mayasaba.App/x64/Release/Mayasaba.App/Mayasaba.App.exe",
+    "sha256": "647F3AA312163F10A93E7B53A6500346CF2946A57C22B03442395A0BA7F86FFE",
+    "size_bytes": 2792448
+  },
+  "libraries": {
+    "mayasaba_app.lib": {
+      "path": "build/vs2026/app/Release/mayasaba_app.lib",
+      "sha256": "2C8C163B2E1344BD50EAA33359497C063D793BCDAFB85C0A6608016FFB24F76D"
+    },
+    "mayasaba_core.lib": {
+      "path": "build/vs2026/core/Release/mayasaba_core.lib",
+      "sha256": "6C61D5A48A6F768C3388E1C9E2AE0F04E015CB4E3A88FA63B3F70957B9B999AB"
+    },
+    "mayasaba_adapters.lib": {
+      "path": "build/vs2026/adapters/Release/mayasaba_adapters.lib",
+      "sha256": "A019E24A2B580528689E5A9399A4FE18B680C40D11FA3A176B00EBB8CA1DB793"
+    }
+  },
+  "payload_metrics": {
+    "file_count": 281,
+    "directory_count": 94,
+    "component_count": 95,
+    "embedded_cabinet": true
+  },
+  "timestamp_utc": "2026-10-10T03:20:00Z"
+}

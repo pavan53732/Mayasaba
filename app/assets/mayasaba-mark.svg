@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mayasaba mark — original, resolution-independent source.
+
+  "Three Sightlines, One Node": Mayasaba owns one project reality (the filled node) that three
+  independent coding CLIs observe from three directions (three unequal, gapped strokes); the node
+  stands on the plumb baseline of the published root. Deliberately not a sparkle, robot, chat
+  bubble, hexagon or symmetric network hub.
+
+  This is the canonical vector source; Theme/Styles.xaml carries the same geometry as XAML
+  (MayasabaMarkLines / MayasabaMarkNode) and app/assets/generate-icon.ps1 rasterises the same
+  numbers into the application icon.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512"
+     role="img" aria-label="Mayasaba">
+  <title>Mayasaba</title>
+  <g fill="none" stroke="#4057C8" stroke-width="4.5"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- sightline from the upper-left observer -->
+    <path d="M 9,10 L 26.5,24.5" />
+    <!-- sightline from the upper-right observer -->
+    <path d="M 55,10 L 37.5,24.5" />
+    <!-- sightline from the lower observer -->
+    <path d="M 32,58 L 32,37.5" />
+    <!-- the plumb baseline: the published project root -->
+    <path d="M 22,58 L 42,58" />
+  </g>
+  <!-- the single node of verified project reality -->
+  <circle cx="32" cy="30" r="5.2" fill="#4057C8" />
+</svg>

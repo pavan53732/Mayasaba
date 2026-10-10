@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mayasaba application-icon source: the same "Three Sightlines, One Node" mark reversed out of
+  the Authority indigo plate, so the taskbar, Alt-Tab and Explorer identities match the title-bar
+  mark. Rasterised into app/assets/mayasaba.ico by app/assets/generate-icon.ps1.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512"
+     role="img" aria-label="Mayasaba application icon">
+  <title>Mayasaba</title>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#4057C8" />
+  <g fill="none" stroke="#FFFFFF" stroke-width="4.5"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 9,10 L 26.5,24.5" />
+    <path d="M 55,10 L 37.5,24.5" />
+    <path d="M 32,58 L 32,37.5" />
+    <path d="M 22,58 L 42,58" />
+  </g>
+  <circle cx="32" cy="30" r="5.2" fill="#FFFFFF" />
+</svg>

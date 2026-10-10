@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mayasaba.App.vcxproj — WinUI 3 / C++/WinRT desktop app.
+
+  Deployment shape (AGENTS.md section 3, section 14):
+    * unpackaged  : <WindowsPackageType>None</WindowsPackageType>, <AppxPackage>false</AppxPackage>
+    * self-contained Windows App SDK payload: <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    * no MSIX tooling: <EnableMsixTooling>false</EnableMsixTooling>
+
+  The deterministic Mayasaba core stays out of this project; the UI owns no SQL, no process
+  launch, no direct agent channel (AGENTS.md section 12).
+-->
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup Label="NuGet">
+    <!-- PackageReference style restore for a native (C++) project. -->
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <NuGetTargetMoniker>native,Version=v0.0</NuGetTargetMoniker>
+    <NuGetTargetPlatformIdentifier>Windows</NuGetTargetPlatformIdentifier>
+    <NuGetTargetPlatformVersion>$(WindowsTargetPlatformVersion)</NuGetTargetPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Globals">
+    <CppWinRTOptimized>true</CppWinRTOptimized>
+    <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+    <MinimalCoreWin>true</MinimalCoreWin>
+    <ProjectGuid>{7F3C9D21-4B8E-4A6F-9C2D-1E5A7B3F8C40}</ProjectGuid>
+    <ProjectName>Mayasaba.App</ProjectName>
+    <RootNamespace>Mayasaba.App</RootNamespace>
+    <!-- $(TargetName) should match $(RootNamespace) so the produced .exe/.pri/.winmd names agree. -->
+    <TargetName>$(RootNamespace)</TargetName>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <AppContainerApplication>false</AppContainerApplication>
+    <ApplicationType>Windows Store</ApplicationType>
+    <ApplicationTypeRevision>10.0</ApplicationTypeRevision>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.17763.0</WindowsTargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <RuntimeIdentifiers>win10-x64</RuntimeIdentifiers>
+
+    <!-- Unpackaged, Windows App SDK self-contained. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxPackage>false</AppxPackage>
+    <WindowsPackageType>None</WindowsPackageType>
+    <EnableMsixTooling>false</EnableMsixTooling>
+  </PropertyGroup>
+
+  <!--
+    The deterministic core and the adapters are built by CMake from the repository root
+    (configure with the vs2026 preset, then build with the vs2026-debug preset). The UI links
+    those static libraries; it never recompiles core sources and never reaches around the
+    controller facade.
+  -->
+  <PropertyGroup Label="MayasabaCore">
+    <MayasabaRepoRoot>$(ProjectDir)..\..\</MayasabaRepoRoot>
+    <MayasabaCoreInclude>$(MayasabaRepoRoot)core\include</MayasabaCoreInclude>
+    <MayasabaAdaptersInclude>$(MayasabaRepoRoot)adapters\include</MayasabaAdaptersInclude>
+    <!-- mayasaba_json is header-only and rooted at third_party, so <nlohmann/json.hpp> resolves. -->
+    <MayasabaThirdPartyInclude>$(MayasabaRepoRoot)third_party</MayasabaThirdPartyInclude>
+    <MayasabaSqliteInclude>$(MayasabaRepoRoot)third_party\sqlite</MayasabaSqliteInclude>
+    <MayasabaCoreLibDir>$(MayasabaRepoRoot)build\vs2026\core\$(Configuration)</MayasabaCoreLibDir>
+    <MayasabaAdaptersLibDir>$(MayasabaRepoRoot)build\vs2026\adapters\$(Configuration)</MayasabaAdaptersLibDir>
+    <!-- mayasaba_app is layer 2: the Orchestrator and the control::Controller facade the UI
+         calls. It must be linked, or every control::* symbol resolves as undefined. -->
+    <MayasabaAppLibDir>$(MayasabaRepoRoot)build\vs2026\app\$(Configuration)</MayasabaAppLibDir>
+    <MayasabaSqliteLibDir>$(MayasabaRepoRoot)build\vs2026\third_party\$(Configuration)</MayasabaSqliteLibDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.260224002" />
+    <PackageReference Include="Microsoft.Windows.CppWinRT" Version="2.0.250303.1" />
+    <PackageReference Include="Microsoft.Windows.ImplementationLibrary" Version="1.0.250325.1" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)' == '17.0'">v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <DesktopCompatible>true</DesktopCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <!-- Workaround for the extra root-namespace segment in the resource URI of unpackaged
+         C++ WinUI apps. -->
+    <AppxPriInitialPath></AppxPriInitialPath>
+  </PropertyGroup>
+
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <PropertyGroup Label="UserMacros" />
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch.pch</PrecompiledHeaderOutputFile>
+      <WarningLevel>Level4</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <!-- /bigobj: the generated XAML type-info and cppwinrt projection objects exceed the
+           default section limit. /utf-8: sources carry UTF-8 literals. -->
+      <AdditionalOptions>%(AdditionalOptions) /bigobj /utf-8</AdditionalOptions>
+      <!-- XAML files in subfolders (Chat\, Controls\) make the XAML compiler emit their
+           <Name>.xaml.g.h under a mirrored $(GeneratedFilesDir) subfolder, while the cppwinrt
+           <Name>.g.h probes __has_include("<Name>.xaml.g.h") from its own directory. Those
+           mirrored subfolders must be on the include path, or the probe fails and the page
+           silently falls back to a base class without InitializeComponent/named elements. -->
+      <AdditionalIncludeDirectories>$(ProjectDir);$(GeneratedFilesDir)Chat;$(GeneratedFilesDir)Controls;$(MayasabaCoreInclude);$(MayasabaAdaptersInclude);$(MayasabaThirdPartyInclude);$(MayasabaSqliteInclude);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- The XAML compiler would otherwise emit its own wWinMain into App.xaml.g.hpp.
+           We ship an explicit, readable entry point in Main.cpp instead. -->
+      <PreprocessorDefinitions>DISABLE_XAML_GENERATED_MAIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>$(MayasabaCoreLibDir);$(MayasabaAdaptersLibDir);$(MayasabaAppLibDir);$(MayasabaSqliteLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <!-- mayasaba_app/mayasaba_core/mayasaba_adapters are the CMake-built static libraries;
+           the rest are the platform libraries those targets declare (bcrypt/ole32/advapi32/user32).
+           Order matters for static linking: mayasaba_app depends on core+adapters, so it is
+           listed first and its unresolved references are satisfied by the later libraries. -->
+      <AdditionalDependencies>mayasaba_app.lib;mayasaba_core.lib;mayasaba_adapters.lib;mayasaba_sqlite3.lib;bcrypt.lib;ole32.lib;advapi32.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <Manifest Include="app.manifest" />
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="App.xaml.h">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="MainWindow.xaml.h">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="Chat\BindableItems.h" />
+    <ClInclude Include="Chat\ChatPage.xaml.h">
+      <DependentUpon>Chat\ChatPage.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="Chat\ChatViewModel.h" />
+    <ClInclude Include="Chat\ComposerViewModel.h" />
+    <ClInclude Include="Chat\ControllerBridge.h" />
+    <ClInclude Include="Chat\ControllerSession.h" />
+    <ClInclude Include="Chat\DetailsSheetBuilder.h" />
+    <ClInclude Include="Chat\TimelineItemViewModel.h" />
+    <ClInclude Include="Controls\LogoMark.xaml.h">
+      <DependentUpon>Controls\LogoMark.xaml</DependentUpon>
+    </ClInclude>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml" />
+    <Page Include="MainWindow.xaml" />
+    <Page Include="Chat\ChatPage.xaml" />
+    <Page Include="Controls\LogoMark.xaml" />
+    <!-- Design system. ResourceDictionary XAML is compiled to XBF and loaded by ms-appx URI. -->
+    <Page Include="Theme\Tokens.xaml" />
+    <Page Include="Theme\Styles.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="App.xaml.cpp">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="MainWindow.xaml.cpp">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Chat\BindableItems.cpp" />
+    <ClCompile Include="Chat\ChatPage.xaml.cpp">
+      <DependentUpon>Chat\ChatPage.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Chat\ChatViewModel.cpp" />
+    <ClCompile Include="Chat\ComposerViewModel.cpp" />
+    <ClCompile Include="Chat\ControllerSession.cpp" />
+    <ClCompile Include="Chat\DetailsSheetBuilder.cpp" />
+    <ClCompile Include="Chat\TimelineItemViewModel.cpp" />
+    <ClCompile Include="Controls\LogoMark.xaml.cpp">
+      <DependentUpon>Controls\LogoMark.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
+  </ItemGroup>
+
+  <!--
+    MayasabaLinkProbe is a build-only switch used to smoke-test the UI before the parent's
+    controller facade lands. It compiles a clearly marked stub of the control::* surface so the
+    window can actually be launched and the XAML verified. It is OFF by default: a normal build
+    links the real facade (and therefore reports the still-missing control::* symbols as
+    PENDING_PARENT_FACADE).
+  -->
+  <ItemGroup Condition="'$(MayasabaLinkProbe)' == 'true'">
+    <ClCompile Include="..\link-probe\ControllerSmokeStub.cpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Midl Include="Project.idl">
+      <SubType>Code</SubType>
+    </Midl>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Project.idl" />
+  </ItemGroup>
+
+  <!--
+    Windows App SDK 1.7 injects WindowsAppRuntimeAutoInitializer.cpp into @(ClCompile) from a
+    target (needed for the unpackaged self-contained auto-initializer). Because the C++ build
+    computes compile inputs more than once, the identical source ends up in @(ClCompile) twice,
+    which makes MSBuild report MSB8027 and the linker report LNK4042. The two entries are the
+    same file, so collapsing duplicates immediately before the compile-input check is safe and
+    keeps the build output clean.
+  -->
+  <Target Name="MayasabaDeduplicateClCompile" BeforeTargets="WarnCompileDuplicatedFilename;ClCompile;Link">
+    <RemoveDuplicates Inputs="@(ClCompile)">
+      <Output TaskParameter="Filtered" ItemName="_MayasabaClCompileDeduplicated" />
+    </RemoveDuplicates>
+    <ItemGroup>
+      <ClCompile Remove="@(ClCompile)" />
+      <ClCompile Include="@(_MayasabaClCompileDeduplicated)" />
+    </ItemGroup>
+  </Target>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
+  <!-- Copy the generated application icon next to the executable so MainWindow can call
+       AppWindow.SetIcon with the same mark the .rc embeds. -->
+  <Target Name="MayasabaCopyAssets" AfterTargets="Build">
+    <ItemGroup>
+      <_MayasabaAsset Include="$(ProjectDir)..\assets\mayasaba.ico" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_MayasabaAsset)" DestinationFolder="$(TargetDir)assets" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

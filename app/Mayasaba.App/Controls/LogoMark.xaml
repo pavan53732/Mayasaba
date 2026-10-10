@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The original Mayasaba mark, as resolution-independent vector geometry.
+
+  "Three Sightlines, One Node": Mayasaba owns one project reality (the filled node) that three
+  independent coding CLIs observe from three directions (three unequal, gapped strokes), and
+  the node stands on the plumb baseline of the published root. The mark is decorative — the
+  adjacent wordmark carries the meaning — so it is excluded from the accessibility content view.
+-->
+<UserControl
+    x:Class="Mayasaba.App.LogoMark"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    AutomationProperties.AccessibilityView="Raw">
+
+    <Viewbox Stretch="Uniform">
+        <Grid Width="64" Height="64">
+            <!-- The mark geometry is defined inline on purpose: a Geometry is a
+                 single-parent object, so a shared PathGeometry/EllipseGeometry resource
+                 can be assigned to exactly one Path. The second LogoMark instance would
+                 fail with E_XAMLPARSEFAILED ("Failed to assign to property
+                 'Microsoft.UI.Xaml.Shapes.Path.Data'", 0x802B000A). Inline definitions
+                 give every instance its own geometry. -->
+            <Path Stroke="{ThemeResource AuthorityBrush}"
+                  StrokeThickness="4.5"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
+                  StrokeLineJoin="Round">
+                <Path.Data>
+                    <PathGeometry>
+                        <PathFigureCollection>
+                            <PathFigure StartPoint="9,10">
+                                <LineSegment Point="26.5,24.5" />
+                            </PathFigure>
+                            <PathFigure StartPoint="55,10">
+                                <LineSegment Point="37.5,24.5" />
+                            </PathFigure>
+                            <PathFigure StartPoint="32,58">
+                                <LineSegment Point="32,37.5" />
+                            </PathFigure>
+                            <PathFigure StartPoint="22,58">
+                                <LineSegment Point="42,58" />
+                            </PathFigure>
+                        </PathFigureCollection>
+                    </PathGeometry>
+                </Path.Data>
+            </Path>
+            <Path Fill="{ThemeResource AuthorityBrush}">
+                <Path.Data>
+                    <EllipseGeometry Center="32,30" RadiusX="5.2" RadiusY="5.2" />
+                </Path.Data>
+            </Path>
+        </Grid>
+    </Viewbox>
+</UserControl>

@@ -1,0 +1,1274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mayasaba.msi - WiX v6 source for the unpackaged Windows App SDK / WinUI 3 app.
+  Build: wix build packaging\Mayasaba.wxs -d AppBinDir=app\Mayasaba.App\x64\Release\Mayasaba.App\ -b app\Mayasaba.App\x64\Release\Mayasaba.App -out packaging\release\Mayasaba.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="MayasabaControlRoom"
+           Manufacturer="Mayasaba Project"
+           Version="1.0.0.0"
+           InstallerVersion="201"
+           Compressed="yes"
+           Scope="perUser"
+           Language="1033"
+           Codepage='65001'
+           ProductCode="{9750A5BF-D2AC-4C2D-B4E5-6FE45D8C2D3E}"
+           UpgradeCode="B2A1F7C9-9E58-4F6A-8B17-000000000001">
+    <MediaTemplate EmbedCab="yes" />
+    <!-- Scope="perUser" authors ALLUSERS="" and MSIINSTALLPERUSER=1; do not set them here. -->
+    <Property Id="MSIFASTINSTALL" Value="7" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/pavanmayasaba/Mayasaba" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/pavanmayasaba/Mayasaba" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="MAYASABA_FOLDER" Name="Mayasaba">
+      <Directory Id="DIR_Chat" Name="Chat">
+      </Directory>
+      <Directory Id="DIR_Controls" Name="Controls">
+      </Directory>
+      <Directory Id="DIR_Microsoft_UI_Xaml" Name="Microsoft.UI.Xaml">
+        <Directory Id="DIR_Microsoft_UI_Xaml_Assets" Name="Assets">
+        </Directory>
+      </Directory>
+      <Directory Id="DIR_NpuDetect" Name="NpuDetect">
+      </Directory>
+      <Directory Id="DIR_Theme" Name="Theme">
+      </Directory>
+      <Directory Id="DIR_af_ZA" Name="af-ZA">
+      </Directory>
+      <Directory Id="DIR_am_ET" Name="am-ET">
+      </Directory>
+      <Directory Id="DIR_ar_SA" Name="ar-SA">
+      </Directory>
+      <Directory Id="DIR_as_IN" Name="as-IN">
+      </Directory>
+      <Directory Id="DIR_assets" Name="assets">
+      </Directory>
+      <Directory Id="DIR_az_Latn_AZ" Name="az-Latn-AZ">
+      </Directory>
+      <Directory Id="DIR_bg_BG" Name="bg-BG">
+      </Directory>
+      <Directory Id="DIR_bn_IN" Name="bn-IN">
+      </Directory>
+      <Directory Id="DIR_bs_Latn_BA" Name="bs-Latn-BA">
+      </Directory>
+      <Directory Id="DIR_ca_ES" Name="ca-ES">
+      </Directory>
+      <Directory Id="DIR_ca_Es_VALENCIA" Name="ca-Es-VALENCIA">
+      </Directory>
+      <Directory Id="DIR_cs_CZ" Name="cs-CZ">
+      </Directory>
+      <Directory Id="DIR_cy_GB" Name="cy-GB">
+      </Directory>
+      <Directory Id="DIR_da_DK" Name="da-DK">
+      </Directory>
+      <Directory Id="DIR_de_DE" Name="de-DE">
+      </Directory>
+      <Directory Id="DIR_el_GR" Name="el-GR">
+      </Directory>
+      <Directory Id="DIR_en_GB" Name="en-GB">
+      </Directory>
+      <Directory Id="DIR_en_us" Name="en-us">
+      </Directory>
+      <Directory Id="DIR_es_ES" Name="es-ES">
+      </Directory>
+      <Directory Id="DIR_es_MX" Name="es-MX">
+      </Directory>
+      <Directory Id="DIR_et_EE" Name="et-EE">
+      </Directory>
+      <Directory Id="DIR_eu_ES" Name="eu-ES">
+      </Directory>
+      <Directory Id="DIR_fa_IR" Name="fa-IR">
+      </Directory>
+      <Directory Id="DIR_fi_FI" Name="fi-FI">
+      </Directory>
+      <Directory Id="DIR_fil_PH" Name="fil-PH">
+      </Directory>
+      <Directory Id="DIR_fr_CA" Name="fr-CA">
+      </Directory>
+      <Directory Id="DIR_fr_FR" Name="fr-FR">
+      </Directory>
+      <Directory Id="DIR_ga_IE" Name="ga-IE">
+      </Directory>
+      <Directory Id="DIR_gd_gb" Name="gd-gb">
+      </Directory>
+      <Directory Id="DIR_gl_ES" Name="gl-ES">
+      </Directory>
+      <Directory Id="DIR_gu_IN" Name="gu-IN">
+      </Directory>
+      <Directory Id="DIR_he_IL" Name="he-IL">
+      </Directory>
+      <Directory Id="DIR_hi_IN" Name="hi-IN">
+      </Directory>
+      <Directory Id="DIR_hr_HR" Name="hr-HR">
+      </Directory>
+      <Directory Id="DIR_hu_HU" Name="hu-HU">
+      </Directory>
+      <Directory Id="DIR_hy_AM" Name="hy-AM">
+      </Directory>
+      <Directory Id="DIR_id_ID" Name="id-ID">
+      </Directory>
+      <Directory Id="DIR_is_IS" Name="is-IS">
+      </Directory>
+      <Directory Id="DIR_it_IT" Name="it-IT">
+      </Directory>
+      <Directory Id="DIR_ja_JP" Name="ja-JP">
+      </Directory>
+      <Directory Id="DIR_ka_GE" Name="ka-GE">
+      </Directory>
+      <Directory Id="DIR_kk_KZ" Name="kk-KZ">
+      </Directory>
+      <Directory Id="DIR_km_KH" Name="km-KH">
+      </Directory>
+      <Directory Id="DIR_kn_IN" Name="kn-IN">
+      </Directory>
+      <Directory Id="DIR_ko_KR" Name="ko-KR">
+      </Directory>
+      <Directory Id="DIR_kok_IN" Name="kok-IN">
+      </Directory>
+      <Directory Id="DIR_lb_LU" Name="lb-LU">
+      </Directory>
+      <Directory Id="DIR_lo_LA" Name="lo-LA">
+      </Directory>
+      <Directory Id="DIR_lt_LT" Name="lt-LT">
+      </Directory>
+      <Directory Id="DIR_lv_LV" Name="lv-LV">
+      </Directory>
+      <Directory Id="DIR_mi_NZ" Name="mi-NZ">
+      </Directory>
+      <Directory Id="DIR_mk_MK" Name="mk-MK">
+      </Directory>
+      <Directory Id="DIR_ml_IN" Name="ml-IN">
+      </Directory>
+      <Directory Id="DIR_mr_IN" Name="mr-IN">
+      </Directory>
+      <Directory Id="DIR_ms_MY" Name="ms-MY">
+      </Directory>
+      <Directory Id="DIR_mt_MT" Name="mt-MT">
+      </Directory>
+      <Directory Id="DIR_nb_NO" Name="nb-NO">
+      </Directory>
+      <Directory Id="DIR_ne_NP" Name="ne-NP">
+      </Directory>
+      <Directory Id="DIR_nl_NL" Name="nl-NL">
+      </Directory>
+      <Directory Id="DIR_nn_NO" Name="nn-NO">
+      </Directory>
+      <Directory Id="DIR_or_IN" Name="or-IN">
+      </Directory>
+      <Directory Id="DIR_pa_IN" Name="pa-IN">
+      </Directory>
+      <Directory Id="DIR_pl_PL" Name="pl-PL">
+      </Directory>
+      <Directory Id="DIR_pt_BR" Name="pt-BR">
+      </Directory>
+      <Directory Id="DIR_pt_PT" Name="pt-PT">
+      </Directory>
+      <Directory Id="DIR_quz_PE" Name="quz-PE">
+      </Directory>
+      <Directory Id="DIR_ro_RO" Name="ro-RO">
+      </Directory>
+      <Directory Id="DIR_ru_RU" Name="ru-RU">
+      </Directory>
+      <Directory Id="DIR_sk_SK" Name="sk-SK">
+      </Directory>
+      <Directory Id="DIR_sl_SI" Name="sl-SI">
+      </Directory>
+      <Directory Id="DIR_sq_AL" Name="sq-AL">
+      </Directory>
+      <Directory Id="DIR_sr_Cyrl_BA" Name="sr-Cyrl-BA">
+      </Directory>
+      <Directory Id="DIR_sr_Cyrl_RS" Name="sr-Cyrl-RS">
+      </Directory>
+      <Directory Id="DIR_sr_Latn_RS" Name="sr-Latn-RS">
+      </Directory>
+      <Directory Id="DIR_sv_SE" Name="sv-SE">
+      </Directory>
+      <Directory Id="DIR_ta_IN" Name="ta-IN">
+      </Directory>
+      <Directory Id="DIR_te_IN" Name="te-IN">
+      </Directory>
+      <Directory Id="DIR_th_TH" Name="th-TH">
+      </Directory>
+      <Directory Id="DIR_tr_TR" Name="tr-TR">
+      </Directory>
+      <Directory Id="DIR_tt_RU" Name="tt-RU">
+      </Directory>
+      <Directory Id="DIR_ug_CN" Name="ug-CN">
+      </Directory>
+      <Directory Id="DIR_uk_UA" Name="uk-UA">
+      </Directory>
+      <Directory Id="DIR_ur_PK" Name="ur-PK">
+      </Directory>
+      <Directory Id="DIR_uz_Latn_UZ" Name="uz-Latn-UZ">
+      </Directory>
+      <Directory Id="DIR_vi_VN" Name="vi-VN">
+      </Directory>
+      <Directory Id="DIR_zh_CN" Name="zh-CN">
+      </Directory>
+      <Directory Id="DIR_zh_TW" Name="zh-TW">
+      </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Component Id="AppFiles" Guid="{00000000-0000-0000-0000-0000000003e8}" Directory="MAYASABA_FOLDER">
+      <File Id="F_App_xbf" Source="$(var.AppBinDir)\App.xbf" />
+      <File Id="F_CoreMessagingXP_dll" Source="$(var.AppBinDir)\CoreMessagingXP.dll" />
+      <File Id="F_DWriteCore_dll" Source="$(var.AppBinDir)\DWriteCore.dll" />
+      <File Id="F_DwmSceneI_dll" Source="$(var.AppBinDir)\DwmSceneI.dll" />
+      <File Id="F_MRM_dll" Source="$(var.AppBinDir)\MRM.dll" />
+      <File Id="F_MainWindow_xbf" Source="$(var.AppBinDir)\MainWindow.xbf" />
+      <File Id="F_Mayasaba_App_exe" Source="$(var.AppBinDir)\Mayasaba.App.exe" />
+      <File Id="F_Mayasaba_App_pri" Source="$(var.AppBinDir)\Mayasaba.App.pri" />
+      <File Id="F_Mayasaba_App_winmd" Source="$(var.AppBinDir)\Mayasaba.App.winmd" />
+      <File Id="F_Microsoft_DirectManipulation_dll" Source="$(var.AppBinDir)\Microsoft.DirectManipulation.dll" />
+      <File Id="F_Microsoft_Foundation_winmd" Source="$(var.AppBinDir)\Microsoft.Foundation.winmd" />
+      <File Id="F_Microsoft_Graphics_Display_dll" Source="$(var.AppBinDir)\Microsoft.Graphics.Display.dll" />
+      <File Id="F_Microsoft_Graphics_Imaging_dll" Source="$(var.AppBinDir)\Microsoft.Graphics.Imaging.dll" />
+      <File Id="F_Microsoft_Graphics_Imaging_winmd" Source="$(var.AppBinDir)\Microsoft.Graphics.Imaging.winmd" />
+      <File Id="F_Microsoft_Graphics_ImagingInternal_ImageObjectRemo" Source="$(var.AppBinDir)\Microsoft.Graphics.ImagingInternal.ImageObjectRemover.winmd" />
+      <File Id="F_Microsoft_Graphics_ImagingInternal_winmd" Source="$(var.AppBinDir)\Microsoft.Graphics.ImagingInternal.winmd" />
+      <File Id="F_Microsoft_Graphics_Internal_Imaging_winmd" Source="$(var.AppBinDir)\Microsoft.Graphics.Internal.Imaging.winmd" />
+      <File Id="F_Microsoft_Graphics_winmd" Source="$(var.AppBinDir)\Microsoft.Graphics.winmd" />
+      <File Id="F_Microsoft_InputStateManager_dll" Source="$(var.AppBinDir)\Microsoft.InputStateManager.dll" />
+      <File Id="F_Microsoft_Internal_FrameworkUdk_dll" Source="$(var.AppBinDir)\Microsoft.Internal.FrameworkUdk.dll" />
+      <File Id="F_Microsoft_Security_Authentication_OAuth_winmd" Source="$(var.AppBinDir)\Microsoft.Security.Authentication.OAuth.winmd" />
+      <File Id="F_Microsoft_UI_Composition_OSSupport_dll" Source="$(var.AppBinDir)\Microsoft.UI.Composition.OSSupport.dll" />
+      <File Id="F_Microsoft_UI_Input_dll" Source="$(var.AppBinDir)\Microsoft.UI.Input.dll" />
+      <File Id="F_Microsoft_UI_Text_winmd" Source="$(var.AppBinDir)\Microsoft.UI.Text.winmd" />
+      <File Id="F_Microsoft_UI_Windowing_Core_dll" Source="$(var.AppBinDir)\Microsoft.UI.Windowing.Core.dll" />
+      <File Id="F_Microsoft_UI_Windowing_dll" Source="$(var.AppBinDir)\Microsoft.UI.Windowing.dll" />
+      <File Id="F_Microsoft_UI_Xaml_Controls_dll" Source="$(var.AppBinDir)\Microsoft.UI.Xaml.Controls.dll" />
+      <File Id="F_Microsoft_UI_Xaml_Controls_pri" Source="$(var.AppBinDir)\Microsoft.UI.Xaml.Controls.pri" />
+      <File Id="F_Microsoft_UI_Xaml_Internal_dll" Source="$(var.AppBinDir)\Microsoft.UI.Xaml.Internal.dll" />
+      <File Id="F_Microsoft_UI_Xaml_Phone_dll" Source="$(var.AppBinDir)\Microsoft.UI.Xaml.Phone.dll" />
+      <File Id="F_Microsoft_UI_Xaml_winmd" Source="$(var.AppBinDir)\Microsoft.UI.Xaml.winmd" />
+      <File Id="F_Microsoft_UI_dll" Source="$(var.AppBinDir)\Microsoft.UI.dll" />
+      <File Id="F_Microsoft_UI_pri" Source="$(var.AppBinDir)\Microsoft.UI.pri" />
+      <File Id="F_Microsoft_UI_winmd" Source="$(var.AppBinDir)\Microsoft.UI.winmd" />
+      <File Id="F_Microsoft_Web_WebView2_Core_dll" Source="$(var.AppBinDir)\Microsoft.Web.WebView2.Core.dll" />
+      <File Id="F_Microsoft_Web_WebView2_Core_winmd" Source="$(var.AppBinDir)\Microsoft.Web.WebView2.Core.winmd" />
+      <File Id="F_Microsoft_Windows_AI_ContentModerationInternal_win" Source="$(var.AppBinDir)\Microsoft.Windows.AI.ContentModerationInternal.winmd" />
+      <File Id="F_Microsoft_Windows_AI_ContentSafety_dll" Source="$(var.AppBinDir)\Microsoft.Windows.AI.ContentSafety.dll" />
+      <File Id="F_Microsoft_Windows_AI_ContentSafety_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.ContentSafety.winmd" />
+      <File Id="F_Microsoft_Windows_AI_Foundation_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.Foundation.winmd" />
+      <File Id="F_Microsoft_Windows_AI_FoundationInternal_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.FoundationInternal.winmd" />
+      <File Id="F_Microsoft_Windows_AI_GenerativeInternal_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.GenerativeInternal.winmd" />
+      <File Id="F_Microsoft_Windows_AI_Imaging_dll" Source="$(var.AppBinDir)\Microsoft.Windows.AI.Imaging.dll" />
+      <File Id="F_Microsoft_Windows_AI_Imaging_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.Imaging.winmd" />
+      <File Id="F_Microsoft_Windows_AI_Text_dll" Source="$(var.AppBinDir)\Microsoft.Windows.AI.Text.dll" />
+      <File Id="F_Microsoft_Windows_AI_Text_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.Text.winmd" />
+      <File Id="F_Microsoft_Windows_AI_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AI.winmd" />
+      <File Id="F_Microsoft_Windows_AppLifecycle_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AppLifecycle.winmd" />
+      <File Id="F_Microsoft_Windows_AppNotifications_Builder_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AppNotifications.Builder.winmd" />
+      <File Id="F_Microsoft_Windows_AppNotifications_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.AppNotifications.winmd" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_Background_Univ" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.Background.UniversalBGTask.winmd" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_Background_winm" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.Background.winmd" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_DynamicDependen" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.DynamicDependency.winmd" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_Resources_dll" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.Resources.dll" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_Resources_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.Resources.winmd" />
+      <File Id="F_Microsoft_Windows_ApplicationModel_WindowsAppRunti" Source="$(var.AppBinDir)\Microsoft.Windows.ApplicationModel.WindowsAppRuntime.winmd" />
+      <File Id="F_Microsoft_Windows_BadgeNotifications_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.BadgeNotifications.winmd" />
+      <File Id="F_Microsoft_Windows_Globalization_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Globalization.winmd" />
+      <File Id="F_Microsoft_Windows_Internal_Vision_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Internal.Vision.winmd" />
+      <File Id="F_Microsoft_Windows_Management_Deployment_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Management.Deployment.winmd" />
+      <File Id="F_Microsoft_Windows_Media_Capture_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Media.Capture.winmd" />
+      <File Id="F_Microsoft_Windows_Private_Workloads_SessionManager" Source="$(var.AppBinDir)\Microsoft.Windows.Private.Workloads.SessionManager.winmd" />
+      <File Id="F_Microsoft_Windows_PrivateCommon_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.PrivateCommon.winmd" />
+      <File Id="F_Microsoft_Windows_PushNotifications_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.PushNotifications.winmd" />
+      <File Id="F_Microsoft_Windows_Security_AccessControl_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Security.AccessControl.winmd" />
+      <File Id="F_Microsoft_Windows_SemanticSearch_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.SemanticSearch.winmd" />
+      <File Id="F_Microsoft_Windows_Storage_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Storage.winmd" />
+      <File Id="F_Microsoft_Windows_System_Power_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.System.Power.winmd" />
+      <File Id="F_Microsoft_Windows_System_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.System.winmd" />
+      <File Id="F_Microsoft_Windows_Vision_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Vision.winmd" />
+      <File Id="F_Microsoft_Windows_VisionInternal_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.VisionInternal.winmd" />
+      <File Id="F_Microsoft_Windows_Widgets_dll" Source="$(var.AppBinDir)\Microsoft.Windows.Widgets.dll" />
+      <File Id="F_Microsoft_Windows_Widgets_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Widgets.winmd" />
+      <File Id="F_Microsoft_Windows_Workloads_Resources_dll" Source="$(var.AppBinDir)\Microsoft.Windows.Workloads.Resources.dll" />
+      <File Id="F_Microsoft_Windows_Workloads_Resources_ec_dll" Source="$(var.AppBinDir)\Microsoft.Windows.Workloads.Resources_ec.dll" />
+      <File Id="F_Microsoft_Windows_Workloads_dll" Source="$(var.AppBinDir)\Microsoft.Windows.Workloads.dll" />
+      <File Id="F_Microsoft_Windows_Workloads_winmd" Source="$(var.AppBinDir)\Microsoft.Windows.Workloads.winmd" />
+      <File Id="F_Microsoft_WindowsAppRuntime_Bootstrap_dll" Source="$(var.AppBinDir)\Microsoft.WindowsAppRuntime.Bootstrap.dll" />
+      <File Id="F_Microsoft_WindowsAppRuntime_Insights_Resource_dll" Source="$(var.AppBinDir)\Microsoft.WindowsAppRuntime.Insights.Resource.dll" />
+      <File Id="F_Microsoft_WindowsAppRuntime_dll" Source="$(var.AppBinDir)\Microsoft.WindowsAppRuntime.dll" />
+      <File Id="F_Microsoft_ui_xaml_dll" Source="$(var.AppBinDir)\Microsoft.ui.xaml.dll" />
+      <File Id="F_Microsoft_ui_xaml_resources_19h1_dll" Source="$(var.AppBinDir)\Microsoft.ui.xaml.resources.19h1.dll" />
+      <File Id="F_Microsoft_ui_xaml_resources_common_dll" Source="$(var.AppBinDir)\Microsoft.ui.xaml.resources.common.dll" />
+      <File Id="F_PushNotificationsLongRunningTask_ProxyStub_dll" Source="$(var.AppBinDir)\PushNotificationsLongRunningTask.ProxyStub.dll" />
+      <File Id="F_RestartAgent_exe" Source="$(var.AppBinDir)\RestartAgent.exe" />
+      <File Id="F_SessionHandleIPCProxyStub_dll" Source="$(var.AppBinDir)\SessionHandleIPCProxyStub.dll" />
+      <File Id="F_WinUIEdit_dll" Source="$(var.AppBinDir)\WinUIEdit.dll" />
+      <File Id="F_WindowsAppRuntime_DeploymentExtensions_OneCore_dll" Source="$(var.AppBinDir)\WindowsAppRuntime.DeploymentExtensions.OneCore.dll" />
+      <File Id="F_WindowsAppRuntime_png" Source="$(var.AppBinDir)\WindowsAppRuntime.png" />
+      <File Id="F_WindowsAppSdk_AppxDeploymentExtensions_Desktop_Eve" Source="$(var.AppBinDir)\WindowsAppSdk.AppxDeploymentExtensions.Desktop-EventLog-Instrumentation.dll" />
+      <File Id="F_WindowsAppSdk_AppxDeploymentExtensions_Desktop_dll" Source="$(var.AppBinDir)\WindowsAppSdk.AppxDeploymentExtensions.Desktop.dll" />
+      <File Id="F_dcompi_dll" Source="$(var.AppBinDir)\dcompi.dll" />
+      <File Id="F_dwmcorei_dll" Source="$(var.AppBinDir)\dwmcorei.dll" />
+      <File Id="F_marshal_dll" Source="$(var.AppBinDir)\marshal.dll" />
+      <File Id="F_workloads_365_json" Source="$(var.AppBinDir)\workloads.365.json" />
+      <File Id="F_workloads_j32_json" Source="$(var.AppBinDir)\workloads.j32.json" />
+      <File Id="F_workloads_json" Source="$(var.AppBinDir)\workloads.json" />
+      <File Id="F_workloads_lnl_json" Source="$(var.AppBinDir)\workloads.lnl.json" />
+      <File Id="F_workloads_qnn_json" Source="$(var.AppBinDir)\workloads.qnn.json" />
+      <File Id="F_workloads_stx_json" Source="$(var.AppBinDir)\workloads.stx.json" />
+      <File Id="F_wuceffectsi_dll" Source="$(var.AppBinDir)\wuceffectsi.dll" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="Root" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_MAYASABA_FOLDER" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_Microsoft_UI_Xaml_Assets" Guid="{00000000-0000-0000-0000-0000000003e9}" Directory="DIR_Microsoft_UI_Xaml_Assets">
+      <File Id="F_Microsoft_UI_Xaml_Assets_NoiseAsset_256X256_PNG_pn" Source="$(var.AppBinDir)\Microsoft.UI.Xaml/Assets/NoiseAsset_256X256_PNG.png" />
+      <File Id="F_Microsoft_UI_Xaml_Assets_map_html" Source="$(var.AppBinDir)\Microsoft.UI.Xaml/Assets/map.html" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_Microsoft_UI_Xaml_Assets" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_Microsoft_UI_Xaml_Assets" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_Chat" Guid="{00000000-0000-0000-0000-0000000003ea}" Directory="DIR_Chat">
+      <File Id="F_Chat_ChatPage_xbf" Source="$(var.AppBinDir)\Chat/ChatPage.xbf" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_Chat" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_Chat" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_Controls" Guid="{00000000-0000-0000-0000-0000000003eb}" Directory="DIR_Controls">
+      <File Id="F_Controls_LogoMark_xbf" Source="$(var.AppBinDir)\Controls/LogoMark.xbf" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_Controls" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_Controls" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_NpuDetect" Guid="{00000000-0000-0000-0000-0000000003ec}" Directory="DIR_NpuDetect">
+      <File Id="F_NpuDetect_NPUDetect_dll" Source="$(var.AppBinDir)\NpuDetect/NPUDetect.dll" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_NpuDetect" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_NpuDetect" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_Theme" Guid="{00000000-0000-0000-0000-0000000003ed}" Directory="DIR_Theme">
+      <File Id="F_Theme_Styles_xbf" Source="$(var.AppBinDir)\Theme/Styles.xbf" />
+      <File Id="F_Theme_Tokens_xbf" Source="$(var.AppBinDir)\Theme/Tokens.xbf" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_Theme" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_Theme" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_af_ZA" Guid="{00000000-0000-0000-0000-0000000003ee}" Directory="DIR_af_ZA">
+      <File Id="F_af_ZA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\af-ZA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_af_ZA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\af-ZA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_af_ZA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_af_ZA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_am_ET" Guid="{00000000-0000-0000-0000-0000000003ef}" Directory="DIR_am_ET">
+      <File Id="F_am_ET_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\am-ET/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_am_ET_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\am-ET/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_am_ET" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_am_ET" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ar_SA" Guid="{00000000-0000-0000-0000-0000000003f0}" Directory="DIR_ar_SA">
+      <File Id="F_ar_SA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ar-SA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ar_SA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ar-SA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ar_SA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ar_SA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_as_IN" Guid="{00000000-0000-0000-0000-0000000003f1}" Directory="DIR_as_IN">
+      <File Id="F_as_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\as-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_as_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\as-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_as_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_as_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_assets" Guid="{00000000-0000-0000-0000-0000000003f2}" Directory="DIR_assets">
+      <File Id="F_assets_mayasaba_ico" Source="$(var.AppBinDir)\assets/mayasaba.ico" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_assets" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_assets" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_az_Latn_AZ" Guid="{00000000-0000-0000-0000-0000000003f3}" Directory="DIR_az_Latn_AZ">
+      <File Id="F_az_Latn_AZ_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\az-Latn-AZ/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_az_Latn_AZ_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\az-Latn-AZ/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_az_Latn_AZ" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_az_Latn_AZ" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_bg_BG" Guid="{00000000-0000-0000-0000-0000000003f4}" Directory="DIR_bg_BG">
+      <File Id="F_bg_BG_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\bg-BG/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_bg_BG_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\bg-BG/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_bg_BG" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_bg_BG" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_bn_IN" Guid="{00000000-0000-0000-0000-0000000003f5}" Directory="DIR_bn_IN">
+      <File Id="F_bn_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\bn-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_bn_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\bn-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_bn_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_bn_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_bs_Latn_BA" Guid="{00000000-0000-0000-0000-0000000003f6}" Directory="DIR_bs_Latn_BA">
+      <File Id="F_bs_Latn_BA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\bs-Latn-BA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_bs_Latn_BA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\bs-Latn-BA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_bs_Latn_BA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_bs_Latn_BA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ca_ES" Guid="{00000000-0000-0000-0000-0000000003f7}" Directory="DIR_ca_ES">
+      <File Id="F_ca_ES_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ca-ES/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ca_ES_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ca-ES/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ca_ES" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ca_ES" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ca_Es_VALENCIA" Guid="{00000000-0000-0000-0000-0000000003f8}" Directory="DIR_ca_Es_VALENCIA">
+      <File Id="F_ca_Es_VALENCIA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ca-Es-VALENCIA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ca_Es_VALENCIA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ca-Es-VALENCIA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ca_Es_VALENCIA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ca_Es_VALENCIA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_cs_CZ" Guid="{00000000-0000-0000-0000-0000000003f9}" Directory="DIR_cs_CZ">
+      <File Id="F_cs_CZ_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\cs-CZ/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_cs_CZ_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\cs-CZ/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_cs_CZ" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_cs_CZ" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_cy_GB" Guid="{00000000-0000-0000-0000-0000000003fa}" Directory="DIR_cy_GB">
+      <File Id="F_cy_GB_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\cy-GB/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_cy_GB_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\cy-GB/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_cy_GB" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_cy_GB" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_da_DK" Guid="{00000000-0000-0000-0000-0000000003fb}" Directory="DIR_da_DK">
+      <File Id="F_da_DK_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\da-DK/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_da_DK_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\da-DK/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_da_DK" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_da_DK" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_de_DE" Guid="{00000000-0000-0000-0000-0000000003fc}" Directory="DIR_de_DE">
+      <File Id="F_de_DE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\de-DE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_de_DE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\de-DE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_de_DE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_de_DE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_el_GR" Guid="{00000000-0000-0000-0000-0000000003fd}" Directory="DIR_el_GR">
+      <File Id="F_el_GR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\el-GR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_el_GR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\el-GR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_el_GR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_el_GR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_en_GB" Guid="{00000000-0000-0000-0000-0000000003fe}" Directory="DIR_en_GB">
+      <File Id="F_en_GB_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\en-GB/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_en_GB_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\en-GB/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_en_GB" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_en_GB" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_en_us" Guid="{00000000-0000-0000-0000-0000000003ff}" Directory="DIR_en_us">
+      <File Id="F_en_us_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\en-us/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_en_us_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\en-us/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_en_us" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_en_us" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_es_ES" Guid="{00000000-0000-0000-0000-000000000400}" Directory="DIR_es_ES">
+      <File Id="F_es_ES_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\es-ES/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_es_ES_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\es-ES/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_es_ES" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_es_ES" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_es_MX" Guid="{00000000-0000-0000-0000-000000000401}" Directory="DIR_es_MX">
+      <File Id="F_es_MX_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\es-MX/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_es_MX_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\es-MX/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_es_MX" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_es_MX" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_et_EE" Guid="{00000000-0000-0000-0000-000000000402}" Directory="DIR_et_EE">
+      <File Id="F_et_EE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\et-EE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_et_EE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\et-EE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_et_EE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_et_EE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_eu_ES" Guid="{00000000-0000-0000-0000-000000000403}" Directory="DIR_eu_ES">
+      <File Id="F_eu_ES_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\eu-ES/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_eu_ES_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\eu-ES/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_eu_ES" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_eu_ES" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_fa_IR" Guid="{00000000-0000-0000-0000-000000000404}" Directory="DIR_fa_IR">
+      <File Id="F_fa_IR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\fa-IR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_fa_IR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\fa-IR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_fa_IR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_fa_IR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_fi_FI" Guid="{00000000-0000-0000-0000-000000000405}" Directory="DIR_fi_FI">
+      <File Id="F_fi_FI_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\fi-FI/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_fi_FI_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\fi-FI/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_fi_FI" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_fi_FI" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_fil_PH" Guid="{00000000-0000-0000-0000-000000000406}" Directory="DIR_fil_PH">
+      <File Id="F_fil_PH_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\fil-PH/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_fil_PH_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\fil-PH/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_fil_PH" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_fil_PH" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_fr_CA" Guid="{00000000-0000-0000-0000-000000000407}" Directory="DIR_fr_CA">
+      <File Id="F_fr_CA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\fr-CA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_fr_CA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\fr-CA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_fr_CA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_fr_CA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_fr_FR" Guid="{00000000-0000-0000-0000-000000000408}" Directory="DIR_fr_FR">
+      <File Id="F_fr_FR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\fr-FR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_fr_FR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\fr-FR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_fr_FR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_fr_FR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ga_IE" Guid="{00000000-0000-0000-0000-000000000409}" Directory="DIR_ga_IE">
+      <File Id="F_ga_IE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ga-IE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ga_IE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ga-IE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ga_IE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ga_IE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_gd_gb" Guid="{00000000-0000-0000-0000-00000000040a}" Directory="DIR_gd_gb">
+      <File Id="F_gd_gb_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\gd-gb/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_gd_gb_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\gd-gb/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_gd_gb" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_gd_gb" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_gl_ES" Guid="{00000000-0000-0000-0000-00000000040b}" Directory="DIR_gl_ES">
+      <File Id="F_gl_ES_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\gl-ES/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_gl_ES_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\gl-ES/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_gl_ES" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_gl_ES" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_gu_IN" Guid="{00000000-0000-0000-0000-00000000040c}" Directory="DIR_gu_IN">
+      <File Id="F_gu_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\gu-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_gu_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\gu-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_gu_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_gu_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_he_IL" Guid="{00000000-0000-0000-0000-00000000040d}" Directory="DIR_he_IL">
+      <File Id="F_he_IL_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\he-IL/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_he_IL_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\he-IL/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_he_IL" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_he_IL" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_hi_IN" Guid="{00000000-0000-0000-0000-00000000040e}" Directory="DIR_hi_IN">
+      <File Id="F_hi_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\hi-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_hi_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\hi-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_hi_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_hi_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_hr_HR" Guid="{00000000-0000-0000-0000-00000000040f}" Directory="DIR_hr_HR">
+      <File Id="F_hr_HR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\hr-HR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_hr_HR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\hr-HR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_hr_HR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_hr_HR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_hu_HU" Guid="{00000000-0000-0000-0000-000000000410}" Directory="DIR_hu_HU">
+      <File Id="F_hu_HU_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\hu-HU/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_hu_HU_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\hu-HU/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_hu_HU" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_hu_HU" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_hy_AM" Guid="{00000000-0000-0000-0000-000000000411}" Directory="DIR_hy_AM">
+      <File Id="F_hy_AM_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\hy-AM/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_hy_AM_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\hy-AM/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_hy_AM" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_hy_AM" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_id_ID" Guid="{00000000-0000-0000-0000-000000000412}" Directory="DIR_id_ID">
+      <File Id="F_id_ID_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\id-ID/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_id_ID_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\id-ID/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_id_ID" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_id_ID" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_is_IS" Guid="{00000000-0000-0000-0000-000000000413}" Directory="DIR_is_IS">
+      <File Id="F_is_IS_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\is-IS/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_is_IS_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\is-IS/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_is_IS" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_is_IS" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_it_IT" Guid="{00000000-0000-0000-0000-000000000414}" Directory="DIR_it_IT">
+      <File Id="F_it_IT_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\it-IT/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_it_IT_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\it-IT/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_it_IT" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_it_IT" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ja_JP" Guid="{00000000-0000-0000-0000-000000000415}" Directory="DIR_ja_JP">
+      <File Id="F_ja_JP_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ja-JP/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ja_JP_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ja-JP/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ja_JP" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ja_JP" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ka_GE" Guid="{00000000-0000-0000-0000-000000000416}" Directory="DIR_ka_GE">
+      <File Id="F_ka_GE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ka-GE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ka_GE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ka-GE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ka_GE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ka_GE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_kk_KZ" Guid="{00000000-0000-0000-0000-000000000417}" Directory="DIR_kk_KZ">
+      <File Id="F_kk_KZ_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\kk-KZ/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_kk_KZ_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\kk-KZ/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_kk_KZ" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_kk_KZ" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_km_KH" Guid="{00000000-0000-0000-0000-000000000418}" Directory="DIR_km_KH">
+      <File Id="F_km_KH_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\km-KH/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_km_KH_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\km-KH/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_km_KH" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_km_KH" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_kn_IN" Guid="{00000000-0000-0000-0000-000000000419}" Directory="DIR_kn_IN">
+      <File Id="F_kn_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\kn-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_kn_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\kn-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_kn_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_kn_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ko_KR" Guid="{00000000-0000-0000-0000-00000000041a}" Directory="DIR_ko_KR">
+      <File Id="F_ko_KR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ko-KR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ko_KR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ko-KR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ko_KR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ko_KR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_kok_IN" Guid="{00000000-0000-0000-0000-00000000041b}" Directory="DIR_kok_IN">
+      <File Id="F_kok_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\kok-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_kok_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\kok-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_kok_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_kok_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_lb_LU" Guid="{00000000-0000-0000-0000-00000000041c}" Directory="DIR_lb_LU">
+      <File Id="F_lb_LU_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\lb-LU/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_lb_LU_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\lb-LU/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_lb_LU" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_lb_LU" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_lo_LA" Guid="{00000000-0000-0000-0000-00000000041d}" Directory="DIR_lo_LA">
+      <File Id="F_lo_LA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\lo-LA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_lo_LA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\lo-LA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_lo_LA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_lo_LA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_lt_LT" Guid="{00000000-0000-0000-0000-00000000041e}" Directory="DIR_lt_LT">
+      <File Id="F_lt_LT_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\lt-LT/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_lt_LT_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\lt-LT/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_lt_LT" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_lt_LT" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_lv_LV" Guid="{00000000-0000-0000-0000-00000000041f}" Directory="DIR_lv_LV">
+      <File Id="F_lv_LV_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\lv-LV/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_lv_LV_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\lv-LV/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_lv_LV" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_lv_LV" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_mi_NZ" Guid="{00000000-0000-0000-0000-000000000420}" Directory="DIR_mi_NZ">
+      <File Id="F_mi_NZ_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\mi-NZ/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_mi_NZ_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\mi-NZ/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_mi_NZ" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_mi_NZ" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_mk_MK" Guid="{00000000-0000-0000-0000-000000000421}" Directory="DIR_mk_MK">
+      <File Id="F_mk_MK_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\mk-MK/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_mk_MK_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\mk-MK/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_mk_MK" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_mk_MK" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ml_IN" Guid="{00000000-0000-0000-0000-000000000422}" Directory="DIR_ml_IN">
+      <File Id="F_ml_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ml-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ml_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ml-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ml_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ml_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_mr_IN" Guid="{00000000-0000-0000-0000-000000000423}" Directory="DIR_mr_IN">
+      <File Id="F_mr_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\mr-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_mr_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\mr-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_mr_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_mr_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ms_MY" Guid="{00000000-0000-0000-0000-000000000424}" Directory="DIR_ms_MY">
+      <File Id="F_ms_MY_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ms-MY/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ms_MY_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ms-MY/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ms_MY" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ms_MY" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_mt_MT" Guid="{00000000-0000-0000-0000-000000000425}" Directory="DIR_mt_MT">
+      <File Id="F_mt_MT_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\mt-MT/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_mt_MT_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\mt-MT/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_mt_MT" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_mt_MT" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_nb_NO" Guid="{00000000-0000-0000-0000-000000000426}" Directory="DIR_nb_NO">
+      <File Id="F_nb_NO_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\nb-NO/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_nb_NO_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\nb-NO/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_nb_NO" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_nb_NO" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ne_NP" Guid="{00000000-0000-0000-0000-000000000427}" Directory="DIR_ne_NP">
+      <File Id="F_ne_NP_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ne-NP/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ne_NP_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ne-NP/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ne_NP" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ne_NP" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_nl_NL" Guid="{00000000-0000-0000-0000-000000000428}" Directory="DIR_nl_NL">
+      <File Id="F_nl_NL_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\nl-NL/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_nl_NL_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\nl-NL/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_nl_NL" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_nl_NL" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_nn_NO" Guid="{00000000-0000-0000-0000-000000000429}" Directory="DIR_nn_NO">
+      <File Id="F_nn_NO_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\nn-NO/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_nn_NO_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\nn-NO/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_nn_NO" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_nn_NO" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_or_IN" Guid="{00000000-0000-0000-0000-00000000042a}" Directory="DIR_or_IN">
+      <File Id="F_or_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\or-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_or_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\or-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_or_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_or_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_pa_IN" Guid="{00000000-0000-0000-0000-00000000042b}" Directory="DIR_pa_IN">
+      <File Id="F_pa_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\pa-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_pa_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\pa-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_pa_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_pa_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_pl_PL" Guid="{00000000-0000-0000-0000-00000000042c}" Directory="DIR_pl_PL">
+      <File Id="F_pl_PL_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\pl-PL/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_pl_PL_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\pl-PL/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_pl_PL" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_pl_PL" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_pt_BR" Guid="{00000000-0000-0000-0000-00000000042d}" Directory="DIR_pt_BR">
+      <File Id="F_pt_BR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\pt-BR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_pt_BR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\pt-BR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_pt_BR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_pt_BR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_pt_PT" Guid="{00000000-0000-0000-0000-00000000042e}" Directory="DIR_pt_PT">
+      <File Id="F_pt_PT_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\pt-PT/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_pt_PT_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\pt-PT/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_pt_PT" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_pt_PT" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_quz_PE" Guid="{00000000-0000-0000-0000-00000000042f}" Directory="DIR_quz_PE">
+      <File Id="F_quz_PE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\quz-PE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_quz_PE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\quz-PE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_quz_PE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_quz_PE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ro_RO" Guid="{00000000-0000-0000-0000-000000000430}" Directory="DIR_ro_RO">
+      <File Id="F_ro_RO_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ro-RO/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ro_RO_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ro-RO/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ro_RO" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ro_RO" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ru_RU" Guid="{00000000-0000-0000-0000-000000000431}" Directory="DIR_ru_RU">
+      <File Id="F_ru_RU_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ru-RU/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ru_RU_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ru-RU/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ru_RU" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ru_RU" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sk_SK" Guid="{00000000-0000-0000-0000-000000000432}" Directory="DIR_sk_SK">
+      <File Id="F_sk_SK_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sk-SK/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sk_SK_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sk-SK/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sk_SK" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sk_SK" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sl_SI" Guid="{00000000-0000-0000-0000-000000000433}" Directory="DIR_sl_SI">
+      <File Id="F_sl_SI_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sl-SI/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sl_SI_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sl-SI/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sl_SI" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sl_SI" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sq_AL" Guid="{00000000-0000-0000-0000-000000000434}" Directory="DIR_sq_AL">
+      <File Id="F_sq_AL_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sq-AL/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sq_AL_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sq-AL/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sq_AL" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sq_AL" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sr_Cyrl_BA" Guid="{00000000-0000-0000-0000-000000000435}" Directory="DIR_sr_Cyrl_BA">
+      <File Id="F_sr_Cyrl_BA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sr-Cyrl-BA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sr_Cyrl_BA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sr-Cyrl-BA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sr_Cyrl_BA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sr_Cyrl_BA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sr_Cyrl_RS" Guid="{00000000-0000-0000-0000-000000000436}" Directory="DIR_sr_Cyrl_RS">
+      <File Id="F_sr_Cyrl_RS_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sr-Cyrl-RS/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sr_Cyrl_RS_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sr-Cyrl-RS/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sr_Cyrl_RS" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sr_Cyrl_RS" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sr_Latn_RS" Guid="{00000000-0000-0000-0000-000000000437}" Directory="DIR_sr_Latn_RS">
+      <File Id="F_sr_Latn_RS_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sr-Latn-RS/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sr_Latn_RS_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sr-Latn-RS/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sr_Latn_RS" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sr_Latn_RS" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_sv_SE" Guid="{00000000-0000-0000-0000-000000000438}" Directory="DIR_sv_SE">
+      <File Id="F_sv_SE_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\sv-SE/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_sv_SE_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\sv-SE/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_sv_SE" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_sv_SE" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ta_IN" Guid="{00000000-0000-0000-0000-000000000439}" Directory="DIR_ta_IN">
+      <File Id="F_ta_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ta-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ta_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ta-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ta_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ta_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_te_IN" Guid="{00000000-0000-0000-0000-00000000043a}" Directory="DIR_te_IN">
+      <File Id="F_te_IN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\te-IN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_te_IN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\te-IN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_te_IN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_te_IN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_th_TH" Guid="{00000000-0000-0000-0000-00000000043b}" Directory="DIR_th_TH">
+      <File Id="F_th_TH_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\th-TH/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_th_TH_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\th-TH/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_th_TH" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_th_TH" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_tr_TR" Guid="{00000000-0000-0000-0000-00000000043c}" Directory="DIR_tr_TR">
+      <File Id="F_tr_TR_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\tr-TR/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_tr_TR_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\tr-TR/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_tr_TR" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_tr_TR" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_tt_RU" Guid="{00000000-0000-0000-0000-00000000043d}" Directory="DIR_tt_RU">
+      <File Id="F_tt_RU_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\tt-RU/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_tt_RU_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\tt-RU/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_tt_RU" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_tt_RU" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ug_CN" Guid="{00000000-0000-0000-0000-00000000043e}" Directory="DIR_ug_CN">
+      <File Id="F_ug_CN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ug-CN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ug_CN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ug-CN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ug_CN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ug_CN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_uk_UA" Guid="{00000000-0000-0000-0000-00000000043f}" Directory="DIR_uk_UA">
+      <File Id="F_uk_UA_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\uk-UA/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_uk_UA_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\uk-UA/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_uk_UA" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_uk_UA" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_ur_PK" Guid="{00000000-0000-0000-0000-000000000440}" Directory="DIR_ur_PK">
+      <File Id="F_ur_PK_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\ur-PK/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_ur_PK_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\ur-PK/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_ur_PK" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_ur_PK" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_uz_Latn_UZ" Guid="{00000000-0000-0000-0000-000000000441}" Directory="DIR_uz_Latn_UZ">
+      <File Id="F_uz_Latn_UZ_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\uz-Latn-UZ/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_uz_Latn_UZ_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\uz-Latn-UZ/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_uz_Latn_UZ" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_uz_Latn_UZ" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_vi_VN" Guid="{00000000-0000-0000-0000-000000000442}" Directory="DIR_vi_VN">
+      <File Id="F_vi_VN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\vi-VN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_vi_VN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\vi-VN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_vi_VN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_vi_VN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_zh_CN" Guid="{00000000-0000-0000-0000-000000000443}" Directory="DIR_zh_CN">
+      <File Id="F_zh_CN_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\zh-CN/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_zh_CN_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\zh-CN/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_zh_CN" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_zh_CN" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_zh_TW" Guid="{00000000-0000-0000-0000-000000000444}" Directory="DIR_zh_TW">
+      <File Id="F_zh_TW_Microsoft_UI_Xaml_Phone_dll_mui" Source="$(var.AppBinDir)\zh-TW/Microsoft.UI.Xaml.Phone.dll.mui" />
+      <File Id="F_zh_TW_Microsoft_ui_xaml_dll_mui" Source="$(var.AppBinDir)\zh-TW/Microsoft.ui.xaml.dll.mui" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_zh_TW" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+      <RemoveFolder Id="RF_DIR_COMP_zh_TW" On="uninstall" />
+    </Component>
+
+    <Component Id="DIR_COMP_Microsoft_UI_Xaml" Guid="{00000000-0000-0000-0000-000000000445}" Directory="DIR_Microsoft_UI_Xaml">
+      <RemoveFolder Id="RF_DIR_COMP_Microsoft_UI_Xaml" On="uninstall" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\App">
+        <RegistryValue Name="DIR_COMP_Microsoft_UI_Xaml" Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+    </Component>
+
+    <Icon Id="AppIcon" SourceFile="$(var.AppBinDir)\assets/mayasaba.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="STARTMENU_FOLDER" Name="Mayasaba Control Room" />
+    </StandardDirectory>
+
+    <Component Id="StartMenuShortcut" Guid="{00000000-0000-0000-0000-0000000007d0}" Directory="STARTMENU_FOLDER">
+      <Shortcut Id="StartMenuShortcut"
+                Name="Mayasaba Control Room"
+                Description="Native Windows desktop control plane for coding agents"
+                Target="[MAYASABA_FOLDER]Mayasaba.App.exe"
+                WorkingDirectory="MAYASABA_FOLDER"
+                Icon="AppIcon" />
+      <RemoveFolder Id="STARTMENU_FOLDER" On="uninstall" />
+      <RegistryKey Root="HKCU" Key="Software\Mayasaba\Shortcut">
+        <RegistryValue Type="integer" Name="installed" Value="1" KeyPath="yes" />
+      </RegistryKey>
+    </Component>
+
+    <Feature Id="Complete" Level="1" Title="Mayasaba Control Room">
+      <ComponentRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DIR_COMP_Microsoft_UI_Xaml_Assets" />
+      <ComponentRef Id="DIR_COMP_Chat" />
+      <ComponentRef Id="DIR_COMP_Controls" />
+      <ComponentRef Id="DIR_COMP_NpuDetect" />
+      <ComponentRef Id="DIR_COMP_Theme" />
+      <ComponentRef Id="DIR_COMP_af_ZA" />
+      <ComponentRef Id="DIR_COMP_am_ET" />
+      <ComponentRef Id="DIR_COMP_ar_SA" />
+      <ComponentRef Id="DIR_COMP_as_IN" />
+      <ComponentRef Id="DIR_COMP_assets" />
+      <ComponentRef Id="DIR_COMP_az_Latn_AZ" />
+      <ComponentRef Id="DIR_COMP_bg_BG" />
+      <ComponentRef Id="DIR_COMP_bn_IN" />
+      <ComponentRef Id="DIR_COMP_bs_Latn_BA" />
+      <ComponentRef Id="DIR_COMP_ca_ES" />
+      <ComponentRef Id="DIR_COMP_ca_Es_VALENCIA" />
+      <ComponentRef Id="DIR_COMP_cs_CZ" />
+      <ComponentRef Id="DIR_COMP_cy_GB" />
+      <ComponentRef Id="DIR_COMP_da_DK" />
+      <ComponentRef Id="DIR_COMP_de_DE" />
+      <ComponentRef Id="DIR_COMP_el_GR" />
+      <ComponentRef Id="DIR_COMP_en_GB" />
+      <ComponentRef Id="DIR_COMP_en_us" />
+      <ComponentRef Id="DIR_COMP_es_ES" />
+      <ComponentRef Id="DIR_COMP_es_MX" />
+      <ComponentRef Id="DIR_COMP_et_EE" />
+      <ComponentRef Id="DIR_COMP_eu_ES" />
+      <ComponentRef Id="DIR_COMP_fa_IR" />
+      <ComponentRef Id="DIR_COMP_fi_FI" />
+      <ComponentRef Id="DIR_COMP_fil_PH" />
+      <ComponentRef Id="DIR_COMP_fr_CA" />
+      <ComponentRef Id="DIR_COMP_fr_FR" />
+      <ComponentRef Id="DIR_COMP_ga_IE" />
+      <ComponentRef Id="DIR_COMP_gd_gb" />
+      <ComponentRef Id="DIR_COMP_gl_ES" />
+      <ComponentRef Id="DIR_COMP_gu_IN" />
+      <ComponentRef Id="DIR_COMP_he_IL" />
+      <ComponentRef Id="DIR_COMP_hi_IN" />
+      <ComponentRef Id="DIR_COMP_hr_HR" />
+      <ComponentRef Id="DIR_COMP_hu_HU" />
+      <ComponentRef Id="DIR_COMP_hy_AM" />
+      <ComponentRef Id="DIR_COMP_id_ID" />
+      <ComponentRef Id="DIR_COMP_is_IS" />
+      <ComponentRef Id="DIR_COMP_it_IT" />
+      <ComponentRef Id="DIR_COMP_ja_JP" />
+      <ComponentRef Id="DIR_COMP_ka_GE" />
+      <ComponentRef Id="DIR_COMP_kk_KZ" />
+      <ComponentRef Id="DIR_COMP_km_KH" />
+      <ComponentRef Id="DIR_COMP_kn_IN" />
+      <ComponentRef Id="DIR_COMP_ko_KR" />
+      <ComponentRef Id="DIR_COMP_kok_IN" />
+      <ComponentRef Id="DIR_COMP_lb_LU" />
+      <ComponentRef Id="DIR_COMP_lo_LA" />
+      <ComponentRef Id="DIR_COMP_lt_LT" />
+      <ComponentRef Id="DIR_COMP_lv_LV" />
+      <ComponentRef Id="DIR_COMP_mi_NZ" />
+      <ComponentRef Id="DIR_COMP_mk_MK" />
+      <ComponentRef Id="DIR_COMP_ml_IN" />
+      <ComponentRef Id="DIR_COMP_mr_IN" />
+      <ComponentRef Id="DIR_COMP_ms_MY" />
+      <ComponentRef Id="DIR_COMP_mt_MT" />
+      <ComponentRef Id="DIR_COMP_nb_NO" />
+      <ComponentRef Id="DIR_COMP_ne_NP" />
+      <ComponentRef Id="DIR_COMP_nl_NL" />
+      <ComponentRef Id="DIR_COMP_nn_NO" />
+      <ComponentRef Id="DIR_COMP_or_IN" />
+      <ComponentRef Id="DIR_COMP_pa_IN" />
+      <ComponentRef Id="DIR_COMP_pl_PL" />
+      <ComponentRef Id="DIR_COMP_pt_BR" />
+      <ComponentRef Id="DIR_COMP_pt_PT" />
+      <ComponentRef Id="DIR_COMP_quz_PE" />
+      <ComponentRef Id="DIR_COMP_ro_RO" />
+      <ComponentRef Id="DIR_COMP_ru_RU" />
+      <ComponentRef Id="DIR_COMP_sk_SK" />
+      <ComponentRef Id="DIR_COMP_sl_SI" />
+      <ComponentRef Id="DIR_COMP_sq_AL" />
+      <ComponentRef Id="DIR_COMP_sr_Cyrl_BA" />
+      <ComponentRef Id="DIR_COMP_sr_Cyrl_RS" />
+      <ComponentRef Id="DIR_COMP_sr_Latn_RS" />
+      <ComponentRef Id="DIR_COMP_sv_SE" />
+      <ComponentRef Id="DIR_COMP_ta_IN" />
+      <ComponentRef Id="DIR_COMP_te_IN" />
+      <ComponentRef Id="DIR_COMP_th_TH" />
+      <ComponentRef Id="DIR_COMP_tr_TR" />
+      <ComponentRef Id="DIR_COMP_tt_RU" />
+      <ComponentRef Id="DIR_COMP_ug_CN" />
+      <ComponentRef Id="DIR_COMP_uk_UA" />
+      <ComponentRef Id="DIR_COMP_ur_PK" />
+      <ComponentRef Id="DIR_COMP_uz_Latn_UZ" />
+      <ComponentRef Id="DIR_COMP_vi_VN" />
+      <ComponentRef Id="DIR_COMP_zh_CN" />
+      <ComponentRef Id="DIR_COMP_zh_TW" />
+      <ComponentRef Id="DIR_COMP_Microsoft_UI_Xaml" />
+    </Feature>
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Mayasaba is already installed." />
+  </Package>
+</Wix>

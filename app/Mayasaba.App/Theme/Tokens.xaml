@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mayasaba Control Room — design tokens (Theme/Tokens.xaml).
+
+  This dictionary is the single source of truth for the Control Room's colour, type,
+  spacing, shape and motion vocabulary. It is merged (first) by Theme/Styles.xaml, which is
+  merged by App.xaml, so every control and card resolves the same tokens.
+
+  Colour is declared as SolidColorBrush tokens inside ThemeDictionaries so that Light, Dark
+  and HighContrast are all first-class. The default-light values are the relationships fixed
+  by UI-UX.md section 4; Dark and HighContrast are implementations of the same relationships.
+  HighContrast deliberately collapses hue into system colours and relies on the card's text
+  label, glyph and state word (never colour alone) to carry meaning — see UI-DESIGN.md,
+  "Accessibility matrix".
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ============================ LIGHT (default) ============================ -->
+        <ResourceDictionary x:Key="Light">
+            <!-- Surfaces -->
+            <SolidColorBrush x:Key="CanvasBrush" Color="#FFF7F8FA" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="SurfaceAltBrush" Color="#FFF1F3F6" />
+            <!-- Ink -->
+            <SolidColorBrush x:Key="InkBrush" Color="#FF202124" />
+            <SolidColorBrush x:Key="MutedBrush" Color="#FF62666D" />
+            <SolidColorBrush x:Key="BorderBrush" Color="#FFE2E5EA" />
+            <SolidColorBrush x:Key="SeparatorBrush" Color="#FFEDEFF2" />
+            <!-- Semantic families (Authority = controller provenance, Attention = waiting,
+                 Critical = blocking failure, Success = certification only) -->
+            <SolidColorBrush x:Key="AuthorityBrush" Color="#FF4057C8" />
+            <SolidColorBrush x:Key="AuthoritySoftBrush" Color="#FFE8ECFB" />
+            <SolidColorBrush x:Key="AttentionBrush" Color="#FFA65D00" />
+            <SolidColorBrush x:Key="AttentionSoftBrush" Color="#FFFBF1E2" />
+            <SolidColorBrush x:Key="CriticalBrush" Color="#FFB4232C" />
+            <SolidColorBrush x:Key="CriticalSoftBrush" Color="#FFFBE9EA" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#FF1F6F4A" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#FFE7F4ED" />
+            <SolidColorBrush x:Key="ProvisionalBrush" Color="#FF6A4E9C" />
+            <SolidColorBrush x:Key="ProvisionalSoftBrush" Color="#FFF0ECF8" />
+            <SolidColorBrush x:Key="FocusBrush" Color="#FF4057C8" />
+            <SolidColorBrush x:Key="ScrimBrush" Color="#66000000" />
+        </ResourceDictionary>
+
+        <!-- ============================= DARK ============================= -->
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="CanvasBrush" Color="#FF1B1D21" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#FF26282D" />
+            <SolidColorBrush x:Key="SurfaceAltBrush" Color="#FF2E3137" />
+            <SolidColorBrush x:Key="InkBrush" Color="#FFF2F3F5" />
+            <SolidColorBrush x:Key="MutedBrush" Color="#FFA9ADB4" />
+            <SolidColorBrush x:Key="BorderBrush" Color="#FF3A3D44" />
+            <SolidColorBrush x:Key="SeparatorBrush" Color="#FF33363C" />
+            <SolidColorBrush x:Key="AuthorityBrush" Color="#FF8FA2FF" />
+            <SolidColorBrush x:Key="AuthoritySoftBrush" Color="#FF2A3358" />
+            <SolidColorBrush x:Key="AttentionBrush" Color="#FFE0A24A" />
+            <SolidColorBrush x:Key="AttentionSoftBrush" Color="#FF3B2E17" />
+            <SolidColorBrush x:Key="CriticalBrush" Color="#FFFF8A8A" />
+            <SolidColorBrush x:Key="CriticalSoftBrush" Color="#FF3F1F22" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#FF6FD3A0" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#FF17301F" />
+            <SolidColorBrush x:Key="ProvisionalBrush" Color="#FFC3A9F0" />
+            <SolidColorBrush x:Key="ProvisionalSoftBrush" Color="#FF2A2338" />
+            <SolidColorBrush x:Key="FocusBrush" Color="#FF8FA2FF" />
+            <SolidColorBrush x:Key="ScrimBrush" Color="#99000000" />
+        </ResourceDictionary>
+
+        <!-- ========================= HIGH CONTRAST =========================
+             Hue is not information. Everything maps onto system colours; status is carried
+             by the card's text label, glyph and state word as well as the spine. -->
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="CanvasBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceAltBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="InkBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="MutedBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="BorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SeparatorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AuthorityBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AuthoritySoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AttentionBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AttentionSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CriticalBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CriticalSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ProvisionalBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="ProvisionalSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="FocusBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ============================== TYPOGRAPHY ==============================
+         Segoe UI Variable for interface/conversation text; Cascadia Mono for code, paths,
+         hashes and command fragments (UI-UX.md section 4). -->
+    <FontFamily x:Key="FontUIFamily">Segoe UI Variable Text</FontFamily>
+    <FontFamily x:Key="FontDisplayFamily">Segoe UI Variable Display</FontFamily>
+    <FontFamily x:Key="FontMonoFamily">Cascadia Mono</FontFamily>
+
+    <x:Double x:Key="FontSizeCaption">12</x:Double>
+    <x:Double x:Key="FontSizeBody">14</x:Double>
+    <x:Double x:Key="FontSizeBodyLarge">16</x:Double>
+    <x:Double x:Key="FontSizeSubtitle">20</x:Double>
+    <x:Double x:Key="FontSizeTitle">28</x:Double>
+    <x:Double x:Key="LineHeightBody">20</x:Double>
+    <x:Double x:Key="LineHeightTight">16</x:Double>
+
+    <!-- =============================== SPACING ===============================
+         4px base scale; XL/XXL are reserved for empty-state and sheet breathing room. -->
+    <x:Double x:Key="SpaceXXS">2</x:Double>
+    <x:Double x:Key="SpaceXS">4</x:Double>
+    <x:Double x:Key="SpaceS">8</x:Double>
+    <x:Double x:Key="SpaceM">12</x:Double>
+    <x:Double x:Key="SpaceL">16</x:Double>
+    <x:Double x:Key="SpaceXL">24</x:Double>
+    <x:Double x:Key="SpaceXXL">32</x:Double>
+
+    <!-- Reading measure: the conversation column stays under ~80 characters (UI-UX.md 4). -->
+    <x:Double x:Key="ConversationMaxWidth">760</x:Double>
+    <x:Double x:Key="CardMaxWidth">900</x:Double>
+    <x:Double x:Key="ComposerMaxWidth">760</x:Double>
+
+    <Thickness x:Key="PadCard">16</Thickness>
+    <Thickness x:Key="PadCardCompact">12</Thickness>
+    <Thickness x:Key="PadShell">16,10,16,10</Thickness>
+    <Thickness x:Key="PadComposer">12</Thickness>
+
+    <!-- ================================ SHAPE ================================ -->
+    <CornerRadius x:Key="RadiusS">4</CornerRadius>
+    <CornerRadius x:Key="RadiusM">8</CornerRadius>
+    <CornerRadius x:Key="RadiusL">12</CornerRadius>
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>
+
+    <x:Double x:Key="SpineWidth">3</x:Double>
+    <x:Double x:Key="HairlineWidth">1</x:Double>
+    <x:Double x:Key="FocusStrokeWidth">2</x:Double>
+
+    <!-- =============================== MOTION ===============================
+         Durations in milliseconds. Code reads UISettings.AnimationsEnabled and, when the user
+         has reduced motion enabled, applies the final state immediately instead of animating
+         (UI-UX.md section 18, "Respect reduced-motion preferences"). -->
+    <x:Double x:Key="MotionFastMs">120</x:Double>
+    <x:Double x:Key="MotionMediumMs">200</x:Double>
+    <x:Double x:Key="MotionSlowMs">320</x:Double>
+
+</ResourceDictionary>

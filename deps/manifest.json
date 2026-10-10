@@ -1,0 +1,63 @@
+{
+  "manifest_version": 1,
+  "note": "Pinned third-party build dependencies for Mayasaba. Vendored sources live under third_party/. Hashes are SHA-256 of the exact retrieved artifact. This manifest is the reproducible dependency record required by AGENTS.md section 12 and the technology matrix. No dependency is fetched at build time: the build is offline-restorable from the repository.",
+  "dependencies": [
+    {
+      "name": "sqlite-amalgamation",
+      "version": "3.54.0",
+      "source_url": "https://sqlite.org/2026/sqlite-amalgamation-3540000.zip",
+      "artifact_sha256": "68e913b0fe8ec6b4e5f391c594a28872884e80d6cd042a1e50c957be46b5aa4d",
+      "license": "Public Domain",
+      "license_file": "third_party/sqlite/README.md",
+      "vendored_at": "third_party/sqlite",
+      "files_used": ["sqlite3.c", "sqlite3.h", "sqlite3ext.h"],
+      "build_flags": ["SQLITE_THREADSAFE=1", "SQLITE_OMIT_LOAD_EXTENSION", "SQLITE_DQS=0", "SQLITE_DEFAULT_FOREIGN_KEYS=1"]
+    },
+    {
+      "name": "nlohmann/json",
+      "version": "3.11.3",
+      "source_url": "https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp",
+      "artifact_sha256": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
+      "license": "MIT",
+      "license_file": "third_party/nlohmann/LICENSE.MIT",
+      "vendored_at": "third_party/nlohmann",
+      "role": "JSON parser/serializer. Not treated as canonical serialization; Mayasaba defines and tests its own canonical byte profile (contracts/CANONICAL.md)."
+    },
+    {
+      "name": "google/googletest",
+      "version": "1.15.2",
+      "source_url": "https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz",
+      "artifact_sha256": "7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926",
+      "license": "BSD-3-Clause",
+      "license_file": "third_party/googletest/LICENSE",
+      "vendored_at": "third_party/googletest",
+      "role": "Core unit/integration test framework (GoogleTest/GoogleMock candidate pinned)."
+    }
+  ],
+  "build_only": [
+    {
+      "name": "Microsoft.WindowsAppSDK",
+      "version": "1.7.x",
+      "restore": "NuGet PackageReference from the app project; restored into the user NuGet cache. Not vendored because it is a build-time SDK component with its own servicing model.",
+      "role": "WinUI 3 + Windows App SDK runtime for the Control Room UI (unpackaged, self-contained payload)."
+    },
+    {
+      "name": "Microsoft.Windows.CppWinRT",
+      "version": "2.0.x",
+      "restore": "NuGet PackageReference; provides cppwinrt.exe code generation.",
+      "role": "C++/WinRT projection generation."
+    },
+    {
+      "name": "Microsoft.Windows.ImplementationLibrary",
+      "version": "1.0.x",
+      "restore": "NuGet PackageReference.",
+      "role": "WIL resource wrappers (RAII handles) per technology baseline."
+    },
+    {
+      "name": "WiX Toolset",
+      "version": "6.0.2",
+      "restore": "Installed dotnet tool (already present on the build machine).",
+      "role": "MSI authoring (mandatory end-user installation format)."
+    }
+  ]
+}

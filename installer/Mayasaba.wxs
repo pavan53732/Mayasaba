@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mayasaba - WiX v6 installer source (Milestone M12).
+
+  Shape fixed by the system description (packaging section):
+    * MSI is the mandatory end-user installation format, authored with WiX.
+    * The WinUI 3 application is unpackaged (no MSIX identity) and ships a self-contained
+      Windows App SDK runtime payload. That is an application deployment detail, not an
+      alternative to the MSI.
+    * External CLIs (Hermes, OpenCode, Kilo Code) are user-installed. They are deliberately
+      NOT bundled or installed here, and a missing CLI must never fail installation. Missing
+      CLIs surface only as inline Chat problem cards and block only their own operations.
+
+  The runtime payload is NOT harvested with the <Files> element. <Files> derives the File
+  table's Language column from each binary's version resource, which for the Windows App SDK
+  produces a 430-character comma-separated LCID list on Microsoft.ui.xaml.dll and
+  Microsoft.UI.Xaml.Phone.dll (ICE03 string overflow) and rejects several locale .mui files
+  (ICE03 invalid language id). <Files> exposes no attribute to override this.
+
+  Instead scripts/build-installer.ps1 generates installer/payload.generated.wxs: one Component
+  per payload file, with a deterministic RFC-4122 v5 component GUID derived from the file's
+  path (so GUIDs are stable across builds) and an explicit Language of 0 (neutral), which
+  avoids the version-resource derivation entirely. Both sources are compiled together.
+
+  Build (see scripts/build-installer.ps1):
+    wix build installer/Mayasaba.wxs installer/payload.generated.wxs
+               -d PayloadDir=<staging> -arch x64 -o installer/bin/Mayasaba.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package
+      Name="Mayasaba"
+      Manufacturer="Mayasaba"
+      Version="0.1.0.0"
+      UpgradeCode="{8E2A7C41-5F3B-4D6E-9A17-2C4B6D8E0F31}"
+      Scope="perMachine"
+      Compressed="yes">
+
+    <SummaryInformation
+        Description="Mayasaba Control Room - native Windows control plane"
+        Manufacturer="Mayasaba" />
+
+    <!-- Upgrade-in-place. A newer installed version is never silently downgraded. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Mayasaba is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Shared application icon: also registered on the Start Menu shortcut. -->
+    <Icon Id="MayasabaIcon" SourceFile="$(var.PayloadDir)\assets\mayasaba.ico" />
+
+    <!-- The per-machine install root (%ProgramFiles%\Mayasaba) and the payload components under
+         it are declared by payload.generated.wxs, so they are not repeated here. -->
+
+
+    <!-- Start Menu shortcut. ProgramMenuFolder is the only Start Menu id WiX v6 exposes as a
+         StandardDirectory; ICE38/ICE43/ICE57 require a shortcut component that lives in the
+         user profile to carry an HKCU key path, so the key path is per-user even though the
+         package installs per-machine. -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MayasabaMenuFolder" Name="Mayasaba">
+        <Component Id="StartMenuShortcut" Guid="{1B4C6D8E-0F31-4A52-8C74-9E1F3A5B7D90}">
+          <Shortcut Id="MayasabaStartMenuShortcut"
+                    Name="Mayasaba"
+                    Description="Mayasaba Control Room"
+                    Target="[INSTALLFOLDER]Mayasaba.App.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="MayasabaIcon" />
+          <RemoveFolder Id="RemoveMayasabaMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\Mayasaba" Name="StartMenuShortcut"
+                         Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+  </Package>
+</Wix>

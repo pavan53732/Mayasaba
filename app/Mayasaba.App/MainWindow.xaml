@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mayasaba Control Room shell — the single top-level window.
+
+  The real product UI is the Chat shell. This smoke-test window carries only the two text
+  elements needed to prove the WinUI 3 XAML stack is live in an unpackaged process.
+-->
+<Window
+    x:Class="Mayasaba.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Mayasaba.App"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Mayasaba">
+
+    <Grid Background="{ThemeResource CanvasBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar: the Mayasaba mark and wordmark. Transparent so the caption buttons
+             keep their system treatment. -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="36" Padding="12,0,0,0"
+              Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <local:LogoMark Width="16" Height="16" VerticalAlignment="Center" />
+                <TextBlock Text="Mayasaba" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Style="{StaticResource TextBody}" />
+                <TextBlock Text="Control Room" VerticalAlignment="Center"
+                           Style="{StaticResource TextMeta}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- The one persistent route. -->
+        <local:ChatPage x:Name="ChatHost" Grid.Row="1" />
+    </Grid>
+</Window>

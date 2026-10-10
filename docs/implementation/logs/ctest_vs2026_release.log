@@ -1,0 +1,40 @@
+Test project C:/Users/pavan/PROJECTS/Mayasaba/build/vs2026
+      Start  1: canonical_tests
+ 1/14 Test  #1: canonical_tests ..................   Passed    0.01 sec
+      Start  2: registry_tests
+ 2/14 Test  #2: registry_tests ...................   Passed    0.02 sec
+      Start  3: controller_tests
+ 3/14 Test  #3: controller_tests .................   Passed    2.08 sec
+      Start  4: adapter_tests
+ 4/14 Test  #4: adapter_tests ....................   Passed    0.69 sec
+      Start  5: kernel_tests
+ 5/14 Test  #5: kernel_tests .....................   Passed    0.46 sec
+      Start  6: bus_tests
+ 6/14 Test  #6: bus_tests ........................   Passed    0.49 sec
+      Start  7: base_tests
+ 7/14 Test  #7: base_tests .......................   Passed    0.02 sec
+      Start  8: context_tests
+ 8/14 Test  #8: context_tests ....................   Passed    0.36 sec
+      Start  9: council_tests
+ 9/14 Test  #9: council_tests ....................   Passed    0.02 sec
+      Start 10: orchestration_tests
+10/14 Test #10: orchestration_tests ..............   Passed    0.27 sec
+      Start 11: policy_tests
+11/14 Test #11: policy_tests .....................   Passed    0.38 sec
+      Start 12: store_tests
+12/14 Test #12: store_tests ......................   Passed    0.36 sec
+      Start 13: tasks_tests
+13/14 Test #13: tasks_tests ......................   Passed    0.62 sec
+      Start 14: workspace_tests
+14/14 Test #14: workspace_tests ..................   Passed    0.37 sec
+
+100% tests passed, 0 tests failed out of 14
+
+Total Test time (real) =   6.19 sec
+
+--- Execution Record ---
+Command: ctest --preset vs2026-release --output-on-failure
+ExitCode: 0
+DurationMs: 6233
+TimestampUtc: 2026-10-10T03:20:54.8633676Z
+

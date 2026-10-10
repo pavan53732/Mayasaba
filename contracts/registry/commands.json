@@ -1,0 +1,36 @@
+{
+  "registry_version": 1,
+  "controller_protocol_version": 1,
+  "description": "Typed UI<->controller contract for the WinUI 3 Control Room. Every command and query is versioned; the compiled CommandNames()/QueryNames() lists must agree with this registry (drift check in tests/contract/registry_tests.cpp).",
+  "commands": [
+    { "name": "OpenFolder", "request": "OpenFolderRequest", "result": "OpenFolderResult",
+      "note": "Validates and binds (or restores) project identity for a user-chosen folder. Never scans, launches agents or touches Git." },
+    { "name": "SendMessage", "request": "SendMessageRequest", "result": "SendReceipt",
+      "note": "Persists exactly one immutable UserContribution after a root is bound, even with no CLI available; agent work is gated separately." },
+    { "name": "CancelOperation", "request": "CancelOperationRequest", "result": "Ack",
+      "note": "Cancels the session behind a timeline operation; the observed termination is reported separately." },
+    { "name": "RetryAgentProbe", "request": "RetryAgentProbeRequest", "result": "AgentStatusView",
+      "note": "Bounded, non-mutating readiness re-probe for one agent." },
+    { "name": "DismissCard", "request": "DismissCardRequest", "result": "Ack",
+      "note": "Hides a dismissible timeline card without deleting history." },
+    { "name": "SetAgentExecutablePath", "request": "SetAgentExecutablePathRequest", "result": "Ack",
+      "note": "Stores the user-owned executable path and re-probes. Never a model/provider flag." },
+    { "name": "RequestDetails", "request": "RequestDetailsRequest", "result": "DetailsPayload",
+      "note": "Builds the inspectable details for one card from the backing authoritative records." }
+  ],
+  "queries": [
+    { "name": "QueryProjectState", "result": "ProjectState",
+      "note": "Bound flag, identity, canonical root, phase and epoch." },
+    { "name": "QueryTimeline", "request": "TimelineQuery", "result": "TimelinePage",
+      "note": "Bounded, ordered page of Chat timeline items since a sequence." },
+    { "name": "QueryAgents", "result": "AgentStatusView[]",
+      "note": "All three agents with readiness; only non-READY ones need attention." }
+  ],
+  "timeline_kinds": [
+    "user_message", "agent_message", "status", "warning", "question", "progress",
+    "council_summary", "requirements_summary", "decision", "task", "validation",
+    "delivery", "error"
+  ],
+  "severities": ["info", "attention", "error", "success"],
+  "readiness_states": ["CHECKING", "READY", "MISSING", "UNSUPPORTED", "PROBE_FAILED"]
+}

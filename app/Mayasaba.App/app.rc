@@ -1,0 +1,8 @@
+// Mayasaba Control Room shell — Win32 resources.
+//
+// The application icon is generated from the same vector geometry as the in-app Mayasaba mark
+// (app/assets/generate-icon.ps1) so the taskbar, Alt-Tab and Explorer identities match the
+// title-bar mark exactly.
+#include <windows.h>
+
+IDI_MAYASABA_APP ICON "..\\assets\\mayasaba.ico"

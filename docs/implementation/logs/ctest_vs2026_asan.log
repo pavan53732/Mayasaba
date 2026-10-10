@@ -1,0 +1,40 @@
+Test project C:/Users/pavan/PROJECTS/Mayasaba/build/vs2026-asan
+      Start  1: canonical_tests
+ 1/14 Test  #1: canonical_tests ..................   Passed    0.06 sec
+      Start  2: registry_tests
+ 2/14 Test  #2: registry_tests ...................   Passed    0.35 sec
+      Start  3: controller_tests
+ 3/14 Test  #3: controller_tests .................   Passed   12.62 sec
+      Start  4: adapter_tests
+ 4/14 Test  #4: adapter_tests ....................   Passed    1.86 sec
+      Start  5: kernel_tests
+ 5/14 Test  #5: kernel_tests .....................   Passed    1.10 sec
+      Start  6: bus_tests
+ 6/14 Test  #6: bus_tests ........................   Passed    1.46 sec
+      Start  7: base_tests
+ 7/14 Test  #7: base_tests .......................   Passed    0.09 sec
+      Start  8: context_tests
+ 8/14 Test  #8: context_tests ....................   Passed    1.22 sec
+      Start  9: council_tests
+ 9/14 Test  #9: council_tests ....................   Passed    0.14 sec
+      Start 10: orchestration_tests
+10/14 Test #10: orchestration_tests ..............   Passed    1.41 sec
+      Start 11: policy_tests
+11/14 Test #11: policy_tests .....................   Passed    1.62 sec
+      Start 12: store_tests
+12/14 Test #12: store_tests ......................   Passed    1.44 sec
+      Start 13: tasks_tests
+13/14 Test #13: tasks_tests ......................   Passed    2.67 sec
+      Start 14: workspace_tests
+14/14 Test #14: workspace_tests ..................   Passed    0.96 sec
+
+100% tests passed, 0 tests failed out of 14
+
+Total Test time (real) =  27.03 sec
+
+--- Execution Record ---
+Command: ctest --test-dir build/vs2026-asan -C Debug --output-on-failure
+ExitCode: 0
+DurationMs: 27078
+TimestampUtc: 2026-10-10T03:21:21.9464615Z
+

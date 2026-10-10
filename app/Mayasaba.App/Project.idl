@@ -1,0 +1,108 @@
+// Mayasaba Control Room shell — WinRT type declarations for the XAML-declared classes and the
+// bindable Chat view-model items.
+//
+// C++/WinRT WinUI 3 projects declare their XAML classes (x:Class) as WinRT runtimeclasses so
+// the XAML type system and the generated activation factories have a stable identity. The
+// Chat timeline is bound with x:Bind, so the item view-models the DataTemplates bind to must
+// also be WinRT-visible. Everything else in the UI stays plain C++ (see Chat/ChatViewModel.h).
+
+namespace Mayasaba.App
+{
+    [default_interface]
+    runtimeclass MainWindow : Microsoft.UI.Xaml.Window
+    {
+        MainWindow();
+    }
+
+    // The single top-level route. Chat is the only persistent workspace (UI-UX.md section 3).
+    [default_interface]
+    runtimeclass ChatPage : Microsoft.UI.Xaml.Controls.Page
+    {
+        ChatPage();
+        // The host window handle, needed only to parent the native folder/file pickers.
+        void HostWindow(Int64 hwnd);
+    }
+
+    // The original Mayasaba mark, as resolution-independent vector geometry.
+    [default_interface]
+    runtimeclass LogoMark : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        LogoMark();
+    }
+
+    // One action a controller card offers (from control::CardAction).
+    runtimeclass CardActionView
+    {
+        CardActionView();
+        String ActionId;
+        String Label;
+        String Command;
+        String CardId;
+        String RequestJson;
+    }
+
+    // One Chat timeline entry rendered by the timeline DataTemplate.
+    runtimeclass TimelineCard
+    {
+        TimelineCard();
+        UInt64 Sequence;
+        String CardId;
+        String Kind;
+        String Title;
+        String Body;
+        String Severity;
+        String State;
+        String Timestamp;
+        String Author;
+        String KindLabel;
+        String Glyph;
+        String AccessibilityName;
+        Boolean HasDetails;
+        Boolean Dismissible;
+        Boolean IsMessage;
+        Boolean IsProvisional;
+        Microsoft.UI.Xaml.Visibility MessageVisibility;
+        Microsoft.UI.Xaml.Visibility CardVisibility;
+        Microsoft.UI.Xaml.Visibility ProgressVisibility;
+        Microsoft.UI.Xaml.Visibility SpineInfoVisibility;
+        Microsoft.UI.Xaml.Visibility SpineAttentionVisibility;
+        Microsoft.UI.Xaml.Visibility SpineErrorVisibility;
+        Microsoft.UI.Xaml.Visibility SpineSuccessVisibility;
+        Microsoft.UI.Xaml.Visibility ActionsVisibility;
+        Microsoft.UI.Xaml.Visibility DetailsVisibility;
+        Microsoft.UI.Xaml.Visibility StateVisibility;
+        Microsoft.UI.Xaml.Visibility ProvisionalVisibility;
+        Microsoft.UI.Xaml.Visibility TitleVisibility;
+        Microsoft.UI.Xaml.Visibility BodyVisibility;
+        Microsoft.UI.Xaml.Visibility DismissVisibility;
+        Microsoft.UI.Xaml.Visibility TimestampVisibility;
+        Microsoft.UI.Xaml.Style CardStyle;
+        Windows.Foundation.Collections.IObservableVector<CardActionView> Actions;
+    }
+
+    // One agent warning row. Only MISSING / UNSUPPORTED / PROBE_FAILED agents ever appear
+    // here; READY agents never occupy a warning row (AGENTS.md section 5).
+    runtimeclass AgentNotice
+    {
+        AgentNotice();
+        String AgentId;
+        String DisplayName;
+        String Readiness;
+        String Reason;
+        String Effect;
+        String Guidance;
+        String AccessibilityName;
+        Microsoft.UI.Xaml.Visibility LocateVisibility;
+        Microsoft.UI.Xaml.Visibility ReasonVisibility;
+    }
+
+    // One pending attachment chip in the composer.
+    runtimeclass AttachmentChip
+    {
+        AttachmentChip();
+        String Name;
+        String SizeText;
+        String StateText;
+        String AccessibilityName;
+    }
+}
